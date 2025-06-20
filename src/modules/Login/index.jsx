@@ -45,7 +45,7 @@ const LoginPage = () => {
       <ToastContainer />
       <div className="w-full lg:w-1/2 flex justify-center items-center px-6 py-12 bg-white ">
         <div className="w-full max-w-md mb-28">
-          <img src="/img/logo.png" alt="Logo" className="h-52 mx-auto" />
+          <img src="/img/logonew.png" alt="Logo" className="h-24 mx-auto mb-10" />
 
           <form className="space-y-5" onSubmit={handleLogin}>
             <div>

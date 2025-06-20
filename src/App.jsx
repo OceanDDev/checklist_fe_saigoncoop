@@ -4,6 +4,7 @@ import ForkliftChecklist from "./modules/CheckList";
 import LoginPage from "./modules/Login";
 import PrivateRoute from "./middleware/PrivateRoute";
 import ThankYouScreen from "./modules/CheckListSucces";
+import MainLayout from "./page/home";
 
 function App() {
   return (
@@ -17,7 +18,9 @@ function App() {
           path="/"
           element={
             <PrivateRoute>
-              <UserTable />
+              <MainLayout>
+                <UserTable />
+              </MainLayout>
             </PrivateRoute>
           }
         />

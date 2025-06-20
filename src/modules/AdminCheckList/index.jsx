@@ -1,18 +1,15 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import UserRowCheckList from "./userRow";
 import { checkListService } from "@/services/checklist.service";
+import CustomPagination from "@/components/ui/customPagination";
 
 const UserTableCheckList = () => {
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    navigate("/login");
-  };
-
   const [searchTerm, setSearchTerm] = useState("");
   const [checkList, setCheckList] = useState([]);
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = 8;
+
+ 
 
   useEffect(() => {
     const fetchData = async () => {
@@ -23,38 +20,33 @@ const UserTableCheckList = () => {
     fetchData();
   }, []);
 
+  // Lọc theo tên
   const filteredUsers = checkList.filter((item) =>
     item.ho_ten?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Phân trang
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const startIndex = currentPage * itemsPerPage;
+  const currentUsers = filteredUsers.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  );
+
   return (
     <>
-      {/* Header cố định */}
-      <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 py-3 bg-white shadow border-b">
-        <div className="flex items-center space-x-3">
-          <img src="/img/logosc.png" alt="Logo" className="h-14 w-auto" />
-          <span className="text-xl font-bold text-gray-800">
-            Hệ thống kiểm tra xe
-          </span>
-        </div>
-
-        <button
-          onClick={handleLogout}
-          className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-5 rounded shadow transition-all"
-        >
-          Đăng xuất
-        </button>
-      </header>
-
       {/* Nội dung bảng */}
-      <div className="relative overflow-x-auto shadow-md sm:rounded-lg m-5 pt-[100px]">
+      <div className="relative overflow-x-auto shadow-md sm:rounded-lg m-5 pt-[50px]">
         {/* Thanh tìm kiếm */}
         <div className="flex justify-between items-center mb-4">
           <input
             type="text"
             placeholder="Tìm kiếm theo họ tên..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(0); // reset về trang đầu khi tìm kiếm
+            }}
             className="border border-gray-300 p-2 rounded-md w-full max-w-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -74,24 +66,35 @@ const UserTableCheckList = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.length === 0 ? (
+            {currentUsers.length === 0 ? (
               <tr>
-                <td colSpan="7" className="text-center py-4 text-gray-500">
+                <td colSpan="8" className="text-center py-4 text-gray-500">
                   Không tìm thấy người dùng nào.
                 </td>
               </tr>
             ) : (
-              filteredUsers.map((userCheckList, index) => (
+              currentUsers.map((userCheckList, index) => (
                 <UserRowCheckList
                   key={userCheckList._id}
                   user={userCheckList}
-                  index={index}
-                  
+                  index={startIndex + index} // STT chính xác theo phân trang
                 />
               ))
             )}
           </tbody>
         </table>
+
+        {/* Phân trang */}
+        {totalPages > 1 && (
+          <div className="flex justify-center mt-8">
+            <CustomPagination
+              pageCount={totalPages}
+              forcePage={currentPage}
+              onPageChange={({ selected }) => setCurrentPage(selected)}
+              additionalClassname="flex flex-wrap gap-2"
+            />
+          </div>
+        )}
       </div>
     </>
   );

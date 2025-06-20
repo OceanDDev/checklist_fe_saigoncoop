@@ -5,7 +5,7 @@ const DEF_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const apiEndpoint = "http://localhost:5000";
+const apiEndpoint = import.meta.env.VITE_API;
 
 const ApiServer = axios.create({
   baseURL: apiEndpoint,
