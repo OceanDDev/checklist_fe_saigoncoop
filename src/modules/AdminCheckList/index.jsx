@@ -69,6 +69,7 @@ const UserTableCheckList = () => {
               <th className="border px-4 py-2">Đơn vị</th>
               <th className="border px-4 py-2">Số xe</th>
               <th className="border px-4 py-2">Ngày điền</th>
+              <th className="border px-4 py-2 text-center">Tổng quan</th>
               <th className="border px-4 py-2 text-center">Chi tiết</th>
             </tr>
           </thead>

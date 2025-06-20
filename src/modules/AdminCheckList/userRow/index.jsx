@@ -1,4 +1,5 @@
 /* eslint-disable react/prop-types */
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -6,8 +7,42 @@ import {
   DialogContent,
 } from "@/components/ui/dialog";
 import UserDetailCheckList from "../userDetail";
+import { checkListService } from "@/services/checklist.service";
 
 const UserRowCheckList = ({ user, index }) => {
+  const [percent, setPercent] = useState(null);
+
+  useEffect(() => {
+    const fetchChecklist = async () => {
+      try {
+        const res = await checkListService.getByIdCheckList(user._id);
+        const outside = res.kiem_tra_ben_ngoai || [];
+        const inside = res.kiem_tra_khi_van_hanh || [];
+        const all = [...outside, ...inside];
+
+        const total = all.length;
+        const yCount = all.filter(
+          (item) => item.dap_an?.toLowerCase() === "y"
+        ).length;
+
+        const calcPercent = total > 0 ? Math.round((yCount / total) * 100) : 0;
+        setPercent(calcPercent);
+      } catch (error) {
+        console.error("Lỗi lấy checklist:", error);
+        setPercent(0);
+      }
+    };
+
+    fetchChecklist();
+  }, [user._id]);
+
+  // Xác định màu theo phần trăm
+  const getBadgeColor = () => {
+    if (percent >= 80) return "bg-green-500";
+    if (percent >= 50) return "bg-yellow-500";
+    return "bg-red-500";
+  };
+
   return (
     <tr className="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700">
       <td className="border px-4 py-2">{index + 1}</td>
@@ -24,6 +59,18 @@ const UserRowCheckList = ({ user, index }) => {
           minute: "2-digit",
         })}
       </td>
+      <td className="border px-4 py-2 text-center">
+        {percent !== null ? (
+          <span
+            className={`font-semibold px-2 py-1 rounded-full text-white text-sm ${getBadgeColor()} w-[60px] inline-block text-center`}
+          >
+            {percent}%
+          </span>
+        ) : (
+          "Đang tính..."
+        )}
+      </td>
+
       <td className="border px-4 py-2 text-center align-middle">
         <Dialog>
           <DialogTrigger asChild>
