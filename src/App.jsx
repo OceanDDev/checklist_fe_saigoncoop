@@ -11,11 +11,11 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Trang checklist không cần đăng nhập */}
-        <Route path="/saigoncoop/checklist" element={<ForkliftChecklist />} />
+        <Route path="/checklist" element={<ForkliftChecklist />} />
 
         {/* Trang chủ chỉ vào được nếu đã login */}
         <Route
-          path="/saigoncoop"
+          path="/"
           element={
             <PrivateRoute>
               <MainLayout>
@@ -24,10 +24,10 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route path="/saigoncoop/thank-you" element={<ThankYouScreen />} />
+        <Route path="/thank-you" element={<ThankYouScreen />} />
 
         {/* Trang login */}
-        <Route path="/saigoncoop/login" element={<LoginPage />} />
+        <Route path="/login" element={<LoginPage />} />
       </Routes>
     </BrowserRouter>
   );
