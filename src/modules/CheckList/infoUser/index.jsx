@@ -1,10 +1,10 @@
 import PropTypes from "prop-types";
-import { User, IdCard, Building, CarFront } from "lucide-react";
+import { User, IdCard, Building } from "lucide-react";
 
 const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
-  const { employeeId, userName, department, carNumber } = userInfo;
+  const { employeeId, userName, department } = userInfo;
 
-  const isFormValid = employeeId && userName && department && carNumber;
+  const isFormValid = employeeId && userName && department;
 
   const handleChange = (field) => (e) => {
     setUserInfo({ ...userInfo, [field]: e.target.value });
@@ -57,17 +57,6 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
             />
           </div>
 
-          {/* Số xe */}
-          <div className="relative">
-            <CarFront className="absolute top-3 left-3 text-gray-400 size-5" />
-            <input
-              type="text"
-              placeholder="Số xe"
-              className={inputClass}
-              value={carNumber}
-              onChange={handleChange("carNumber")}
-            />
-          </div>
 
           <button
             onClick={onConfirm}
@@ -91,7 +80,6 @@ UserInfoForm.propTypes = {
     employeeId: PropTypes.string.isRequired,
     userName: PropTypes.string.isRequired,
     department: PropTypes.string.isRequired,
-    carNumber: PropTypes.string,
   }).isRequired,
   setUserInfo: PropTypes.func.isRequired,
   onConfirm: PropTypes.func.isRequired,

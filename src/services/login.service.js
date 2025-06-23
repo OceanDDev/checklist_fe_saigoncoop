@@ -4,7 +4,8 @@ import { requestService } from "./request.service"
 
 const login = async (payload) => {
 	try {
-		const results = await requestService.post(ApiServer, URL.auth.login, payload)
+		const results = await requestService.post(URL.auth.login, payload, undefined, ApiServer);
+
 		return results
 	} catch (error) {
 		console.error(error)

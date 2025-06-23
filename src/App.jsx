@@ -1,21 +1,21 @@
 import { Routes, Route, BrowserRouter } from "react-router-dom";
 import UserTable from "./modules/AdminCheckList";
-import ForkliftChecklist from "./modules/CheckList";
 import LoginPage from "./modules/Login";
 import PrivateRoute from "./middleware/PrivateRoute";
 import ThankYouScreen from "./modules/CheckListSucces";
 import MainLayout from "./page/home";
+import HomeCheckList from "./modules/AdminCheckList/HomeCheckList";
+import AdminChecklistForm from "./modules/AdminCheckList/HomeCheckList/Formchecklist";
+import ForkliftChecklistMobile from "./modules/CheckList";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Trang checklist không cần đăng nhập */}
-        <Route path="/checklist" element={<ForkliftChecklist />} />
 
         {/* Trang chủ chỉ vào được nếu đã login */}
         <Route
-          path="/"
+          path="/checklistform/:formId"
           element={
             <PrivateRoute>
               <MainLayout>
@@ -24,6 +24,33 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route
+          path="/"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <HomeCheckList />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/checklistform"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <AdminChecklistForm />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+         <Route
+          path="/checklist/fill/:id"
+          element={
+                <ForkliftChecklistMobile  />
+          }
+        />
+
         <Route path="/thank-you" element={<ThankYouScreen />} />
 
         {/* Trang login */}

@@ -1,38 +1,58 @@
-import { ApiServer, URL } from "@/configs/api-request"
-import { requestService } from "./request.service"
-
+import { ApiServer, URL } from "@/configs/api-request";
+import { requestService } from "./request.service";
 
 const getCheckList = async (payload) => {
-	try {
-		const results = await requestService.get(ApiServer, URL.checklist.list, payload)
-		return results
-	} catch (error) {
-		console.error(error)
-	}
-}
+  try {
+    const results = await requestService.get(
+      ApiServer,
+      URL.checklist.list,
+      payload
+    );
+    return results;
+  } catch (error) {
+    console.error(error);
+  }
+};
 
-const createCheckList = async (payload) =>{ 
-    try {
-        const results = await requestService.post(ApiServer,URL.checklist.create, payload)
-        return results
+const createCheckList = async (formId, payload) => {
+  try {
+    const results = await requestService.post(
+      `${URL.checklist.create}/${formId}`, // ⬅️ thêm formId vào URL
+      payload
+    );
+    return results;
+  } catch (error) {
+    console.error("Lỗi gửi checklist:", error);
+    throw error;
+  }
+};
 
-    } catch (error) {
-        console.error(error)
-    }
-}
+const getCheckListsByFormId = async (formId) => {
+  try {
+    const result = await requestService.get(`${URL.checklist.create}/form/${formId}`);
+    return result;
+  } catch (error) {
+    console.error("Lỗi khi gọi getCheckListsByFormId:", error);
+    throw error;
+  }
+};
 
-const getByIdCheckList = async (id) =>{ 
-    try {
-        const res = await requestService.get(ApiServer,`${URL.checklist.list}/${id}`)
-        return res
-    } catch (error) {
-        console.error(error);
-        
-    }
-}
 
-export const checkListService ={ 
-    getCheckList,
-    createCheckList,
-    getByIdCheckList
-}
+const getByIdCheckList = async (id) => {
+  try {
+    const path = `${URL.checklist.create}/${id}`;
+    const result = await requestService.get(path);
+    return result;
+  } catch (error) {
+    console.error("Lỗi khi gọi getByIdCheckList:", error);
+    throw error;
+  }
+};
+
+
+export const checkListService = {
+  getCheckList,
+  createCheckList,
+  getByIdCheckList,
+  getCheckListsByFormId
+};

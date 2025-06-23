@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const Header = () => {
   const navigate = useNavigate();
@@ -11,9 +11,11 @@ const Header = () => {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 py-3 bg-white shadow border-b">
       <div className="flex items-center space-x-3">
-        <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
-        <span className="text-xl font-bold text-gray-800">Hệ thống kiểm tra xe</span>
+        <Link to="/">
+          <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
+        </Link>{" "}
       </div>
+        <h2 className="text-3xl font-bold text-gray-800">CHECKLIST</h2>
 
       <button
         onClick={handleLogout}

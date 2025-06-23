@@ -1,39 +1,45 @@
-import { ApiServer, DEF_HEADERS } from "@/configs/api-request"
+import { ApiServer, DEF_HEADERS } from "@/configs/api-request";
 
-const get = (axiosInstance = ApiServer, path = '', params = {}, headers = DEF_HEADERS, responseType = 'json') =>
+// GET
+const get = (path = '', params = {}, headers = DEF_HEADERS, axiosInstance = ApiServer) =>
   axiosInstance
-    .get(path, { responseType, headers, params })
+    .get(path, { params, headers })
     .then(res => res.data)
-    .catch(err => Promise.reject(err.response ? err.response.data : err))
+    .catch(err => Promise.reject(err.response?.data || err));
 
-const post = (axiosInstance = ApiServer, path = '', body = {}, headers = DEF_HEADERS) =>
+// POST
+const post = (path = '', body = {}, headers = DEF_HEADERS, axiosInstance = ApiServer) =>
   axiosInstance
     .post(path, body, { headers })
     .then(res => res.data)
-    .catch(err => Promise.reject(err.response ? err.response.data : err))
+    .catch(err => Promise.reject(err.response?.data || err));
 
-const put = (axiosInstance = ApiServer, path = '', body = {}, headers = DEF_HEADERS) =>
+// PUT
+const put = (path = '', body = {}, headers = DEF_HEADERS, axiosInstance = ApiServer) =>
   axiosInstance
     .put(path, body, { headers })
     .then(res => res.data)
-    .catch(err => Promise.reject(err.response ? err.response.data : err))
+    .catch(err => Promise.reject(err.response?.data || err));
 
-const patch = (axiosInstance = ApiServer, path = '', body = {}, headers = DEF_HEADERS) =>
+// PATCH
+const patch = (path = '', body = {}, headers = DEF_HEADERS, axiosInstance = ApiServer) =>
   axiosInstance
     .patch(path, body, { headers })
     .then(res => res.data)
-    .catch(err => Promise.reject(err.response ? err.response.data : err))
+    .catch(err => Promise.reject(err.response?.data || err));
 
-const del = (axiosInstance = ApiServer, path = '', headers = DEF_HEADERS) =>
+// DELETE
+const del = (path = '', headers = DEF_HEADERS, axiosInstance = ApiServer) =>
   axiosInstance
     .delete(path, { headers })
     .then(res => res.data)
-    .catch(err => Promise.reject(err.response ? err.response.data : err))
+    .catch(err => Promise.reject(err.response?.data || err));
 
+// ✅ Export
 export const requestService = {
   get,
   post,
   put,
   patch,
-  del
-}
+  del,
+};
