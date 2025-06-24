@@ -16,6 +16,12 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 px-4 py-8">
       <div className="bg-white shadow-2xl rounded-2xl w-full max-w-md p-6 sm:p-8">
+        
+        {/* Căn giữa logo */}
+        <div className="flex justify-center mb-4">
+          <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
+        </div>
+
         <h2 className="text-center text-xl font-bold text-blue-600 uppercase mb-8 tracking-wide">
           Nhập Thông Tin Người Kiểm Tra
         </h2>
@@ -57,7 +63,7 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
             />
           </div>
 
-
+          {/* Nút xác nhận */}
           <button
             onClick={onConfirm}
             disabled={!isFormValid}
