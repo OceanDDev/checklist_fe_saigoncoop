@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import UserRowCheckList from "./userRow";
 import { checkListService } from "@/services/checklist.service";
@@ -13,6 +13,10 @@ const UserTableCheckList = () => {
   const itemsPerPage = 8;
   const [title, setTitle] = useState([]);
 
+  // Flags để ngăn duplicate
+  const fetchedCheckList = useRef(false);
+  const fetchedTitle = useRef(false);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -26,7 +30,10 @@ const UserTableCheckList = () => {
       }
     };
 
-    if (formId) fetchData();
+    if (formId && !fetchedCheckList.current) {
+      fetchedCheckList.current = true;
+      fetchData();
+    }
   }, [formId]);
 
   useEffect(() => {
@@ -39,7 +46,11 @@ const UserTableCheckList = () => {
         console.error(error);
       }
     };
-    fetchTitle();
+
+    if (formId && !fetchedTitle.current) {
+      fetchedTitle.current = true;
+      fetchTitle();
+    }
   }, [formId]);
 
   const filteredUsers = checkList.filter((item) =>

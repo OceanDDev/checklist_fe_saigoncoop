@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkListFormService } from "@/services/checklistform.service";
 import { ToastContainer, toast } from "react-toastify";
@@ -8,13 +8,16 @@ const HomeCheckList = () => {
   const [checklists, setChecklists] = useState([]);
   const navigate = useNavigate();
 
+  const fetchedRef = useRef(false); // 👈 FLAG chống gọi lặp
+
   useEffect(() => {
     const fetchChecklists = async () => {
       try {
         const res = await checkListFormService.getCheckListForm();
-        // Sắp xếp checklist theo ngày tạo mới nhất lên đầu
         const sorted = [...res].sort(
-          (a, b) => new Date(b.createdAt || b.ngay_tao) - new Date(a.createdAt || a.ngay_tao)
+          (a, b) =>
+            new Date(b.createdAt || b.ngay_tao) -
+            new Date(a.createdAt || a.ngay_tao)
         );
         setChecklists(sorted);
       } catch (error) {
@@ -22,7 +25,10 @@ const HomeCheckList = () => {
       }
     };
 
-    fetchChecklists();
+    if (!fetchedRef.current) {
+      fetchedRef.current = true; // đánh dấu đã fetch
+      fetchChecklists();
+    }
   }, []);
 
   const handleCopy = (url) => {
@@ -45,12 +51,11 @@ const HomeCheckList = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-10">
         <button
-  onClick={() => navigate("/checklistform")}
-  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-lg flex items-center gap-2"
->
-   Tạo Checklist
-</button>
-
+          onClick={() => navigate("/checklistform")}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-lg flex items-center gap-2"
+        >
+          Tạo Checklist
+        </button>
       </div>
 
       {/* Danh sách checklist */}

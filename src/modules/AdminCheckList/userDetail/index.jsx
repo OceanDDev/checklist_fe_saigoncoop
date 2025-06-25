@@ -1,10 +1,11 @@
 import { checkListService } from "@/services/checklist.service";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 // eslint-disable-next-line react/prop-types
 const UserDetailCheckList = ({ userId }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const fetchRef = useRef(false)
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -18,9 +19,11 @@ const UserDetailCheckList = ({ userId }) => {
         setLoading(false);
       }
     };
-
-    if (userId) {
-      fetchDetail();
+    if(!fetchRef.current){
+      fetchRef.current = true
+      if (userId) {
+        fetchDetail();
+      }
     }
   }, [userId]);
 

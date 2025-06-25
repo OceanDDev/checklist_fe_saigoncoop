@@ -85,7 +85,7 @@ const AdminChecklistForm = () => {
 
         {/* Kiểm tra bên ngoài */}
         <div className="mb-6">
-          <h4 className="text-lg font-semibold text-gray-800 mb-2">🛠 Kiểm tra bên ngoài</h4>
+          <h4 className="text-lg font-semibold text-gray-800 mb-2">Kiểm tra bên ngoài</h4>
           {form.kiem_tra_ben_ngoai.map((item, index) => (
             <div key={index} className="flex items-center gap-2 mb-2">
               <input
@@ -116,7 +116,7 @@ const AdminChecklistForm = () => {
 
         {/* Kiểm tra khi vận hành */}
         <div className="mb-6">
-          <h4 className="text-lg font-semibold text-gray-800 mb-2">🚛 Kiểm tra khi vận hành</h4>
+          <h4 className="text-lg font-semibold text-gray-800 mb-2">Kiểm tra khi vận hành</h4>
           {form.kiem_tra_khi_van_hanh.map((item, index) => (
             <div key={index} className="flex items-center gap-2 mb-2">
               <input

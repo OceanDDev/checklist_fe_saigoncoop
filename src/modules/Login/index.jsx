@@ -27,7 +27,7 @@ const LoginPage = () => {
     }
 
     // 👇 THÀNH CÔNG MỚI VÀO ĐÂY
-    toast.success('Đăng nhập thành công! 👋', { position: 'top-right' });
+    toast.success('Đăng nhập thành công', { position: 'top-right' });
     localStorage.setItem('user', JSON.stringify(res.user));
     setTimeout(() => navigate('/'), 1000);
   } catch (err) {
