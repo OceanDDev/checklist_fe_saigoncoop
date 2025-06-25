@@ -23,9 +23,7 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
           <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
         </div>
 
-        <h2 className="text-center text-xl font-bold text-blue-600 uppercase mb-8 tracking-wide">
-          Nhập Thông Tin Người Kiểm Tra
-        </h2>
+        
 
         <div className="space-y-5">
           {/* Mã nhân viên */}
@@ -74,7 +72,7 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
                 : "bg-gray-300 text-gray-600 cursor-not-allowed"
             }`}
           >
-            🚀 Xác nhận & Bắt đầu kiểm tra
+             Xác nhận & Bắt đầu kiểm tra
           </button>
         </div>
       </div>
@@ -93,4 +91,3 @@ UserInfoForm.propTypes = {
 };
 
 export default UserInfoForm;
-  
