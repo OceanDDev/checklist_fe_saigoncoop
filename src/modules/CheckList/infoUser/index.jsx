@@ -10,14 +10,15 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
     setUserInfo({ ...userInfo, [field]: e.target.value });
   };
 
+  // Font size >= 16px để tránh zoom trên iPhone
   const inputClass =
-    "w-full border border-gray-300 rounded-lg px-4 py-2 pl-10 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500";
+    "w-full border border-gray-300 rounded-lg px-4 py-2 pl-10 text-base sm:text-lg focus:outline-none focus:ring-2 focus:ring-blue-500";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 px-4 py-8">
       <div className="bg-white shadow-2xl rounded-2xl w-full max-w-md p-6 sm:p-8">
         
-        {/* Căn giữa logo */}
+        {/* Logo */}
         <div className="flex justify-center mb-4">
           <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
         </div>
@@ -67,7 +68,7 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
           <button
             onClick={onConfirm}
             disabled={!isFormValid}
-            className={`w-full py-2 rounded-lg text-sm sm:text-base font-semibold transition duration-200 ${
+            className={`w-full py-2 rounded-lg text-base sm:text-lg font-semibold transition duration-200 ${
               isFormValid
                 ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md"
                 : "bg-gray-300 text-gray-600 cursor-not-allowed"
@@ -92,3 +93,4 @@ UserInfoForm.propTypes = {
 };
 
 export default UserInfoForm;
+  

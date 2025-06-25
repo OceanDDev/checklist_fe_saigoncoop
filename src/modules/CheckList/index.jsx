@@ -6,7 +6,7 @@ import UserInfoForm from "./infoUser";
 import { ClipboardCheck, AlertCircle, StickyNote } from "lucide-react";
 
 const ForkliftChecklistMobile = () => {
-  const { id } = useParams(); // ✅ form_id
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const [formTitle, setFormTitle] = useState("");
@@ -80,20 +80,18 @@ const ForkliftChecklistMobile = () => {
       }));
 
     const payload = {
-      form_id: id, // ✅ form_id gửi trong payload
+      form_id: id,
       ma_nhan_vien: userInfo.employeeId,
       ho_ten: userInfo.userName,
       don_vi: userInfo.department,
       ket_luan: conclusion,
       kiem_tra_ben_ngoai: buildAnswers(groupedQuestions["KIỂM TRA BÊN NGOÀI"]),
-      kiem_tra_khi_van_hanh: buildAnswers(
-        groupedQuestions["KIỂM TRA KHI VẬN HÀNH"]
-      ),
+      kiem_tra_khi_van_hanh: buildAnswers(groupedQuestions["KIỂM TRA KHI VẬN HÀNH"]),
     };
 
     try {
       console.log("🚀 Gửi checklist với payload:", payload);
-      await checkListService.createCheckList(id, payload); // ⬅️ Gửi formId vào URL
+      await checkListService.createCheckList(id, payload);
       navigate("/thank-you");
     } catch (err) {
       alert("Gửi checklist thất bại");
@@ -117,39 +115,27 @@ const ForkliftChecklistMobile = () => {
         {formTitle}
       </h2>
 
-      <div className="mb-4 text-sm text-gray-700 space-y-1">
-        <p>
-          <strong>Mã nhân viên:</strong> {userInfo.employeeId}
-        </p>
-        <p>
-          <strong>Họ và tên:</strong> {userInfo.userName}
-        </p>
-        <p>
-          <strong>Đơn vị:</strong> {userInfo.department}
-        </p>
-       
+      <div className="mb-4 text-base text-gray-700 space-y-1">
+        <p><strong>Mã nhân viên:</strong> {userInfo.employeeId}</p>
+        <p><strong>Họ và tên:</strong> {userInfo.userName}</p>
+        <p><strong>Đơn vị:</strong> {userInfo.department}</p>
       </div>
 
       {Object.entries(groupedQuestions).map(([groupName, questions], gIdx) => (
         <div key={gIdx}>
-          <div className="flex items-center gap-2 text-blue-600 font-semibold mb-2 border-b pb-1">
+          <div className="flex items-center gap-2 text-blue-600 text-base font-semibold mb-2 border-b pb-1">
             <ClipboardCheck className="size-5" />
             {groupName}
           </div>
 
           {questions.map((q, idx) => (
-            <div
-              key={q._id}
-              className="mb-5 border rounded-xl p-4 shadow bg-white"
-            >
-              <div className="flex gap-2 items-start mb-2 text-sm text-gray-800 font-medium">
+            <div key={q._id} className="mb-5 border rounded-xl p-4 shadow bg-white">
+              <div className="flex gap-2 items-start mb-2 text-base text-gray-800 font-medium">
                 <AlertCircle className="size-4 text-yellow-500 mt-1" />
-                <span>
-                  {idx + 1}. {q.noidung}
-                </span>
+                <span>{idx + 1}. {q.noidung}</span>
               </div>
 
-              <div className="flex gap-6 text-sm mb-2">
+              <div className="flex gap-6 text-base mb-2">
                 {["Y", "N"].map((opt) => (
                   <label key={opt} className="flex items-center gap-2">
                     <input
@@ -173,12 +159,12 @@ const ForkliftChecklistMobile = () => {
                   onChange={(e) =>
                     handleAnswerChange(q._id, "ghi_chu", e.target.value)
                   }
-                  className="w-full border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               {errors[q._id] && (
-                <div className="text-red-500 text-xs mt-1">{errors[q._id]}</div>
+                <div className="text-red-500 text-sm mt-1">{errors[q._id]}</div>
               )}
             </div>
           ))}
@@ -187,18 +173,19 @@ const ForkliftChecklistMobile = () => {
 
       <div className="mt-6 space-y-4">
         <div>
-          <label className="text-sm font-semibold">Kết luận:</label>
+          <label className="text-base font-semibold">Kết luận:</label>
           <input
             type="text"
-            className="w-full mt-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full mt-1 border border-gray-300 rounded px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={conclusion}
             onChange={(e) => setConclusion(e.target.value)}
             placeholder="Ghi kết luận chung nếu có..."
           />
         </div>
+
         <button
           onClick={handleSubmit}
-          className="w-full bg-blue-600 text-white rounded py-2 text-sm font-semibold hover:bg-blue-700"
+          className="w-full bg-blue-600 text-white rounded py-2 text-base font-semibold hover:bg-blue-700 transition duration-200"
         >
           Gửi Checklist
         </button>
