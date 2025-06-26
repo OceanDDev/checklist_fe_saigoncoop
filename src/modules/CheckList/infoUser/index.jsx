@@ -1,7 +1,9 @@
 import PropTypes from "prop-types";
 import { User, IdCard, Building } from "lucide-react";
+import { toast, ToastContainer } from "react-toastify";
+import { checkListService } from "@/services/checklist.service";
 
-const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
+const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
   const { employeeId, userName, department } = userInfo;
 
   const isFormValid = employeeId && userName && department;
@@ -10,15 +12,31 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
     setUserInfo({ ...userInfo, [field]: e.target.value });
   };
 
+  const handleConfirm = async () => {
+    try {
+      const res = await checkListService.checkDuplicate(formId, employeeId);
+      if (res) {
+        toast.error("⚠️ Mã nhân viên đã điền checklist hôm nay.");
+        return;
+      }
+      onConfirm(); // → sang bước checklist
+    } catch (err) {
+      const msg = err?.response?.data?.error || "Lỗi kiểm tra mã nhân viên.";
+      toast.error("❌ " + msg);
+    }
+  };
+
   // Font size >= 16px để tránh zoom trên iPhone
   const inputClass =
     "w-full border border-gray-300 rounded-lg px-4 py-2 pl-10 text-base sm:text-lg focus:outline-none focus:ring-2 focus:ring-blue-500";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 px-4 py-8">
+          <ToastContainer />
+
       <div className="bg-white shadow-2xl rounded-2xl w-full max-w-md p-6 sm:p-8">
         
-        {/* Logo */}
+        {/* Căn giữa logo */}
         <div className="flex justify-center mb-4">
           <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
         </div>
@@ -26,7 +44,6 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
         
 
         <div className="space-y-5">
-          {/* Mã nhân viên */}
           <div className="relative">
             <IdCard className="absolute top-3 left-3 text-gray-400 size-5" />
             <input
@@ -38,7 +55,6 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
             />
           </div>
 
-          {/* Họ và tên */}
           <div className="relative">
             <User className="absolute top-3 left-3 text-gray-400 size-5" />
             <input
@@ -50,7 +66,6 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
             />
           </div>
 
-          {/* Đơn vị */}
           <div className="relative">
             <Building className="absolute top-3 left-3 text-gray-400 size-5" />
             <input
@@ -62,9 +77,8 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm }) => {
             />
           </div>
 
-          {/* Nút xác nhận */}
           <button
-            onClick={onConfirm}
+            onClick={handleConfirm}
             disabled={!isFormValid}
             className={`w-full py-2 rounded-lg text-base sm:text-lg font-semibold transition duration-200 ${
               isFormValid
@@ -88,6 +102,7 @@ UserInfoForm.propTypes = {
   }).isRequired,
   setUserInfo: PropTypes.func.isRequired,
   onConfirm: PropTypes.func.isRequired,
+  formId: PropTypes.string.isRequired,
 };
 
 export default UserInfoForm;

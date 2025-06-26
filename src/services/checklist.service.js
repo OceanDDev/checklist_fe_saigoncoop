@@ -49,10 +49,23 @@ const getByIdCheckList = async (id) => {
   }
 };
 
+const checkDuplicate = async (formId, ma_nhan_vien) => {
+  try {
+    const path = `${URL.checklist.create}/check-duplicate/${formId}?ma_nhan_vien=${ma_nhan_vien}`;
+    const result = await requestService.get(path);
+    return result.exists; // ✅ kết quả là true/false
+  } catch (error) {
+    console.error("Lỗi khi kiểm tra trùng mã nhân viên:", error);
+    throw error;
+  }
+};
+
 
 export const checkListService = {
   getCheckList,
   createCheckList,
   getByIdCheckList,
-  getCheckListsByFormId
+  getCheckListsByFormId,
+  checkDuplicate
+  
 };

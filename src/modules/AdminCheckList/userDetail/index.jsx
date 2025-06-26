@@ -38,20 +38,15 @@ const UserDetailCheckList = ({ userId }) => {
           <div className="flex items-center gap-2 mt-2 sm:mt-0">
             <span
               className={`px-3 py-1 text-sm font-semibold rounded-full ${
-                item.dap_an === "Y"
+                item.dap_an === "Đ"
                   ? "bg-green-100 text-green-700"
-                  : item.dap_an === "N"
+                  : item.dap_an === "K"
                   ? "bg-red-100 text-red-700"
                   : "bg-gray-100 text-gray-700"
               }`}
             >
               {item.dap_an}
             </span>
-            {item.ghi_chu && (
-              <span className="text-sm text-gray-600 dark:text-gray-400 italic">
-                Ghi chú: {item.ghi_chu}
-              </span>
-            )}
           </div>
         </div>
       </li>
@@ -72,7 +67,7 @@ const UserDetailCheckList = ({ userId }) => {
       <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg space-y-2">
         <p>
           <strong>Kết luận:</strong>{" "}
-          <span className="text-gray-800 dark:text-gray-200">{data.ket_luan}</span>
+          <span className="text-gray-800 dark:text-gray-200">{data.ghi_chu}</span>
         </p>
         <p>
           <strong>Ngày tạo:</strong>{" "}

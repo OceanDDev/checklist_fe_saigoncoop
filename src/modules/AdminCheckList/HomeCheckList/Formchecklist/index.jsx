@@ -12,6 +12,12 @@ const AdminChecklistForm = () => {
     mo_ta: "",
     kiem_tra_ben_ngoai: [{ noidung: "" }],
     kiem_tra_khi_van_hanh: [{ noidung: "" }],
+    option: [
+      {
+        label: "",
+        choices: [""]
+      }
+    ]
   });
 
   const handleChange = (field, value) => {
@@ -36,6 +42,43 @@ const AdminChecklistForm = () => {
     setForm({ ...form, [section]: updated });
   };
 
+  // 🔽 HANDLERS FOR OPTION
+  const handleOptionLabelChange = (index, value) => {
+    const updated = [...form.option];
+    updated[index].label = value;
+    setForm({ ...form, option: updated });
+  };
+
+  const handleChoiceChange = (optIndex, choiceIndex, value) => {
+    const updated = [...form.option];
+    updated[optIndex].choices[choiceIndex] = value;
+    setForm({ ...form, option: updated });
+  };
+
+  const handleAddChoice = (optIndex) => {
+    const updated = [...form.option];
+    updated[optIndex].choices.push("");
+    setForm({ ...form, option: updated });
+  };
+
+  const handleRemoveChoice = (optIndex, choiceIndex) => {
+    const updated = [...form.option];
+    updated[optIndex].choices = updated[optIndex].choices.filter((_, i) => i !== choiceIndex);
+    setForm({ ...form, option: updated });
+  };
+
+  const handleAddOption = () => {
+    setForm({
+      ...form,
+      option: [...form.option, { label: "", choices: [""] }],
+    });
+  };
+
+  const handleRemoveOption = (index) => {
+    const updated = form.option.filter((_, i) => i !== index);
+    setForm({ ...form, option: updated });
+  };
+
   const handleSubmit = async () => {
     try {
       await checkListFormService.createCheckListForm(form);
@@ -47,17 +90,17 @@ const AdminChecklistForm = () => {
         navigate("/");
       }, 1500);
     } catch (err) {
-      toast.error("❌ Có lỗi xảy ra khi tạo form!",err, {
+      toast.error("❌ Có lỗi xảy ra khi tạo form!", {
         position: "top-center",
         autoClose: 2500,
-      });
+      },err);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <ToastContainer />
-      <div className="max-w-3xl mx-auto p-8 bg-white border-2 border-blue-200 rounded-2xl shadow-xl">
+      <div className="max-w-4xl mx-auto p-8 bg-white border-2 border-blue-200 rounded-2xl shadow-xl">
         <h2 className="text-3xl font-bold mb-6 text-blue-700">📝 Tạo Checklist Form</h2>
 
         {/* Tiêu đề */}
@@ -83,7 +126,7 @@ const AdminChecklistForm = () => {
           />
         </div>
 
-        {/* Kiểm tra bên ngoài */}
+        {/* 🛠 Kiểm tra bên ngoài */}
         <div className="mb-6">
           <h4 className="text-lg font-semibold text-gray-800 mb-2">Kiểm tra bên ngoài</h4>
           {form.kiem_tra_ben_ngoai.map((item, index) => (
@@ -114,7 +157,7 @@ const AdminChecklistForm = () => {
           </button>
         </div>
 
-        {/* Kiểm tra khi vận hành */}
+        {/* 🚛 Kiểm tra khi vận hành */}
         <div className="mb-6">
           <h4 className="text-lg font-semibold text-gray-800 mb-2">Kiểm tra khi vận hành</h4>
           {form.kiem_tra_khi_van_hanh.map((item, index) => (
@@ -145,7 +188,60 @@ const AdminChecklistForm = () => {
           </button>
         </div>
 
-        {/* Nút tạo */}
+        {/* 🧩 Option */}
+        <div className="mb-8">
+          <h4 className="text-lg font-semibold text-gray-800 mb-2">🧩 Tuỳ chọn người dùng (Option)</h4>
+          {form.option.map((opt, optIndex) => (
+            <div key={optIndex} className="border border-gray-200 p-4 rounded-lg mb-4 bg-gray-50">
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  className="border border-gray-300 p-2 flex-1 rounded-md"
+                  placeholder="Nhập tiêu đề (label), ví dụ: Khu vực kiểm tra"
+                  value={opt.label}
+                  onChange={(e) => handleOptionLabelChange(optIndex, e.target.value)}
+                />
+                <button
+                  onClick={() => handleRemoveOption(optIndex)}
+                  className="text-red-500 text-sm hover:underline"
+                >
+                  Xoá option
+                </button>
+              </div>
+              {opt.choices.map((choice, choiceIndex) => (
+                <div key={choiceIndex} className="flex items-center gap-2 mb-1">
+                  <input
+                    className="border border-gray-300 p-2 flex-1 rounded-md"
+                    placeholder={`Lựa chọn ${choiceIndex + 1}`}
+                    value={choice}
+                    onChange={(e) =>
+                      handleChoiceChange(optIndex, choiceIndex, e.target.value)
+                    }
+                  />
+                  <button
+                    onClick={() => handleRemoveChoice(optIndex, choiceIndex)}
+                    className="text-red-500 text-xs hover:underline"
+                  >
+                    Xoá
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => handleAddChoice(optIndex)}
+                className="text-blue-500 text-sm hover:underline mt-1"
+              >
+                + Thêm lựa chọn
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={handleAddOption}
+            className="text-green-600 font-medium text-sm hover:underline"
+          >
+            + Thêm Option mới
+          </button>
+        </div>
+
+        {/* Submit */}
         <div className="text-right">
           <button
             onClick={handleSubmit}

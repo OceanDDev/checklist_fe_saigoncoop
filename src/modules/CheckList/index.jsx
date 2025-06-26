@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { checkListFormService } from "@/services/checklistform.service";
 import { checkListService } from "@/services/checklist.service";
 import UserInfoForm from "./infoUser";
-import { ClipboardCheck, AlertCircle, StickyNote } from "lucide-react";
+import { ClipboardCheck, AlertCircle } from "lucide-react";
 
 const ForkliftChecklistMobile = () => {
   const { id } = useParams();
@@ -17,6 +17,9 @@ const ForkliftChecklistMobile = () => {
     userName: "",
     department: "",
   });
+  const [options, setOptions] = useState([]);
+  const [selectedOptions, setSelectedOptions] = useState({});
+  const [optionErrors, setOptionErrors] = useState({});
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [errors, setErrors] = useState({});
   const [conclusion, setConclusion] = useState("");
@@ -34,18 +37,15 @@ const ForkliftChecklistMobile = () => {
           "KIỂM TRA KHI VẬN HÀNH": data.kiem_tra_khi_van_hanh || [],
         };
         setGroupedQuestions(grouped);
+        setOptions(data.option || []);
 
         const initialAnswers = {};
-        [
-          ...grouped["KIỂM TRA BÊN NGOÀI"],
-          ...grouped["KIỂM TRA KHI VẬN HÀNH"],
-        ].forEach((q) => {
+        [...grouped["KIỂM TRA BÊN NGOÀI"], ...grouped["KIỂM TRA KHI VẬN HÀNH"]].forEach((q) => {
           initialAnswers[q._id] = { dap_an: "", ghi_chu: "" };
         });
         setAnswers(initialAnswers);
       } catch (err) {
         alert("Lỗi tải form: " + (err?.response?.data?.error || err.message));
-        console.error("Lỗi lấy form:", err);
       }
     };
 
@@ -60,13 +60,30 @@ const ForkliftChecklistMobile = () => {
     setErrors((prev) => ({ ...prev, [qid]: "" }));
   };
 
+  const handleOptionChange = (label, value) => {
+    setSelectedOptions((prev) => ({
+      ...prev,
+      [label]: value,
+    }));
+    setOptionErrors((prev) => ({ ...prev, [label]: "" }));
+  };
+
   const validate = () => {
     const newErrors = {};
     Object.entries(answers).forEach(([qid, value]) => {
-      if (!value.dap_an) newErrors[qid] = "Vui lòng chọn Y hoặc N";
+      if (!value.dap_an) newErrors[qid] = "Vui lòng chọn Đ hoặc K";
     });
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+
+    const newOptionErrors = {};
+    options.forEach((opt) => {
+      if (!selectedOptions[opt.label]) {
+        newOptionErrors[opt.label] = "Vui lòng chọn tùy chọn này";
+      }
+    });
+    setOptionErrors(newOptionErrors);
+
+    return Object.keys(newErrors).length === 0 && Object.keys(newOptionErrors).length === 0;
   };
 
   const handleSubmit = async () => {
@@ -76,26 +93,29 @@ const ForkliftChecklistMobile = () => {
       (group || []).map((q) => ({
         noidung: q.noidung,
         dap_an: answers[q._id]?.dap_an || "",
-        ghi_chu: answers[q._id]?.ghi_chu || "",
       }));
+
+    const option_da_chon = Object.entries(selectedOptions).map(
+      ([label, value]) => ({ label, value })
+    );
 
     const payload = {
       form_id: id,
       ma_nhan_vien: userInfo.employeeId,
       ho_ten: userInfo.userName,
       don_vi: userInfo.department,
-      ket_luan: conclusion,
+      ghi_chu: conclusion,
+      option_da_chon,
       kiem_tra_ben_ngoai: buildAnswers(groupedQuestions["KIỂM TRA BÊN NGOÀI"]),
       kiem_tra_khi_van_hanh: buildAnswers(groupedQuestions["KIỂM TRA KHI VẬN HÀNH"]),
     };
 
     try {
       console.log("🚀 Gửi checklist với payload:", payload);
-      await checkListService.createCheckList(id, payload);
+      await checkListService.createCheckList(id, payload); // ⬅️ Gửi formId vào URL
       navigate("/thank-you");
     } catch (err) {
-      alert("Gửi checklist thất bại");
-      console.error("❌ Lỗi gửi checklist:", err);
+      alert("Gửi checklist thất bại",err);
     }
   };
 
@@ -105,21 +125,54 @@ const ForkliftChecklistMobile = () => {
         userInfo={userInfo}
         setUserInfo={setUserInfo}
         onConfirm={() => setIsConfirmed(true)}
+          formId={id}
+
       />
     );
   }
 
   return (
     <div className="p-4 bg-gray-50 min-h-screen max-w-3xl mx-auto">
-      <h2 className="text-center text-lg font-bold text-blue-600 mb-4 uppercase">
-        {formTitle}
-      </h2>
+      <h2 className="text-center text-lg font-bold text-blue-600 mb-4 uppercase">{formTitle}</h2>
 
-      <div className="mb-4 text-base text-gray-700 space-y-1">
-        <p><strong>Mã nhân viên:</strong> {userInfo.employeeId}</p>
-        <p><strong>Họ và tên:</strong> {userInfo.userName}</p>
-        <p><strong>Đơn vị:</strong> {userInfo.department}</p>
+      <div className="mb-4 text-sm text-gray-700 space-y-1">
+        <p>
+          <strong>Mã nhân viên:</strong> {userInfo.employeeId}
+        </p>
+        <p>
+          <strong>Họ và tên:</strong> {userInfo.userName}
+        </p>
+        <p>
+          <strong>Đơn vị:</strong> {userInfo.department}
+        </p>
+       
       </div>
+
+      {options.length > 0 && (
+        <div className="mb-6">
+          <h4 className="font-semibold text-gray-800 mb-2">🧩 Tuỳ chọn</h4>
+          {options.map((opt, idx) => (
+            <div key={idx} className="mb-3">
+              <label className="block mb-1 text-sm font-medium text-gray-700">{opt.label}</label>
+              <select
+                className={`w-full border rounded px-3 py-2 text-sm focus:outline-none
+                  ${optionErrors[opt.label] ? "border-red-500 ring-red-400 ring-1" : "border-gray-300 focus:ring-2 focus:ring-blue-500"}
+                `}
+                value={selectedOptions[opt.label] || ""}
+                onChange={(e) => handleOptionChange(opt.label, e.target.value)}
+              >
+                <option value="">-- Chọn --</option>
+                {opt.choices.map((choice, cIdx) => (
+                  <option key={cIdx} value={choice}>{choice}</option>
+                ))}
+              </select>
+              {optionErrors[opt.label] && (
+                <p className="text-xs text-red-500 mt-1">{optionErrors[opt.label]}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {Object.entries(groupedQuestions).map(([groupName, questions], gIdx) => (
         <div key={gIdx}>
@@ -129,13 +182,16 @@ const ForkliftChecklistMobile = () => {
           </div>
 
           {questions.map((q, idx) => (
-            <div key={q._id} className="mb-5 border rounded-xl p-4 shadow bg-white">
-              <div className="flex gap-2 items-start mb-2 text-base text-gray-800 font-medium">
+            <div
+              key={q._id}
+              className="mb-5 border rounded-xl p-4 shadow bg-white"
+            >
+              <div className="flex gap-2 items-start mb-2 text-sm text-gray-800 font-medium">
                 <AlertCircle className="size-4 text-yellow-500 mt-1" />
                 <span>{idx + 1}. {q.noidung}</span>
               </div>
 
-              <div className="flex gap-6 text-base mb-2">
+              <div className="flex gap-6 text-sm mb-2">
                 {["Y", "N"].map((opt) => (
                   <label key={opt} className="flex items-center gap-2">
                     <input
@@ -150,19 +206,7 @@ const ForkliftChecklistMobile = () => {
                 ))}
               </div>
 
-              <div className="flex items-start gap-2 mt-1">
-                <StickyNote className="size-4 text-gray-500 mt-1" />
-                <input
-                  type="text"
-                  placeholder="Ghi chú (nếu có)"
-                  value={answers[q._id]?.ghi_chu || ""}
-                  onChange={(e) =>
-                    handleAnswerChange(q._id, "ghi_chu", e.target.value)
-                  }
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
+             
               {errors[q._id] && (
                 <div className="text-red-500 text-sm mt-1">{errors[q._id]}</div>
               )}
@@ -173,13 +217,13 @@ const ForkliftChecklistMobile = () => {
 
       <div className="mt-6 space-y-4">
         <div>
-          <label className="text-base font-semibold">Kết luận:</label>
+          <label className="text-sm font-semibold">Kết luận:</label>
           <input
             type="text"
             className="w-full mt-1 border border-gray-300 rounded px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={conclusion}
             onChange={(e) => setConclusion(e.target.value)}
-            placeholder="Ghi kết luận chung nếu có..."
+            placeholder="Ghi chú chung nếu có..."
           />
         </div>
 
