@@ -40,7 +40,10 @@ const ForkliftChecklistMobile = () => {
         setOptions(data.option || []);
 
         const initialAnswers = {};
-        [...grouped["KIỂM TRA BÊN NGOÀI"], ...grouped["KIỂM TRA KHI VẬN HÀNH"]].forEach((q) => {
+        [
+          ...grouped["KIỂM TRA BÊN NGOÀI"],
+          ...grouped["KIỂM TRA KHI VẬN HÀNH"],
+        ].forEach((q) => {
           initialAnswers[q._id] = { dap_an: "", ghi_chu: "" };
         });
         setAnswers(initialAnswers);
@@ -83,7 +86,10 @@ const ForkliftChecklistMobile = () => {
     });
     setOptionErrors(newOptionErrors);
 
-    return Object.keys(newErrors).length === 0 && Object.keys(newOptionErrors).length === 0;
+    return (
+      Object.keys(newErrors).length === 0 &&
+      Object.keys(newOptionErrors).length === 0
+    );
   };
 
   const handleSubmit = async () => {
@@ -107,7 +113,9 @@ const ForkliftChecklistMobile = () => {
       ghi_chu: conclusion,
       option_da_chon,
       kiem_tra_ben_ngoai: buildAnswers(groupedQuestions["KIỂM TRA BÊN NGOÀI"]),
-      kiem_tra_khi_van_hanh: buildAnswers(groupedQuestions["KIỂM TRA KHI VẬN HÀNH"]),
+      kiem_tra_khi_van_hanh: buildAnswers(
+        groupedQuestions["KIỂM TRA KHI VẬN HÀNH"]
+      ),
     };
 
     try {
@@ -115,7 +123,7 @@ const ForkliftChecklistMobile = () => {
       await checkListService.createCheckList(id, payload); // ⬅️ Gửi formId vào URL
       navigate("/thank-you");
     } catch (err) {
-      alert("Gửi checklist thất bại",err);
+      alert("Gửi checklist thất bại", err);
     }
   };
 
@@ -125,15 +133,16 @@ const ForkliftChecklistMobile = () => {
         userInfo={userInfo}
         setUserInfo={setUserInfo}
         onConfirm={() => setIsConfirmed(true)}
-          formId={id}
-
+        formId={id}
       />
     );
   }
 
   return (
     <div className="p-4 bg-gray-50 min-h-screen max-w-3xl mx-auto">
-      <h2 className="text-center text-lg font-bold text-blue-600 mb-4 uppercase">{formTitle}</h2>
+      <h2 className="text-center text-lg font-bold text-blue-600 mb-4 uppercase">
+        {formTitle}
+      </h2>
 
       <div className="mb-4 text-sm text-gray-700 space-y-1">
         <p>
@@ -145,7 +154,6 @@ const ForkliftChecklistMobile = () => {
         <p>
           <strong>Đơn vị:</strong> {userInfo.department}
         </p>
-       
       </div>
 
       {options.length > 0 && (
@@ -153,21 +161,31 @@ const ForkliftChecklistMobile = () => {
           <h4 className="font-semibold text-gray-800 mb-2">🧩 Tuỳ chọn</h4>
           {options.map((opt, idx) => (
             <div key={idx} className="mb-3">
-              <label className="block mb-1 text-sm font-medium text-gray-700">{opt.label}</label>
+              <label className="block mb-1 text-sm font-medium text-gray-700">
+                {opt.label}
+              </label>
               <select
                 className={`w-full border rounded px-3 py-2 text-sm focus:outline-none
-                  ${optionErrors[opt.label] ? "border-red-500 ring-red-400 ring-1" : "border-gray-300 focus:ring-2 focus:ring-blue-500"}
+                  ${
+                    optionErrors[opt.label]
+                      ? "border-red-500 ring-red-400 ring-1"
+                      : "border-gray-300 focus:ring-2 focus:ring-blue-500"
+                  }
                 `}
                 value={selectedOptions[opt.label] || ""}
                 onChange={(e) => handleOptionChange(opt.label, e.target.value)}
               >
                 <option value="">-- Chọn --</option>
                 {opt.choices.map((choice, cIdx) => (
-                  <option key={cIdx} value={choice}>{choice}</option>
+                  <option key={cIdx} value={choice}>
+                    {choice}
+                  </option>
                 ))}
               </select>
               {optionErrors[opt.label] && (
-                <p className="text-xs text-red-500 mt-1">{optionErrors[opt.label]}</p>
+                <p className="text-xs text-red-500 mt-1">
+                  {optionErrors[opt.label]}
+                </p>
               )}
             </div>
           ))}
@@ -188,25 +206,46 @@ const ForkliftChecklistMobile = () => {
             >
               <div className="flex gap-2 items-start mb-2 text-sm text-gray-800 font-medium">
                 <AlertCircle className="size-4 text-yellow-500 mt-1" />
-                <span>{idx + 1}. {q.noidung}</span>
+                <span>
+                  {idx + 1}. {q.noidung}
+                </span>
               </div>
 
               <div className="flex gap-6 text-sm mb-2">
-                {["Y", "N"].map((opt) => (
-                  <label key={opt} className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name={`status-${q._id}`}
-                      checked={answers[q._id]?.dap_an === opt}
-                      onChange={() => handleAnswerChange(q._id, "dap_an", opt)}
-                      className="accent-blue-600"
-                    />
-                    {opt}
-                  </label>
-                ))}
+                {["Đ", "K"].map((opt) => {
+                  const isChecked = answers[q._id]?.dap_an === opt;
+                  const isD = opt === "Đ";
+
+                  return (
+                    <label
+                      key={opt}
+                      className={`flex items-center justify-center w-10 h-10 text-sm font-bold rounded-full cursor-pointer border transition-all duration-200
+        ${
+          isChecked
+            ? isD
+              ? "bg-green-600 text-white border-green-600"
+              : "bg-red-600 text-white border-red-600"
+            : isD
+            ? "text-green-600 border-green-400 hover:bg-green-100"
+            : "text-red-600 border-red-400 hover:bg-red-100"
+        }
+      `}
+                    >
+                      <input
+                        type="radio"
+                        name={`status-${q._id}`}
+                        checked={isChecked}
+                        onChange={() =>
+                          handleAnswerChange(q._id, "dap_an", opt)
+                        }
+                        className="hidden"
+                      />
+                      {opt}
+                    </label>
+                  );
+                })}
               </div>
 
-             
               {errors[q._id] && (
                 <div className="text-red-500 text-sm mt-1">{errors[q._id]}</div>
               )}
@@ -217,7 +256,7 @@ const ForkliftChecklistMobile = () => {
 
       <div className="mt-6 space-y-4">
         <div>
-          <label className="text-sm font-semibold">Kết luận:</label>
+          <label className="text-sm font-semibold">Ghi chú:</label>
           <input
             type="text"
             className="w-full mt-1 border border-gray-300 rounded px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
