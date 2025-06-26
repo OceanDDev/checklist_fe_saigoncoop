@@ -103,43 +103,44 @@ const exportToExcel = () => {
       "Đơn vị": user.don_vi,
       "Tùy chọn": user.option_da_chon?.map(opt => `${opt.label}: ${opt.value}`).join(", ") || "",
       "Ngày điền": user.ngay_tao ? new Date(user.ngay_tao).toLocaleString("vi-VN") : "",
-     
     };
 
     allCheckTitles.forEach(title => {
       const found = allAnswers.find(item => item.noidung === title);
       result[title] = found?.dap_an || "";
     });
-     result["Ghi chú"] =  user.ghi_chu || "";
+    result["Ghi chú"] = user.ghi_chu || "";
 
     return result;
   });
 
-  // Tạo worksheet từ JSON
-  const worksheet = XLSX.utils.json_to_sheet(exportData);
+  // Bước 1: Tạo worksheet từ dữ liệu
+  const worksheet = XLSX.utils.json_to_sheet(exportData, { origin: "A3" });
 
-  // Tạo style cho từng ô
+  // Bước 2: Thêm tiêu đề (Header)
+  const title = "BẢNG KIỂM TRA .... ";
+  XLSX.utils.sheet_add_aoa(worksheet, [[title]], { origin: "A1" });
+
+  // Merge header từ A1 đến cột cuối
+  const totalColumns = Object.keys(exportData[0] || {}).length;
+  worksheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: totalColumns - 1 } }];
+
+  // Style cho dòng tiêu đề chính
+  worksheet["A1"].s = {
+    font: { name: "Arial", sz: 16, bold: true, color: { rgb: "FFFFFF" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    fill: { fgColor: { rgb: "305496" } },
+  };
+
+  // Bước 3: Style phần nội dung
   const range = XLSX.utils.decode_range(worksheet["!ref"]);
-
-  for (let R = range.s.r; R <= range.e.r; ++R) {
+  for (let R = range.s.r + 2; R <= range.e.r; ++R) {
     for (let C = range.s.c; C <= range.e.c; ++C) {
       const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
       if (!worksheet[cellAddress]) continue;
-
       worksheet[cellAddress].s = {
-        font: {
-          name: "Arial",
-          sz: 12,
-          bold: R === 0, // header in đậm
-        },
-        alignment: {
-          horizontal: "center",
-          vertical: "center",
-          wrapText: true,
-        },
-        fill: R === 0 ? {
-          fgColor: { rgb: "D9E1F2" } // light blue for header
-        } : undefined,
+        font: { name: "Arial", sz: 12 },
+        alignment: { horizontal: "center", vertical: "center", wrapText: true },
         border: {
           top: { style: "thin", color: { rgb: "000000" } },
           left: { style: "thin", color: { rgb: "000000" } },
@@ -150,20 +151,48 @@ const exportToExcel = () => {
     }
   }
 
+  // Bước 4: Style dòng tiêu đề cột (hàng 3)
+  for (let C = range.s.c; C <= range.e.c; ++C) {
+    const headerCell = XLSX.utils.encode_cell({ r: 2, c: C });
+    if (worksheet[headerCell]) {
+      worksheet[headerCell].s = {
+        font: { name: "Arial", sz: 12, bold: true },
+        alignment: { horizontal: "center", vertical: "center" },
+        fill: { fgColor: { rgb: "D9E1F2" } },
+        border: {
+          top: { style: "thin", color: { rgb: "000000" } },
+          left: { style: "thin", color: { rgb: "000000" } },
+          bottom: { style: "thin", color: { rgb: "000000" } },
+          right: { style: "thin", color: { rgb: "000000" } },
+        },
+      };
+    }
+  }
+
+  // Bước 5: Thêm dòng Footer
+  const footerRowIndex = range.e.r + 2;
+  const footerText = "Nhân viên kiểm tra ký xác nhận hoàn thành";
+  XLSX.utils.sheet_add_aoa(worksheet, [[footerText]], { origin: { r: footerRowIndex, c: 0 } });
+  worksheet["!merges"].push({ s: { r: footerRowIndex, c: 0 }, e: { r: footerRowIndex, c: totalColumns - 1 } });
+  const footerCell = XLSX.utils.encode_cell({ r: footerRowIndex, c: 0 });
+  worksheet[footerCell].s = {
+    font: { name: "Arial", sz: 12, italic: true },
+    alignment: { horizontal: "center", vertical: "center" },
+    fill: { fgColor: { rgb: "FFF2CC" } },
+  };
+
+  // Bước 6: Ghi file
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "CheckList");
 
-  const excelBuffer = XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "array",
-  });
-
+  const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
   const blob = new Blob([excelBuffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
 
   saveAs(blob, `CheckList_${new Date().toISOString()}.xlsx`);
 };
+
 
 
 
