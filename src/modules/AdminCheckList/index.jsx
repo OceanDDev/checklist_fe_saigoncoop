@@ -109,59 +109,66 @@ const UserTableCheckList = () => {
   const currentUsers = isFiltering
     ? filteredUsers // khi đang lọc thì không phân trang
     : filteredUsers.slice(startIndex, startIndex + itemsPerPage);
-  const exportToExcel = () => {
+const exportToExcel = () => {
   const exportMatrix = [];
 
-  // ==== Header 4 dòng ====
+  // ==== Header 3 dòng (KHÔNG còn cột trống đầu) ====
   exportMatrix.push(["BẢNG KIỂM TRA"]);
-  exportMatrix.push(["Bộ phận: ................................    Loại xe: ................................"]);
-  exportMatrix.push(["Nhân viên vận hành: ................................      Số hiệu xe: ................................"]);
+  exportMatrix.push(["Bộ phận:................................    Loại xe:................................"]);
+  exportMatrix.push(["Nhân viên vận hành:................................    Số hiệu xe:................................"]);
 
-  // ==== Dòng tiêu đề: "Thông tin", Nhân viên 1, 2,...
-  const headerRow = ["Thông tin", ...filteredUsers.map((_, i) => `Nhân viên ${i + 1}`)];
-  exportMatrix.push(headerRow);
-
-  // ==== Dữ liệu checklist ====
+  // ==== Cấu trúc các dòng nội dung ====
   const staticFields = ["Mã NV", "Họ tên", "Đơn vị", "Tùy chọn", "Ngày điền"];
   const dynamicFields = allCheckTitles;
   const finalFields = [...staticFields, ...dynamicFields, "Ghi chú"];
 
-  finalFields.forEach((field) => {
-    const row = [field];
+  // ==== Sắp xếp theo ngày điền tăng dần ====
+  filteredUsers.sort((a, b) => new Date(a.ngay_tao) - new Date(b.ngay_tao));
+
+  // ==== Tạo các dòng dữ liệu, thêm STT bên trái ====
+  finalFields.forEach((field, index) => {
+    const row = [];
+    row.push(index + 1); // STT
+    row.push(field);     // Tên dòng
+
     filteredUsers.forEach((user) => {
-      if (field === "Mã NV") return row.push(user.ma_nhan_vien);
-      if (field === "Họ tên") return row.push(user.ho_ten);
-      if (field === "Đơn vị") return row.push(user.don_vi);
-      if (field === "Tùy chọn")
+      if (field === "Mã NV") return row.push(user.ma_nhan_vien || "");
+      if (field === "Họ tên") return row.push(user.ho_ten || "");
+      if (field === "Đơn vị") return row.push(user.don_vi || "");
+      if (field === "Tùy chọn") {
         return row.push(
           user.option_da_chon?.map((opt) => `${opt.label}: ${opt.value}`).join(", ") || ""
         );
-      if (field === "Ngày điền")
+      }
+      if (field === "Ngày điền") {
         return row.push(user.ngay_tao ? new Date(user.ngay_tao).toLocaleDateString("vi-VN") : "");
+      }
       if (field === "Ghi chú") return row.push(user.ghi_chu || "");
 
-      const allAnswers = [...(user.kiem_tra_ben_ngoai || []), ...(user.kiem_tra_khi_van_hanh || [])];
+      const allAnswers = [
+        ...(user.kiem_tra_ben_ngoai || []),
+        ...(user.kiem_tra_khi_van_hanh || []),
+      ];
       const found = allAnswers.find((item) => item.noidung === field);
       row.push(found?.dap_an || "");
     });
+
     exportMatrix.push(row);
   });
 
   // ==== Footer ====
-  exportMatrix.push([]); // Dòng trống
-  exportMatrix.push(["Nhân viên kiểm tra ký xác nhận hoàn thành"]);
+  exportMatrix.push([]);
+  exportMatrix.push(["", "Nhân viên kiểm tra ký xác nhận hoàn thành"]);
 
   // ==== Tạo worksheet ====
   const worksheet = XLSX.utils.aoa_to_sheet(exportMatrix);
 
-  // ==== Merge các dòng tiêu đề và ký xác nhận ====
-  const totalCols = filteredUsers.length + 1;
+  // ==== Merge các dòng đầu tiên ====
+  const totalCols = filteredUsers.length + 2; // STT + tên dòng + n người
   worksheet["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: totalCols - 1 } },
-    { s: { r: 3, c: 0 }, e: { r: 3, c: totalCols - 1 } },
-    { s: { r: exportMatrix.length - 1, c: 0 }, e: { r: exportMatrix.length - 1, c: totalCols - 1 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }, // BẢNG KIỂM TRA
+    { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } }, // Bộ phận...
+    { s: { r: 2, c: 0 }, e: { r: 2, c: totalCols - 1 } }, // Nhân viên...
   ];
 
   // ==== Style toàn bộ bảng ====
@@ -172,7 +179,11 @@ const UserTableCheckList = () => {
       if (!worksheet[cell]) worksheet[cell] = { t: "s", v: "" };
       worksheet[cell].s = {
         font: { name: "Arial", sz: 12 },
-        alignment: { horizontal: "center", vertical: "center", wrapText: true },
+        alignment: {
+          horizontal: R <= 2 ? "left" : "center",
+          vertical: "center",
+          wrapText: true,
+        },
         border: {
           top: { style: "thin", color: { rgb: "000000" } },
           left: { style: "thin", color: { rgb: "000000" } },
@@ -183,7 +194,7 @@ const UserTableCheckList = () => {
     }
   }
 
-  // ==== Style riêng cho tiêu đề dòng đầu "BẢNG KIỂM TRA" ====
+  // ==== Style riêng cho tiêu đề "BẢNG KIỂM TRA" ====
   const titleCell = XLSX.utils.encode_cell({ r: 0, c: 0 });
   worksheet[titleCell].s = {
     ...worksheet[titleCell].s,
@@ -191,9 +202,9 @@ const UserTableCheckList = () => {
     alignment: { horizontal: "center", vertical: "center" },
   };
 
-  // ==== Xuất file ====
+  // ==== Tạo và xuất workbook ====
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "CheckList_Xoay");
+  XLSX.utils.book_append_sheet(workbook, worksheet, "CheckList_Xoay_STT");
 
   const excelBuffer = XLSX.write(workbook, {
     bookType: "xlsx",
@@ -203,8 +214,12 @@ const UserTableCheckList = () => {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
 
-  saveAs(blob, `CheckList_XOAY_${new Date().toISOString()}.xlsx`);
+  saveAs(blob, `CheckList_XOAY_STT_${new Date().toISOString()}.xlsx`);
 };
+
+
+
+
 
 
   const clearFilters = () => {
