@@ -6,8 +6,8 @@ import CustomPagination from "@/components/ui/customPagination";
 import { saveAs } from "file-saver";
 import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
-import 'react-date-range/dist/styles.css';
-import 'react-date-range/dist/theme/default.css';
+import "react-date-range/dist/styles.css";
+import "react-date-range/dist/theme/default.css";
 import UserRowCheckList from "./userRow";
 import * as XLSX from "xlsx-js-style";
 
@@ -17,19 +17,27 @@ const UserTableCheckList = () => {
   const [title, setTitle] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOption, setSelectedOption] = useState("");
-  const [dateRange, setDateRange] = useState([{ startDate: null, endDate: null, key: "selection" }]);
+  const [dateRange, setDateRange] = useState([
+    { startDate: null, endDate: null, key: "selection" },
+  ]);
   const [showCalendar, setShowCalendar] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 8;
-  const isFiltering = !!(searchTerm || selectedOption || (dateRange[0].startDate && dateRange[0].endDate));
+  const isFiltering = !!(
+    searchTerm ||
+    selectedOption ||
+    (dateRange[0].startDate && dateRange[0].endDate)
+  );
   const fetchedTitle = useRef(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await checkListService.getCheckListsByFormId(formId);
-        const sorted = Array.isArray(res) ? res.sort((a, b) => new Date(b.ngay_tao) - new Date(a.ngay_tao)) : [];
+        const sorted = Array.isArray(res)
+          ? res.sort((a, b) => new Date(b.ngay_tao) - new Date(a.ngay_tao))
+          : [];
         setCheckList(sorted);
       } catch (error) {
         console.error("Lỗi lấy checklist:", error);
@@ -58,24 +66,32 @@ const UserTableCheckList = () => {
 
   const allCheckTitles = Array.from(
     new Set(
-      checkList.flatMap(user =>
-        [...(user.kiem_tra_ben_ngoai || []), ...(user.kiem_tra_khi_van_hanh || [])].map(item => item.noidung)
+      checkList.flatMap((user) =>
+        [
+          ...(user.kiem_tra_ben_ngoai || []),
+          ...(user.kiem_tra_khi_van_hanh || []),
+        ].map((item) => item.noidung)
       )
     )
   );
 
   const allOptionValues = Array.from(
     new Set(
-      checkList.flatMap(user =>
-        user.option_da_chon?.map(opt => `${opt.label}: ${opt.value}`) || []
+      checkList.flatMap(
+        (user) =>
+          user.option_da_chon?.map((opt) => `${opt.label}: ${opt.value}`) || []
       )
     )
   );
 
-  const filteredUsers = checkList.filter(user => {
-    const matchSearch = user.ho_ten?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredUsers = checkList.filter((user) => {
+    const matchSearch = user.ho_ten
+      ?.toLowerCase()
+      .includes(searchTerm.toLowerCase());
     const matchOption = selectedOption
-      ? user.option_da_chon?.some(opt => `${opt.label}: ${opt.value}` === selectedOption)
+      ? user.option_da_chon?.some(
+          (opt) => `${opt.label}: ${opt.value}` === selectedOption
+        )
       : true;
 
     const itemDate = dayjs(user.ngay_tao);
@@ -90,55 +106,71 @@ const UserTableCheckList = () => {
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
   const startIndex = currentPage * itemsPerPage;
-const currentUsers = isFiltering
-  ? filteredUsers // khi đang lọc thì không phân trang
-  : filteredUsers.slice(startIndex, startIndex + itemsPerPage);
-const exportToExcel = () => {
-  const exportData = filteredUsers.map((user, index) => {
-    const allAnswers = [...(user.kiem_tra_ben_ngoai || []), ...(user.kiem_tra_khi_van_hanh || [])];
-    const result = {
-      STT: index + 1,
-      "Mã NV": user.ma_nhan_vien,
-      "Họ tên": user.ho_ten,
-      "Đơn vị": user.don_vi,
-      "Tùy chọn": user.option_da_chon?.map(opt => `${opt.label}: ${opt.value}`).join(", ") || "",
-      "Ngày điền": user.ngay_tao ? new Date(user.ngay_tao).toLocaleString("vi-VN") : "",
-    };
+  const currentUsers = isFiltering
+    ? filteredUsers // khi đang lọc thì không phân trang
+    : filteredUsers.slice(startIndex, startIndex + itemsPerPage);
+  const exportToExcel = () => {
+  const exportMatrix = [];
 
-    allCheckTitles.forEach(title => {
-      const found = allAnswers.find(item => item.noidung === title);
-      result[title] = found?.dap_an || "";
+  // ==== Header 4 dòng ====
+  exportMatrix.push(["BẢNG KIỂM TRA"]);
+  exportMatrix.push(["Bộ phận: ................................    Loại xe: ................................"]);
+  exportMatrix.push(["Nhân viên vận hành: ................................      Số hiệu xe: ................................"]);
+
+  // ==== Dòng tiêu đề: "Thông tin", Nhân viên 1, 2,...
+  const headerRow = ["Thông tin", ...filteredUsers.map((_, i) => `Nhân viên ${i + 1}`)];
+  exportMatrix.push(headerRow);
+
+  // ==== Dữ liệu checklist ====
+  const staticFields = ["Mã NV", "Họ tên", "Đơn vị", "Tùy chọn", "Ngày điền"];
+  const dynamicFields = allCheckTitles;
+  const finalFields = [...staticFields, ...dynamicFields, "Ghi chú"];
+
+  finalFields.forEach((field) => {
+    const row = [field];
+    filteredUsers.forEach((user) => {
+      if (field === "Mã NV") return row.push(user.ma_nhan_vien);
+      if (field === "Họ tên") return row.push(user.ho_ten);
+      if (field === "Đơn vị") return row.push(user.don_vi);
+      if (field === "Tùy chọn")
+        return row.push(
+          user.option_da_chon?.map((opt) => `${opt.label}: ${opt.value}`).join(", ") || ""
+        );
+      if (field === "Ngày điền")
+        return row.push(user.ngay_tao ? new Date(user.ngay_tao).toLocaleDateString("vi-VN") : "");
+      if (field === "Ghi chú") return row.push(user.ghi_chu || "");
+
+      const allAnswers = [...(user.kiem_tra_ben_ngoai || []), ...(user.kiem_tra_khi_van_hanh || [])];
+      const found = allAnswers.find((item) => item.noidung === field);
+      row.push(found?.dap_an || "");
     });
-    result["Ghi chú"] = user.ghi_chu || "";
-
-    return result;
+    exportMatrix.push(row);
   });
 
-  // Bước 1: Tạo worksheet từ dữ liệu
-  const worksheet = XLSX.utils.json_to_sheet(exportData, { origin: "A3" });
+  // ==== Footer ====
+  exportMatrix.push([]); // Dòng trống
+  exportMatrix.push(["Nhân viên kiểm tra ký xác nhận hoàn thành"]);
 
-  // Bước 2: Thêm tiêu đề (Header)
-  const title = "BẢNG KIỂM TRA .... ";
-  XLSX.utils.sheet_add_aoa(worksheet, [[title]], { origin: "A1" });
+  // ==== Tạo worksheet ====
+  const worksheet = XLSX.utils.aoa_to_sheet(exportMatrix);
 
-  // Merge header từ A1 đến cột cuối
-  const totalColumns = Object.keys(exportData[0] || {}).length;
-  worksheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: totalColumns - 1 } }];
+  // ==== Merge các dòng tiêu đề và ký xác nhận ====
+  const totalCols = filteredUsers.length + 1;
+  worksheet["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: totalCols - 1 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: totalCols - 1 } },
+    { s: { r: exportMatrix.length - 1, c: 0 }, e: { r: exportMatrix.length - 1, c: totalCols - 1 } },
+  ];
 
-  // Style cho dòng tiêu đề chính
-  worksheet["A1"].s = {
-    font: { name: "Arial", sz: 16, bold: true, color: { rgb: "FFFFFF" } },
-    alignment: { horizontal: "center", vertical: "center" },
-    fill: { fgColor: { rgb: "305496" } },
-  };
-
-  // Bước 3: Style phần nội dung
+  // ==== Style toàn bộ bảng ====
   const range = XLSX.utils.decode_range(worksheet["!ref"]);
-  for (let R = range.s.r + 2; R <= range.e.r; ++R) {
+  for (let R = range.s.r; R <= range.e.r; ++R) {
     for (let C = range.s.c; C <= range.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-      if (!worksheet[cellAddress]) continue;
-      worksheet[cellAddress].s = {
+      const cell = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!worksheet[cell]) worksheet[cell] = { t: "s", v: "" };
+      worksheet[cell].s = {
         font: { name: "Arial", sz: 12 },
         alignment: { horizontal: "center", vertical: "center", wrapText: true },
         border: {
@@ -151,49 +183,28 @@ const exportToExcel = () => {
     }
   }
 
-  // Bước 4: Style dòng tiêu đề cột (hàng 3)
-  for (let C = range.s.c; C <= range.e.c; ++C) {
-    const headerCell = XLSX.utils.encode_cell({ r: 2, c: C });
-    if (worksheet[headerCell]) {
-      worksheet[headerCell].s = {
-        font: { name: "Arial", sz: 12, bold: true },
-        alignment: { horizontal: "center", vertical: "center" },
-        fill: { fgColor: { rgb: "D9E1F2" } },
-        border: {
-          top: { style: "thin", color: { rgb: "000000" } },
-          left: { style: "thin", color: { rgb: "000000" } },
-          bottom: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } },
-        },
-      };
-    }
-  }
-
-  // Bước 5: Thêm dòng Footer
-  const footerRowIndex = range.e.r + 2;
-  const footerText = "Nhân viên kiểm tra ký xác nhận hoàn thành";
-  XLSX.utils.sheet_add_aoa(worksheet, [[footerText]], { origin: { r: footerRowIndex, c: 0 } });
-  worksheet["!merges"].push({ s: { r: footerRowIndex, c: 0 }, e: { r: footerRowIndex, c: totalColumns - 1 } });
-  const footerCell = XLSX.utils.encode_cell({ r: footerRowIndex, c: 0 });
-  worksheet[footerCell].s = {
-    font: { name: "Arial", sz: 12, italic: true },
+  // ==== Style riêng cho tiêu đề dòng đầu "BẢNG KIỂM TRA" ====
+  const titleCell = XLSX.utils.encode_cell({ r: 0, c: 0 });
+  worksheet[titleCell].s = {
+    ...worksheet[titleCell].s,
+    font: { bold: true, sz: 14 },
     alignment: { horizontal: "center", vertical: "center" },
-    fill: { fgColor: { rgb: "FFF2CC" } },
   };
 
-  // Bước 6: Ghi file
+  // ==== Xuất file ====
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "CheckList");
+  XLSX.utils.book_append_sheet(workbook, worksheet, "CheckList_Xoay");
 
-  const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  const excelBuffer = XLSX.write(workbook, {
+    bookType: "xlsx",
+    type: "array",
+  });
   const blob = new Blob([excelBuffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
 
-  saveAs(blob, `CheckList_${new Date().toISOString()}.xlsx`);
+  saveAs(blob, `CheckList_XOAY_${new Date().toISOString()}.xlsx`);
 };
-
-
 
 
   const clearFilters = () => {
@@ -207,7 +218,10 @@ const exportToExcel = () => {
   return (
     <div className="px-4 sm:px-8 py-8">
       {title.map((form, index) => (
-        <h2 key={index} className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">
+        <h2
+          key={index}
+          className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2"
+        >
           {form.tieu_de || "Không có tiêu đề"}
         </h2>
       ))}
@@ -251,7 +265,9 @@ const exportToExcel = () => {
             onClick={() => setShowCalendar(!showCalendar)}
             value={
               dateRange[0].startDate && dateRange[0].endDate
-                ? `${dayjs(dateRange[0].startDate).format("DD/MM/YYYY")} - ${dayjs(dateRange[0].endDate).format("DD/MM/YYYY")}`
+                ? `${dayjs(dateRange[0].startDate).format(
+                    "DD/MM/YYYY"
+                  )} - ${dayjs(dateRange[0].endDate).format("DD/MM/YYYY")}`
                 : ""
             }
             placeholder="📅 Khoảng ngày"
@@ -281,30 +297,36 @@ const exportToExcel = () => {
       <div className="overflow-x-auto shadow border rounded">
         <table className="w-full text-sm text-left bg-white">
           <thead className="text-xs bg-gray-50 border-b">
-  <tr>
-    <th className="px-4 py-3 font-semibold">STT</th>
-    <th className="px-4 py-3 font-semibold">Mã NV</th>
-    <th className="px-4 py-3 font-semibold">Họ tên</th>
-    <th className="px-4 py-3 font-semibold">Đơn vị</th>
-    <th className="px-4 py-3 font-semibold">Tùy chọn</th>
-    <th className="px-4 py-3 font-semibold">Ngày điền</th>
+            <tr>
+              <th className="px-4 py-3 font-semibold">STT</th>
+              <th className="px-4 py-3 font-semibold">Mã NV</th>
+              <th className="px-4 py-3 font-semibold">Họ tên</th>
+              <th className="px-4 py-3 font-semibold">Đơn vị</th>
+              <th className="px-4 py-3 font-semibold">Tùy chọn</th>
+              <th className="px-4 py-3 font-semibold">Ngày điền</th>
 
-    {/* Các tiêu đề nội dung kiểm tra */}
-    {allCheckTitles.map((title, idx) => (
-      <th key={idx} className="px-4 py-3 font-semibold whitespace-nowrap">
-        {title}
-      </th>
-    ))}
+              {/* Các tiêu đề nội dung kiểm tra */}
+              {allCheckTitles.map((title, idx) => (
+                <th
+                  key={idx}
+                  className="px-4 py-3 font-semibold whitespace-nowrap"
+                >
+                  {title}
+                </th>
+              ))}
 
-    {/* Ghi chú nằm sau cùng */}
-    <th className="px-4 py-3 font-semibold">Ghi chú</th>
-  </tr>
-</thead>
+              {/* Ghi chú nằm sau cùng */}
+              <th className="px-4 py-3 font-semibold">Ghi chú</th>
+            </tr>
+          </thead>
 
           <tbody>
             {currentUsers.length === 0 ? (
               <tr>
-                <td colSpan={6 + allCheckTitles.length} className="text-center py-5 text-gray-500">
+                <td
+                  colSpan={6 + allCheckTitles.length}
+                  className="text-center py-5 text-gray-500"
+                >
                   Không tìm thấy người dùng nào.
                 </td>
               </tr>
@@ -322,20 +344,18 @@ const exportToExcel = () => {
         </table>
       </div>
 
-    {!isFiltering && totalPages > 1 && (
-  <div className="mt-6 flex justify-center">
-    <CustomPagination
-      pageCount={totalPages}
-      forcePage={currentPage}
-      onPageChange={({ selected }) => setCurrentPage(selected)}
-      additionalClassname="flex gap-2"
-    />
-  </div>
-)}
-
+      {!isFiltering && totalPages > 1 && (
+        <div className="mt-6 flex justify-center">
+          <CustomPagination
+            pageCount={totalPages}
+            forcePage={currentPage}
+            onPageChange={({ selected }) => setCurrentPage(selected)}
+            additionalClassname="flex gap-2"
+          />
+        </div>
+      )}
     </div>
   );
 };
 
 export default UserTableCheckList;
-
