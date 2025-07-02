@@ -21,6 +21,7 @@ const UserTableCheckList = () => {
     { startDate: null, endDate: null, key: "selection" },
   ]);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [searchMaNV, setSearchMaNV] = useState("");
 
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 8;
@@ -85,9 +86,14 @@ const UserTableCheckList = () => {
   );
 
   const filteredUsers = checkList.filter((user) => {
-    const matchSearch = user.ho_ten
+    const matchSearchHoTen = user.ho_ten
       ?.toLowerCase()
       .includes(searchTerm.toLowerCase());
+
+    const matchSearchMaNV = user.ma_nhan_vien
+      ?.toLowerCase()
+      .includes(searchMaNV.toLowerCase());
+
     const matchOption = selectedOption
       ? user.option_da_chon?.some(
           (opt) => `${opt.label}: ${opt.value}` === selectedOption
@@ -101,7 +107,7 @@ const UserTableCheckList = () => {
           itemDate.isBefore(dayjs(dateRange[0].endDate).add(1, "day"))
         : true;
 
-    return matchSearch && matchOption && matchDate;
+    return matchSearchHoTen && matchSearchMaNV && matchOption && matchDate;
   });
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -112,17 +118,25 @@ const UserTableCheckList = () => {
   const exportToExcel = () => {
     const exportMatrix = [];
 
-    // ==== Header 3 dòng (KHÔNG còn cột trống đầu) ====
-      exportMatrix.push(["BẢNG KIỂM TRA " + (title?.[0]?.tieu_de || "")]);
+    // === Lấy dữ liệu từ người đầu tiên (nếu có)
+    const firstUser = filteredUsers[0];
+    const user_donvi = firstUser?.don_vi || "................................";
+    const so_hieu_xe =
+      firstUser?.option_da_chon
+        ?.map((opt) => `${opt.label}: ${opt.value}`)
+        .join(", ") || "................................";
+
+    // ==== Header 3 dòng (dữ liệu động) ====
+    exportMatrix.push(["BẢNG KIỂM TRA " + (title?.[0]?.tieu_de || "")]);
     exportMatrix.push([
-      "Bộ phận:................................    Loại xe:................................",
+      `Bộ phận: ${user_donvi}  -  Loại xe:................................`,
     ]);
     exportMatrix.push([
-      "Nhân viên vận hành:................................    Số hiệu xe:................................",
+      `Nhân viên vận hành:................................   -  ${so_hieu_xe}`,
     ]);
 
     // ==== Cấu trúc các dòng nội dung ====
-    const staticFields = ["Mã NV", "Đơn vị", "Tùy chọn", "Ngày điền"];
+    const staticFields = ["Mã NV", "Ngày điền"];
     const dynamicFields = allCheckTitles;
     const finalFields = [...staticFields, ...dynamicFields, "Ghi chú"];
 
@@ -137,14 +151,6 @@ const UserTableCheckList = () => {
 
       filteredUsers.forEach((user) => {
         if (field === "Mã NV") return row.push(user.ma_nhan_vien || "");
-        if (field === "Đơn vị") return row.push(user.don_vi || "");
-        if (field === "Tùy chọn") {
-          return row.push(
-            user.option_da_chon
-              ?.map((opt) => `${opt.label}: ${opt.value}`)
-              .join(", ") || ""
-          );
-        }
         if (field === "Ngày điền") {
           return row.push(
             user.ngay_tao
@@ -175,7 +181,7 @@ const UserTableCheckList = () => {
     // ==== Merge các dòng đầu tiên ====
     const totalCols = filteredUsers.length + 2; // STT + tên dòng + n người
     worksheet["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }, // BẢNG KIỂM TRA
+      { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }, // Dòng tiêu đề
       { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } }, // Bộ phận...
       { s: { r: 2, c: 0 }, e: { r: 2, c: totalCols - 1 } }, // Nhân viên...
     ];
@@ -203,7 +209,7 @@ const UserTableCheckList = () => {
       }
     }
 
-    // ==== Style riêng cho tiêu đề "BẢNG KIỂM TRA" ====
+    // ==== Style riêng cho dòng tiêu đề ====
     const titleCell = XLSX.utils.encode_cell({ r: 0, c: 0 });
     worksheet[titleCell].s = {
       ...worksheet[titleCell].s,
@@ -228,6 +234,7 @@ const UserTableCheckList = () => {
 
   const clearFilters = () => {
     setSearchTerm("");
+    setSearchMaNV(""); // reset thêm mã NV
     setSelectedOption("");
     setDateRange([{ startDate: null, endDate: null, key: "selection" }]);
     setShowCalendar(false);
@@ -242,7 +249,7 @@ const UserTableCheckList = () => {
           className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2"
         >
           {form.tieu_de || "Không có tiêu đề"}
-        </h2> 
+        </h2>
       ))}
 
       {/* Filter Controls */}
@@ -260,6 +267,16 @@ const UserTableCheckList = () => {
           value={searchTerm}
           onChange={(e) => {
             setSearchTerm(e.target.value);
+            setCurrentPage(0);
+          }}
+          className="border px-3 py-2 rounded shadow-sm w-60"
+        />
+        <input
+          type="text"
+          placeholder="🔍 Tìm theo mã NV..."
+          value={searchMaNV}
+          onChange={(e) => {
+            setSearchMaNV(e.target.value);
             setCurrentPage(0);
           }}
           className="border px-3 py-2 rounded shadow-sm w-60"
@@ -334,7 +351,7 @@ const UserTableCheckList = () => {
                 >
                   {title}
                 </th>
-              ))} */}  
+              ))} */}
             </tr>
           </thead>
 

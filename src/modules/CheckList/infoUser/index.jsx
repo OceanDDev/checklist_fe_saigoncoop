@@ -70,7 +70,7 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
             <Building className="absolute top-3 left-3 text-gray-400 size-5" />
             <input
               type="text"
-              placeholder="Đơn vị"
+              placeholder="Bộ phận"
               className={inputClass}
               value={department}
               onChange={handleChange("department")}
