@@ -23,6 +23,7 @@ const ForkliftChecklistMobile = () => {
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [errors, setErrors] = useState({});
   const [conclusion, setConclusion] = useState("");
+  const [showSubmitError, setShowSubmitError] = useState(false); // ✅
 
   useEffect(() => {
     const fetchForm = async () => {
@@ -93,7 +94,9 @@ const ForkliftChecklistMobile = () => {
   };
 
   const handleSubmit = async () => {
-    if (!validate()) return;
+    const isValid = validate();
+    setShowSubmitError(!isValid); // ✅ hiện thông báo nếu không hợp lệ
+    if (!isValid) return;
 
     const buildAnswers = (group) =>
       (group || []).map((q) => ({
@@ -119,8 +122,7 @@ const ForkliftChecklistMobile = () => {
     };
 
     try {
-      console.log("🚀 Gửi checklist với payload:", payload);
-      await checkListService.createCheckList(id, payload); // ⬅️ Gửi formId vào URL
+      await checkListService.createCheckList(id, payload);
       navigate("/thank-you");
     } catch (err) {
       alert("Gửi checklist thất bại", err);
@@ -220,16 +222,16 @@ const ForkliftChecklistMobile = () => {
                     <label
                       key={opt}
                       className={`flex items-center justify-center w-10 h-10 text-sm font-bold rounded-full cursor-pointer border transition-all duration-200
-        ${
-          isChecked
-            ? isD
-              ? "bg-green-600 text-white border-green-600"
-              : "bg-red-600 text-white border-red-600"
-            : isD
-            ? "text-green-600 border-green-400 hover:bg-green-100"
-            : "text-red-600 border-red-400 hover:bg-red-100"
-        }
-      `}
+                        ${
+                          isChecked
+                            ? isD
+                              ? "bg-green-600 text-white border-green-600"
+                              : "bg-red-600 text-white border-red-600"
+                            : isD
+                            ? "text-green-600 border-green-400 hover:bg-green-100"
+                            : "text-red-600 border-red-400 hover:bg-red-100"
+                        }
+                      `}
                     >
                       <input
                         type="radio"
@@ -265,6 +267,13 @@ const ForkliftChecklistMobile = () => {
             placeholder="Ghi chú chung nếu có..."
           />
         </div>
+
+        {/* ✅ Cảnh báo lỗi nếu chưa điền đủ */}
+        {showSubmitError && (
+          <div className="text-red-600 text-sm font-medium text-center">
+            ⚠️ Vui lòng hoàn thành tất cả các câu hỏi và tuỳ chọn trước khi gửi.
+          </div>
+        )}
 
         <button
           onClick={handleSubmit}

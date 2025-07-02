@@ -26,22 +26,18 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
     }
   };
 
-  // Font size >= 16px để tránh zoom trên iPhone
   const inputClass =
     "w-full border border-gray-300 rounded-lg px-4 py-2 pl-10 text-base sm:text-lg focus:outline-none focus:ring-2 focus:ring-blue-500";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 px-4 py-8">
-          <ToastContainer />
+      <ToastContainer />
 
       <div className="bg-white shadow-2xl rounded-2xl w-full max-w-md p-6 sm:p-8">
-        
-        {/* Căn giữa logo */}
+        {/* Logo */}
         <div className="flex justify-center mb-4">
           <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
         </div>
-
-        
 
         <div className="space-y-5">
           <div className="relative">
@@ -86,8 +82,14 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
                 : "bg-gray-300 text-gray-600 cursor-not-allowed"
             }`}
           >
-             Xác nhận & Bắt đầu kiểm tra
+            Xác nhận & Bắt đầu kiểm tra
           </button>
+
+          {/* Lưu ý */}
+          <p className="text-xs text-blue-600 text-left mt-2 leading-snug">
+            ⚠️ Lưu ý: Mỗi mã nhân viên chỉ được kiểm tra <strong>một lần trong ngày</strong>. <br />
+            Nếu có lỗi trong phần kiểm tra, vui lòng liên hệ bộ phận <strong>IT</strong>.
+          </p>
         </div>
       </div>
     </div>
