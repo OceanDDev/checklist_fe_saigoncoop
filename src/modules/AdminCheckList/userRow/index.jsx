@@ -56,7 +56,7 @@ const UserRowCheckList = ({ user, index, allCheckTitles }) => {
 
       {/* Tổng quan - phần trăm đáp án "Đ" */}
       <td
-        className={`border px-3 py-2 text-center min-w-[80px] font-semibold
+        className={`border px-3 py-2 text-center min-w-[80px] font-
     ${(() => {
       const total = allAnswers.length;
       const passed = allAnswers.filter((item) => item.dap_an === "Đ").length;

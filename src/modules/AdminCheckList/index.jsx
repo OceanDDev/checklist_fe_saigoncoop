@@ -113,7 +113,7 @@ const UserTableCheckList = () => {
     const exportMatrix = [];
 
     // ==== Header 3 dòng (KHÔNG còn cột trống đầu) ====
-    exportMatrix.push(["BẢNG KIỂM TRA"]);
+      exportMatrix.push(["BẢNG KIỂM TRA " + (title?.[0]?.tieu_de || "")]);
     exportMatrix.push([
       "Bộ phận:................................    Loại xe:................................",
     ]);
@@ -122,7 +122,7 @@ const UserTableCheckList = () => {
     ]);
 
     // ==== Cấu trúc các dòng nội dung ====
-    const staticFields = ["Mã NV", "Họ tên", "Đơn vị", "Tùy chọn", "Ngày điền"];
+    const staticFields = ["Mã NV", "Đơn vị", "Tùy chọn", "Ngày điền"];
     const dynamicFields = allCheckTitles;
     const finalFields = [...staticFields, ...dynamicFields, "Ghi chú"];
 
@@ -137,7 +137,6 @@ const UserTableCheckList = () => {
 
       filteredUsers.forEach((user) => {
         if (field === "Mã NV") return row.push(user.ma_nhan_vien || "");
-        if (field === "Họ tên") return row.push(user.ho_ten || "");
         if (field === "Đơn vị") return row.push(user.don_vi || "");
         if (field === "Tùy chọn") {
           return row.push(
@@ -243,7 +242,7 @@ const UserTableCheckList = () => {
           className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2"
         >
           {form.tieu_de || "Không có tiêu đề"}
-        </h2>
+        </h2> 
       ))}
 
       {/* Filter Controls */}
