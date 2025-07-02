@@ -214,7 +214,7 @@ const ForkliftChecklistMobile = () => {
               </div>
 
               <div className="flex gap-6 text-sm mb-2">
-                {["Đ", "K"].map((opt) => {
+                {["Đ", "KĐ"].map((opt) => {
                   const isChecked = answers[q._id]?.dap_an === opt;
                   const isD = opt === "Đ";
 

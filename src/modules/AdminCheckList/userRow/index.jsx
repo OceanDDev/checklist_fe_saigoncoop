@@ -106,7 +106,7 @@ const UserRowCheckList = ({ user, index, allCheckTitles }) => {
                         ${
                           answer === "Đ"
                             ? "bg-green-100 text-green-700 font-bold"
-                            : answer === "K"
+                            : answer === "KĐ"
                             ? "bg-red-100 text-red-700 font-bold"
                             : "text-gray-800"
                         }`}

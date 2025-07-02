@@ -40,7 +40,7 @@ const UserDetailCheckList = ({ userId }) => {
               className={`px-3 py-1 text-sm font-semibold rounded-full ${
                 item.dap_an === "Đ"
                   ? "bg-green-100 text-green-700"
-                  : item.dap_an === "K"
+                  : item.dap_an === "KĐ"
                   ? "bg-red-100 text-red-700"
                   : "bg-gray-100 text-gray-700"
               }`}
