@@ -193,7 +193,7 @@ const UserTableCheckList = () => {
     const totalCols = filteredUsers.length + 2;
 
     // ===== GHI CHÚ VÀ CHỮ KÝ (cập nhật thêm các ô trống để đủ cột)
-    worksheet.addRow(["", "Nội dung không đạt(nếu có)", ...Array(filteredUsers.length).fill("")]);
+    worksheet.addRow(["", "Nội dung không đạt (nếu có)", ...Array(filteredUsers.length).fill("")]);
 
     const noteRow = ["", "Ghi chú"];
     filteredUsers.forEach((user) => {
@@ -233,37 +233,36 @@ const UserTableCheckList = () => {
 
     // ===== STYLE
     worksheet.eachRow((row, rowNumber) => {
-      row.eachCell((cell, colNumber) => {
-        const isFirstRow = rowNumber === 1;
-        const isLastRow = rowNumber >= lastRow;
+  row.eachCell((cell) => {
+    const isFirstRow = rowNumber === 1;
+    const isLastRow = rowNumber >= lastRow;
 
-        const cellText = (cell.value || "").toString().trim().toUpperCase();
-        const isBold =
-          isFirstRow ||
-          (cellText !== "Đ" && cellText !== "KĐ");
+    const cellText = (cell.value || "").toString().trim().toUpperCase();
+    const isBold =
+      isFirstRow || (cellText !== "Đ" && cellText !== "KĐ");
 
-        cell.alignment = {
-          vertical: "middle",
-          horizontal:
-            rowNumber <= 3 ? "center" : colNumber <= 2 ? "center" : "left",
-          wrapText: true,
-        };
-        cell.font = {
-          name: "Arial",
-          size: isFirstRow ? 14 : isLastRow ? 8 : 12,
-          bold: isBold,
-        };
-        cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        };
-      });
+    cell.alignment = {
+      vertical: "middle",
+      horizontal: rowNumber >= 6 ? "left" : "center",
+      wrapText: true,
+    };
+    cell.font = {
+      name: "Arial",
+      size: isFirstRow ? 14 : isLastRow ? 8 : 12,
+      bold: isBold,
+    };
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+  });
 
-      if (rowNumber === lastRow) row.height = 100;
-      if (rowNumber === 4 || rowNumber === 5) row.height = 30;
-    });
+  if (rowNumber === lastRow) row.height = 100;
+  if (rowNumber === 4 || rowNumber === 5) row.height = 30;
+});
+
 
     // ===== PAGE SETUP + FOOTER
     worksheet.pageSetup = {
