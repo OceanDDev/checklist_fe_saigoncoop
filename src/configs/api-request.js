@@ -27,6 +27,9 @@ const URL = {
   auth: {
     login: ENDPOINT_PREFIX + "/login",
   },
+  staff: {
+    staff : ENDPOINT_PREFIX + "/staff"
+  }
 };
 
 export { URL, ApiServer, DEF_HEADERS };
