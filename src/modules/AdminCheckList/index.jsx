@@ -67,12 +67,20 @@ const UserTableCheckList = () => {
 
   const allCheckTitles = Array.from(
     new Set(
-      checkList.flatMap((user) =>
-        [
-          ...(user.kiem_tra_ben_ngoai || []),
-          ...(user.kiem_tra_khi_van_hanh || []),
-        ].map((item) => item.noidung)
-      )
+      checkList.flatMap((user) => {
+        // Lấy từ tất cả các nhóm kiểm tra
+        const allGroupItems = [];
+        if (user.checklist_groups && Array.isArray(user.checklist_groups)) {
+          user.checklist_groups.forEach(group => {
+            if (group.items && Array.isArray(group.items)) {
+              group.items.forEach(item => {
+                allGroupItems.push(item.noidung);
+              });
+            }
+          });
+        }
+        return allGroupItems;
+      })
     )
   );
 
@@ -116,156 +124,164 @@ const UserTableCheckList = () => {
     ? filteredUsers // khi đang lọc thì không phân trang
     : filteredUsers.slice(startIndex, startIndex + itemsPerPage);
 
-const exportToExcel = async () => {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet("CheckList");
+ const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("CheckList");
 
-  const firstUser = filteredUsers[0];
-  const user_donvi = firstUser?.don_vi || "................................";
-  const so_hieu_xe =
-    firstUser?.option_da_chon
-      ?.map((opt) => `${opt.label}: ${opt.value}`)
-      .join(", ") || "................................";
+    const firstUser = filteredUsers[0];
+    const user_donvi = firstUser?.don_vi || "................................";
+    const so_hieu_xe =
+      firstUser?.option_da_chon
+        ?.map((opt) => `${opt.label}: ${opt.value}`)
+        .join(", ") || "................................";
 
-  // ===== HEADER
-  worksheet.addRow([`BẢNG KIỂM TRA ${title?.[0]?.tieu_de || ""}`]);
-  const row1 = worksheet.addRow([
-    `Bộ phận: ${user_donvi}  -  Loại xe:................................`,
-  ]);
-  const row2 = worksheet.addRow([
-    `Nhân viên vận hành:................................   -  ${so_hieu_xe}`,
-  ]);
-  row1.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
-  row2.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+    // ===== HEADER
+    worksheet.addRow([`BẢNG KIỂM TRA ${title?.[0]?.tieu_de || ""}`]);
+    const row1 = worksheet.addRow([
+      `Bộ phận: ${user_donvi}  -  Loại xe:................................`,
+    ]);
+    const row2 = worksheet.addRow([
+      `Nhân viên vận hành:................................   -  ${so_hieu_xe}`,
+    ]);
+    row1.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+    row2.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
 
-  // ===== HEADER BẢNG - HÀNG MÃ NHÂN VIÊN
-  const maNVRow = worksheet.addRow(["STT", "Mã NV"]);
-  filteredUsers.forEach((user) => {
-    maNVRow.getCell(maNVRow.cellCount + 1).value = user.ma_nhan_vien || "";
-  });
-
-  // ===== HEADER BẢNG - HÀNG STT VÀ NGÀY/MỤC KIỂM TRA
-  const headerMainRow = worksheet.addRow([
-    "STT",
-    "Ngày Kiểm tra\n        ╱\nMục Kiểm tra",
-  ]);
-  filteredUsers.forEach((user) => {
-    headerMainRow.getCell(headerMainRow.cellCount + 1).value = user.ngay_tao
-      ? new Date(user.ngay_tao).toLocaleDateString("vi-VN")
-      : "";
-  });
-
-  // ===== NỘI DUNG CHÍNH
-  const dynamicFields = allCheckTitles;
-  filteredUsers.sort((a, b) => new Date(a.ngay_tao) - new Date(b.ngay_tao));
-  dynamicFields.forEach((field, index) => {
-    const row = [index + 1, field];
+    // ===== HEADER BẢNG - HÀNG MÃ NHÂN VIÊN
+    const maNVRow = worksheet.addRow(["STT", "Mã NV"]);
     filteredUsers.forEach((user) => {
-      const allAnswers = [
-        ...(user.kiem_tra_ben_ngoai || []),
-        ...(user.kiem_tra_khi_van_hanh || []),
-      ];
-      const found = allAnswers.find((item) => item.noidung === field);
-      row.push(found?.dap_an || "");
+      maNVRow.getCell(maNVRow.cellCount + 1).value = user.ma_nhan_vien || "";
     });
-    worksheet.addRow(row);
-  });
 
-  worksheet.addRow([]);
+    // ===== HEADER BẢNG - HÀNG STT VÀ NGÀY/MỤC KIỂM TRA
+    const headerMainRow = worksheet.addRow([
+      "STT",
+      "Ngày Kiểm tra\n        ╱\nMục Kiểm tra",
+    ]);
+    filteredUsers.forEach((user) => {
+      headerMainRow.getCell(headerMainRow.cellCount + 1).value = user.ngay_tao
+        ? new Date(user.ngay_tao).toLocaleDateString("vi-VN")
+        : "";
+    });
 
-  const totalCols = filteredUsers.length + 2;
+    // ===== NỘI DUNG CHÍNH - Cập nhật theo schema mới
+    // Sắp xếp users theo ngày tạo
+    filteredUsers.sort((a, b) => new Date(a.ngay_tao) - new Date(b.ngay_tao));
+    
+    // Thêm các hàng nội dung kiểm tra
+    allCheckTitles.forEach((fieldContent, index) => {
+      const row = [index + 1, fieldContent];
+      filteredUsers.forEach((user) => {
+        // Tìm đáp án trong tất cả các nhóm
+        let foundAnswer = "";
+        if (user.checklist_groups && Array.isArray(user.checklist_groups)) {
+          user.checklist_groups.forEach(group => {
+            if (group.items && Array.isArray(group.items)) {
+              const foundItem = group.items.find(item => item.noidung === fieldContent);
+              if (foundItem && foundItem.dap_an) {
+                foundAnswer = foundItem.dap_an;
+              }
+            }
+          });
+        }
+        row.push(foundAnswer);
+      });
+      worksheet.addRow(row);
+    });
 
-  // ===== GHI CHÚ VÀ CHỮ KÝ (cập nhật thêm các ô trống để đủ cột)
-  worksheet.addRow(["", "Nội dung không đạt(nếu có)", ...Array(filteredUsers.length).fill("")]);
+    worksheet.addRow([]);
 
-  const noteRow = ["", "Ghi chú"];
-  filteredUsers.forEach((user) => {
-    noteRow.push(user.ghi_chu);
-  });
-  worksheet.addRow(noteRow);
+    const totalCols = filteredUsers.length + 2;
 
-  worksheet.addRow(["", "Nhân viên kiểm tra ký xác nhận hoàn thành", ...Array(filteredUsers.length).fill("")]);
-  worksheet.addRow([]);
+    // ===== GHI CHÚ VÀ CHỮ KÝ (cập nhật thêm các ô trống để đủ cột)
+    worksheet.addRow(["", "Nội dung không đạt(nếu có)", ...Array(filteredUsers.length).fill("")]);
 
-  worksheet.addRow([
-    `Ghi chú:\n- Khi có bất kì dấu hiệu bất thường/không đúng tiêu chuẩn vận hành của mục nào bên trên phải lập tức báo cáo ngay cho giám sát kho và ngưng vận hành hoàn toàn cho đến khi sự cố được khắc phục đảm bảo an toàn vận hành\n- Nhân viên kiểm tra là nhân viên đầu tiên vận hành trong ngày và chịu trách nhiệm kết quả kiểm tra\n- Nếu ở tình trạng bình thường đánh dấu (Đ) Đạt, nếu dấu hiệu bất thường/ không đúng tiêu chuẩn vận hành đánh dấu (KĐ) không đạt và miêu tả tình trạng ở cột ghi chú`,
-  ]);
+    const noteRow = ["", "Ghi chú"];
+    filteredUsers.forEach((user) => {
+      noteRow.push(user.ghi_chu || "");
+    });
+    worksheet.addRow(noteRow);
 
-  // ===== MERGE CELLS
-  [1, 2, 3].forEach((i) => {
+    worksheet.addRow(["", "Nhân viên kiểm tra ký xác nhận hoàn thành", ...Array(filteredUsers.length).fill("")]);
+    worksheet.addRow([]);
+
+    worksheet.addRow([
+      `Ghi chú:\n- Khi có bất kì dấu hiệu bất thường/không đúng tiêu chuẩn vận hành của mục nào bên trên phải lập tức báo cáo ngay cho giám sát kho và ngưng vận hành hoàn toàn cho đến khi sự cố được khắc phục đảm bảo an toàn vận hành\n- Nhân viên kiểm tra là nhân viên đầu tiên vận hành trong ngày và chịu trách nhiệm kết quả kiểm tra\n- Nếu ở tình trạng bình thường đánh dấu (Đ) Đạt, nếu dấu hiệu bất thường/ không đúng tiêu chuẩn vận hành đánh dấu (KĐ) không đạt và miêu tả tình trạng ở cột ghi chú`,
+    ]);
+
+    // ===== MERGE CELLS
+    [1, 2, 3].forEach((i) => {
+      worksheet.mergeCells(
+        `A${i}:` + String.fromCharCode(65 + totalCols - 1) + `${i}`
+      );
+    });
+
+    worksheet.mergeCells("A4:A5");
+
+    const lastRow = worksheet.lastRow.number;
     worksheet.mergeCells(
-      `A${i}:` + String.fromCharCode(65 + totalCols - 1) + `${i}`
+      `A${lastRow}:` + String.fromCharCode(65 + totalCols - 1) + `${lastRow}`
     );
-  });
 
-  worksheet.mergeCells("A4:A5");
-
-  const lastRow = worksheet.lastRow.number;
-  worksheet.mergeCells(
-    `A${lastRow}:` + String.fromCharCode(65 + totalCols - 1) + `${lastRow}`
-  );
-
-  // ===== FILL EMPTY CELLS FOR BORDER
-  worksheet.eachRow((row) => {
-    for (let i = 1; i <= totalCols; i++) {
-      if (!row.getCell(i).value) {
-        row.getCell(i).value = "";
+    // ===== FILL EMPTY CELLS FOR BORDER
+    worksheet.eachRow((row) => {
+      for (let i = 1; i <= totalCols; i++) {
+        if (!row.getCell(i).value) {
+          row.getCell(i).value = "";
+        }
       }
-    }
-  });
-
-  // ===== STYLE
-  worksheet.eachRow((row, rowNumber) => {
-    row.eachCell((cell, colNumber) => {
-      const isFirstRow = rowNumber === 1;
-      const isLastRow = rowNumber >= lastRow;
-
-      const cellText = (cell.value || "").toString().trim().toUpperCase();
-      const isBold =
-        isFirstRow ||
-        (cellText !== "Đ" && cellText !== "KĐ");
-
-      cell.alignment = {
-        vertical: "middle",
-        horizontal:
-          rowNumber <= 3 ? "center" : colNumber <= 2 ? "center" : "left",
-        wrapText: true,
-      };
-      cell.font = {
-        name: "Arial",
-        size: isFirstRow ? 14 : isLastRow ? 8 : 12,
-        bold: isBold,
-      };
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" },
-      };
     });
 
-    if (rowNumber === lastRow) row.height = 100;
-    if (rowNumber === 4 || rowNumber === 5) row.height = 30;
-  });
+    // ===== STYLE
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell, colNumber) => {
+        const isFirstRow = rowNumber === 1;
+        const isLastRow = rowNumber >= lastRow;
 
-  // ===== PAGE SETUP + FOOTER
-  worksheet.pageSetup = {
-    orientation: "landscape",
-    paperSize: 9,
-    horizontalCentered: true,
+        const cellText = (cell.value || "").toString().trim().toUpperCase();
+        const isBold =
+          isFirstRow ||
+          (cellText !== "Đ" && cellText !== "KĐ");
+
+        cell.alignment = {
+          vertical: "middle",
+          horizontal:
+            rowNumber <= 3 ? "center" : colNumber <= 2 ? "center" : "left",
+          wrapText: true,
+        };
+        cell.font = {
+          name: "Arial",
+          size: isFirstRow ? 14 : isLastRow ? 8 : 12,
+          bold: isBold,
+        };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      if (rowNumber === lastRow) row.height = 100;
+      if (rowNumber === 4 || rowNumber === 5) row.height = 30;
+    });
+
+    // ===== PAGE SETUP + FOOTER
+    worksheet.pageSetup = {
+      orientation: "landscape",
+      paperSize: 9,
+      horizontalCentered: true,
+    };
+    worksheet.headerFooter = {
+      oddFooter: "&L&8 BM-478.KTTTB &C&8 Ban hành lần 1 &R&8 Trang &P/&N",
+    };
+
+    // ===== EXPORT
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    saveAs(blob, `CheckList_${new Date().toISOString()}.xlsx`);
   };
-  worksheet.headerFooter = {
-    oddFooter: "&L&8 BM-478.KTTTB &C&8 Ban hành lần 1 &R&8 Trang &P/&N",
-  };
-
-  // ===== EXPORT
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  saveAs(blob, `CheckList_${new Date().toISOString()}.xlsx`);
-};
-
 
   const clearFilters = () => {
     setSearchTerm("");

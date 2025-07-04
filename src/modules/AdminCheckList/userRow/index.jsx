@@ -10,22 +10,25 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-const UserRowCheckList = ({ user, index, allCheckTitles }) => {
+const UserRowCheckList = ({ user, index }) => {
   const [open, setOpen] = useState(false);
-
-  const ktBenNgoai = user.kiem_tra_ben_ngoai || [];
-  const ktVanHanh = user.kiem_tra_khi_van_hanh || [];
-  const allAnswers = [...ktBenNgoai, ...ktVanHanh];
+  const checklistGroups = user.checklist_groups || [];
 
   const getAnswerByContent = (content) => {
-    const found = allAnswers.find((item) => item.noidung === content);
-    return found?.dap_an || "";
+    for (const group of checklistGroups) {
+      const found = group.items.find((item) => item.noidung === content);
+      if (found) return found.dap_an || "";
+    }
+    return "";
   };
 
-  // Tính tỷ lệ số câu trả lời "Đ"
+  const getAllItems = () =>
+    checklistGroups.flatMap((group) => group.items || []);
+
   const getDPercent = () => {
-    const total = allAnswers.length;
-    const passed = allAnswers.filter((item) => item.dap_an === "Đ").length;
+    const allItems = getAllItems();
+    const total = allItems.length;
+    const passed = allItems.filter((item) => item.dap_an === "Đ").length;
     if (total === 0) return "0%";
     return `${Math.round((passed / total) * 100)}%`;
   };
@@ -38,6 +41,8 @@ const UserRowCheckList = ({ user, index, allCheckTitles }) => {
       hour: "2-digit",
       minute: "2-digit",
     });
+
+  const allCheckTitles = getAllItems().map((item) => item.noidung);
 
   return (
     <tr className="bg-white hover:bg-gray-50 transition text-sm text-center">
@@ -54,23 +59,22 @@ const UserRowCheckList = ({ user, index, allCheckTitles }) => {
         {formatDate(user.ngay_tao)}
       </td>
 
-      {/* Tổng quan - phần trăm đáp án "Đ" */}
       <td
         className={`border px-3 py-2 text-center min-w-[80px] font-
-    ${(() => {
-      const total = allAnswers.length;
-      const passed = allAnswers.filter((item) => item.dap_an === "Đ").length;
-      const percent = total === 0 ? 0 : (passed / total) * 100;
+        ${(() => {
+          const allItems = getAllItems();
+          const total = allItems.length;
+          const passed = allItems.filter((item) => item.dap_an === "Đ").length;
+          const percent = total === 0 ? 0 : (passed / total) * 100;
 
-      if (percent <= 60) return "text-red-600";
-      if (percent <= 80) return "text-orange-500";
-      return "text-green-600";
-    })()}`}
+          if (percent <= 60) return "text-red-600";
+          if (percent <= 80) return "text-orange-500";
+          return "text-green-600";
+        })()}`}
       >
         {getDPercent()}
       </td>
 
-      {/* Nút mở modal chi tiết */}
       <td className="border px-3 py-2 text-center min-w-[100px]">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

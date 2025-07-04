@@ -10,7 +10,7 @@ const ForkliftChecklistMobile = () => {
   const navigate = useNavigate();
 
   const [formTitle, setFormTitle] = useState("");
-  const [groupedQuestions, setGroupedQuestions] = useState({});
+  const [checklistGroups, setChecklistGroups] = useState([]);
   const [answers, setAnswers] = useState({});
   const [userInfo, setUserInfo] = useState({
     employeeId: "",
@@ -23,7 +23,7 @@ const ForkliftChecklistMobile = () => {
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [errors, setErrors] = useState({});
   const [conclusion, setConclusion] = useState("");
-  const [showSubmitError, setShowSubmitError] = useState(false); // ✅
+  const [showSubmitError, setShowSubmitError] = useState(false);
 
   useEffect(() => {
     const fetchForm = async () => {
@@ -32,20 +32,14 @@ const ForkliftChecklistMobile = () => {
         if (!data) throw new Error("Form không tồn tại");
 
         setFormTitle(data.tieu_de || "Checklist");
-
-        const grouped = {
-          "KIỂM TRA BÊN NGOÀI": data.kiem_tra_ben_ngoai || [],
-          "KIỂM TRA KHI VẬN HÀNH": data.kiem_tra_khi_van_hanh || [],
-        };
-        setGroupedQuestions(grouped);
+        setChecklistGroups(data.checklist_groups || []);
         setOptions(data.option || []);
 
         const initialAnswers = {};
-        [
-          ...grouped["KIỂM TRA BÊN NGOÀI"],
-          ...grouped["KIỂM TRA KHI VẬN HÀNH"],
-        ].forEach((q) => {
-          initialAnswers[q._id] = { dap_an: "", ghi_chu: "" };
+        (data.checklist_groups || []).forEach((group) => {
+          group.items.forEach((item) => {
+            initialAnswers[item._id] = { dap_an: "", ghi_chu: "" };
+          });
         });
         setAnswers(initialAnswers);
       } catch (err) {
@@ -75,7 +69,7 @@ const ForkliftChecklistMobile = () => {
   const validate = () => {
     const newErrors = {};
     Object.entries(answers).forEach(([qid, value]) => {
-      if (!value.dap_an) newErrors[qid] = "Vui lòng chọn Đ hoặc K";
+      if (!value.dap_an) newErrors[qid] = "Vui lòng chọn Đ hoặc KĐ";
     });
     setErrors(newErrors);
 
@@ -95,14 +89,18 @@ const ForkliftChecklistMobile = () => {
 
   const handleSubmit = async () => {
     const isValid = validate();
-    setShowSubmitError(!isValid); // ✅ hiện thông báo nếu không hợp lệ
+    setShowSubmitError(!isValid);
     if (!isValid) return;
 
-    const buildAnswers = (group) =>
-      (group || []).map((q) => ({
-        noidung: q.noidung,
-        dap_an: answers[q._id]?.dap_an || "",
+    const buildAnswers = () => {
+      return checklistGroups.map((group) => ({
+        label: group.label,
+        items: group.items.map((item) => ({
+          noidung: item.noidung,
+          dap_an: answers[item._id]?.dap_an || "",
+        })),
       }));
+    };
 
     const option_da_chon = Object.entries(selectedOptions).map(
       ([label, value]) => ({ label, value })
@@ -115,10 +113,7 @@ const ForkliftChecklistMobile = () => {
       don_vi: userInfo.department,
       ghi_chu: conclusion,
       option_da_chon,
-      kiem_tra_ben_ngoai: buildAnswers(groupedQuestions["KIỂM TRA BÊN NGOÀI"]),
-      kiem_tra_khi_van_hanh: buildAnswers(
-        groupedQuestions["KIỂM TRA KHI VẬN HÀNH"]
-      ),
+      checklist_groups: buildAnswers(),
     };
 
     try {
@@ -147,15 +142,9 @@ const ForkliftChecklistMobile = () => {
       </h2>
 
       <div className="mb-4 text-sm text-gray-700 space-y-1">
-        <p>
-          <strong>Mã nhân viên:</strong> {userInfo.employeeId}
-        </p>
-        <p>
-          <strong>Họ và tên:</strong> {userInfo.userName}
-        </p>
-        <p>
-          <strong>Đơn vị:</strong> {userInfo.department}
-        </p>
+        <p><strong>Mã nhân viên:</strong> {userInfo.employeeId}</p>
+        <p><strong>Họ và tên:</strong> {userInfo.userName}</p>
+        <p><strong>Đơn vị:</strong> {userInfo.department}</p>
       </div>
 
       {options.length > 0 && (
@@ -167,21 +156,17 @@ const ForkliftChecklistMobile = () => {
                 {opt.label}
               </label>
               <select
-                className={`w-full border rounded px-3 py-2 text-sm focus:outline-none
-                  ${
-                    optionErrors[opt.label]
-                      ? "border-red-500 ring-red-400 ring-1"
-                      : "border-gray-300 focus:ring-2 focus:ring-blue-500"
-                  }
-                `}
+                className={`w-full border rounded px-3 py-2 text-sm focus:outline-none ${
+                  optionErrors[opt.label]
+                    ? "border-red-500 ring-red-400 ring-1"
+                    : "border-gray-300 focus:ring-2 focus:ring-blue-500"
+                }`}
                 value={selectedOptions[opt.label] || ""}
                 onChange={(e) => handleOptionChange(opt.label, e.target.value)}
               >
                 <option value="">-- Chọn --</option>
                 {opt.choices.map((choice, cIdx) => (
-                  <option key={cIdx} value={choice}>
-                    {choice}
-                  </option>
+                  <option key={cIdx} value={choice}>{choice}</option>
                 ))}
               </select>
               {optionErrors[opt.label] && (
@@ -194,52 +179,43 @@ const ForkliftChecklistMobile = () => {
         </div>
       )}
 
-      {Object.entries(groupedQuestions).map(([groupName, questions], gIdx) => (
+      {checklistGroups.map((group, gIdx) => (
         <div key={gIdx}>
           <div className="flex items-center gap-2 text-blue-600 text-base font-semibold mb-2 border-b pb-1">
             <ClipboardCheck className="size-5" />
-            {groupName}
+            {group.label}
           </div>
 
-          {questions.map((q, idx) => (
-            <div
-              key={q._id}
-              className="mb-5 border rounded-xl p-4 shadow bg-white"
-            >
+          {group.items.map((item, idx) => (
+            <div key={item._id} className="mb-5 border rounded-xl p-4 shadow bg-white">
               <div className="flex gap-2 items-start mb-2 text-sm text-gray-800 font-medium">
                 <AlertCircle className="size-4 text-yellow-500 mt-1" />
-                <span>
-                  {idx + 1}. {q.noidung}
-                </span>
+                <span>{idx + 1}. {item.noidung}</span>
               </div>
 
               <div className="flex gap-6 text-sm mb-2">
                 {["Đ", "KĐ"].map((opt) => {
-                  const isChecked = answers[q._id]?.dap_an === opt;
+                  const isChecked = answers[item._id]?.dap_an === opt;
                   const isD = opt === "Đ";
 
                   return (
                     <label
                       key={opt}
-                      className={`flex items-center justify-center w-10 h-10 text-sm font-bold rounded-full cursor-pointer border transition-all duration-200
-                        ${
-                          isChecked
-                            ? isD
-                              ? "bg-green-600 text-white border-green-600"
-                              : "bg-red-600 text-white border-red-600"
-                            : isD
-                            ? "text-green-600 border-green-400 hover:bg-green-100"
-                            : "text-red-600 border-red-400 hover:bg-red-100"
-                        }
-                      `}
+                      className={`flex items-center justify-center w-10 h-10 text-sm font-bold rounded-full cursor-pointer border transition-all duration-200 ${
+                        isChecked
+                          ? isD
+                            ? "bg-green-600 text-white border-green-600"
+                            : "bg-red-600 text-white border-red-600"
+                          : isD
+                          ? "text-green-600 border-green-400 hover:bg-green-100"
+                          : "text-red-600 border-red-400 hover:bg-red-100"
+                      }`}
                     >
                       <input
                         type="radio"
-                        name={`status-${q._id}`}
+                        name={`status-${item._id}`}
                         checked={isChecked}
-                        onChange={() =>
-                          handleAnswerChange(q._id, "dap_an", opt)
-                        }
+                        onChange={() => handleAnswerChange(item._id, "dap_an", opt)}
                         className="hidden"
                       />
                       {opt}
@@ -248,8 +224,8 @@ const ForkliftChecklistMobile = () => {
                 })}
               </div>
 
-              {errors[q._id] && (
-                <div className="text-red-500 text-sm mt-1">{errors[q._id]}</div>
+              {errors[item._id] && (
+                <div className="text-red-500 text-sm mt-1">{errors[item._id]}</div>
               )}
             </div>
           ))}
@@ -268,7 +244,6 @@ const ForkliftChecklistMobile = () => {
           />
         </div>
 
-        {/* ✅ Cảnh báo lỗi nếu chưa điền đủ */}
         {showSubmitError && (
           <div className="text-red-600 text-sm font-medium text-center">
             ⚠️ Vui lòng hoàn thành tất cả các câu hỏi và tuỳ chọn trước khi gửi.
