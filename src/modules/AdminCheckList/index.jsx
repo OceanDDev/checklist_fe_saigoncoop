@@ -311,16 +311,7 @@ const UserTableCheckList = () => {
           ⬇️ Xuất Excel
         </button>
 
-        <input
-          type="text"
-          placeholder="🔍 Tìm theo họ tên..."
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setCurrentPage(0);
-          }}
-          className="border px-3 py-2 rounded shadow-sm w-60"
-        />
+
         <input
           type="text"
           placeholder="🔍 Tìm theo mã NV..."
