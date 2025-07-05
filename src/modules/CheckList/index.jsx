@@ -110,6 +110,7 @@ const ForkliftChecklistMobile = () => {
       <UserInfoForm
         userInfo={userInfo}
         setUserInfo={setUserInfo}
+          formTitle={formTitle} // 👈 THÊM DÒNG NÀY
         onConfirm={() => setIsConfirmed(true)}
         formId={id}
         options={options} // 👈 thêm

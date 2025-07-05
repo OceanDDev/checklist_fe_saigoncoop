@@ -51,14 +51,15 @@ const getByIdCheckList = async (id) => {
 
 const checkDuplicateByVehicle = async (formId, soHieuXe) => {
   try {
-    const path = `${URL.checklist.create}/check-duplicate/${formId}?soHieuXe=${soHieuXe}`;
+    const path = `${URL.checklist.create}/check-duplicate/${formId}?soHieuXe=${encodeURIComponent(soHieuXe)}`;
     const result = await requestService.get(path);
-    return result.exists; // ✅ true nếu đã tồn tại
+    return result; // ✅ Trả nguyên object: { exists, ma_nhan_vien, ho_ten }
   } catch (error) {
     console.error("Lỗi khi kiểm tra trùng số hiệu xe:", error);
     throw error;  
   }
 };
+
 
 
 

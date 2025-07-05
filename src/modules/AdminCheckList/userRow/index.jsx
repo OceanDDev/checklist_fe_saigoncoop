@@ -51,9 +51,9 @@ const UserRowCheckList = ({ user, index }) => {
       <td className="border px-3 py-2 min-w-[140px]">{user.ho_ten}</td>
       <td className="border px-3 py-2 min-w-[140px]">{user.don_vi}</td>
       <td className="border px-3 py-2 min-w-[200px]">
-        {(user.option_da_chon || [])
-          .map((opt) => `${opt.label}: ${opt.value}`)
-          .join(", ")}
+        {user.option_da_chon && user.option_da_chon.length > 0
+    ? user.option_da_chon.map((opt) => `${opt.label}: ${opt.value}`).join(", ")
+    : "Không có"}
       </td>
       <td className="border px-3 py-2 min-w-[160px]">
         {formatDate(user.ngay_tao)}

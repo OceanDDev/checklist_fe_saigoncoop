@@ -71,9 +71,9 @@ const UserTableCheckList = () => {
         // Lấy từ tất cả các nhóm kiểm tra
         const allGroupItems = [];
         if (user.checklist_groups && Array.isArray(user.checklist_groups)) {
-          user.checklist_groups.forEach(group => {
+          user.checklist_groups.forEach((group) => {
             if (group.items && Array.isArray(group.items)) {
-              group.items.forEach(item => {
+              group.items.forEach((item) => {
                 allGroupItems.push(item.noidung);
               });
             }
@@ -84,14 +84,26 @@ const UserTableCheckList = () => {
     )
   );
 
+  // Thay thế phần tạo allOptionValues
   const allOptionValues = Array.from(
     new Set(
-      checkList.flatMap(
-        (user) =>
-          user.option_da_chon?.map((opt) => `${opt.label}: ${opt.value}`) || []
-      )
+      checkList
+        .flatMap((user) => {
+          if (!user.option_da_chon || !Array.isArray(user.option_da_chon)) {
+            return [];
+          }
+          return user.option_da_chon.map((opt) => {
+            const label = (opt.label || "").trim();
+            const value = (opt.value || "").trim();
+            return `${label}: ${value}`;
+          });
+        })
+        .filter((option) => {
+          const trimmed = option.trim();
+          return trimmed && trimmed !== ":" && trimmed !== ": ";
+        })
     )
-  );
+  ).sort();
 
   const filteredUsers = checkList.filter((user) => {
     const matchSearchHoTen = user.ho_ten
@@ -102,11 +114,14 @@ const UserTableCheckList = () => {
       ?.toLowerCase()
       .includes(searchMaNV.toLowerCase());
 
-    const matchOption = selectedOption
-      ? user.option_da_chon?.some(
-          (opt) => `${opt.label}: ${opt.value}` === selectedOption
-        )
-      : true;
+    const matchOption =
+      !selectedOption ||
+      user.option_da_chon?.some((opt) => {
+        const label = (opt.label || "").trim();
+        const value = (opt.value || "").trim();
+        const optionString = `${label}: ${value}`;
+        return optionString === selectedOption;
+      });
 
     const itemDate = dayjs(user.ngay_tao);
     const matchDate =
@@ -124,7 +139,7 @@ const UserTableCheckList = () => {
     ? filteredUsers // khi đang lọc thì không phân trang
     : filteredUsers.slice(startIndex, startIndex + itemsPerPage);
 
- const exportToExcel = async () => {
+  const exportToExcel = async () => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("CheckList");
 
@@ -166,7 +181,7 @@ const UserTableCheckList = () => {
     // ===== NỘI DUNG CHÍNH - Cập nhật theo schema mới
     // Sắp xếp users theo ngày tạo
     filteredUsers.sort((a, b) => new Date(a.ngay_tao) - new Date(b.ngay_tao));
-    
+
     // Thêm các hàng nội dung kiểm tra
     allCheckTitles.forEach((fieldContent, index) => {
       const row = [index + 1, fieldContent];
@@ -174,9 +189,11 @@ const UserTableCheckList = () => {
         // Tìm đáp án trong tất cả các nhóm
         let foundAnswer = "";
         if (user.checklist_groups && Array.isArray(user.checklist_groups)) {
-          user.checklist_groups.forEach(group => {
+          user.checklist_groups.forEach((group) => {
             if (group.items && Array.isArray(group.items)) {
-              const foundItem = group.items.find(item => item.noidung === fieldContent);
+              const foundItem = group.items.find(
+                (item) => item.noidung === fieldContent
+              );
               if (foundItem && foundItem.dap_an) {
                 foundAnswer = foundItem.dap_an;
               }
@@ -193,7 +210,11 @@ const UserTableCheckList = () => {
     const totalCols = filteredUsers.length + 2;
 
     // ===== GHI CHÚ VÀ CHỮ KÝ (cập nhật thêm các ô trống để đủ cột)
-    worksheet.addRow(["", "Nội dung không đạt (nếu có)", ...Array(filteredUsers.length).fill("")]);
+    worksheet.addRow([
+      "",
+      "Nội dung không đạt (nếu có)",
+      ...Array(filteredUsers.length).fill(""),
+    ]);
 
     const noteRow = ["", "Ghi chú"];
     filteredUsers.forEach((user) => {
@@ -201,7 +222,11 @@ const UserTableCheckList = () => {
     });
     worksheet.addRow(noteRow);
 
-    worksheet.addRow(["", "Nhân viên kiểm tra ký xác nhận hoàn thành", ...Array(filteredUsers.length).fill("")]);
+    worksheet.addRow([
+      "",
+      "Nhân viên kiểm tra ký xác nhận hoàn thành",
+      ...Array(filteredUsers.length).fill(""),
+    ]);
     worksheet.addRow([]);
 
     worksheet.addRow([
@@ -233,36 +258,34 @@ const UserTableCheckList = () => {
 
     // ===== STYLE
     worksheet.eachRow((row, rowNumber) => {
-  row.eachCell((cell) => {
-    const isFirstRow = rowNumber === 1;
-    const isLastRow = rowNumber >= lastRow;
+      row.eachCell((cell) => {
+        const isFirstRow = rowNumber === 1;
+        const isLastRow = rowNumber >= lastRow;
 
-    const cellText = (cell.value || "").toString().trim().toUpperCase();
-    const isBold =
-      isFirstRow || (cellText !== "Đ" && cellText !== "KĐ");
+        const cellText = (cell.value || "").toString().trim().toUpperCase();
+        const isBold = isFirstRow || (cellText !== "Đ" && cellText !== "KĐ");
 
-    cell.alignment = {
-      vertical: "middle",
-      horizontal: rowNumber >= 6 ? "left" : "center",
-      wrapText: true,
-    };
-    cell.font = {
-      name: "Arial",
-      size: isFirstRow ? 14 : isLastRow ? 8 : 12,
-      bold: isBold,
-    };
-    cell.border = {
-      top: { style: "thin" },
-      left: { style: "thin" },
-      bottom: { style: "thin" },
-      right: { style: "thin" },
-    };
-  });
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: rowNumber >= 6 ? "left" : "center",
+          wrapText: true,
+        };
+        cell.font = {
+          name: "Arial",
+          size: isFirstRow ? 14 : isLastRow ? 8 : 12,
+          bold: isBold,
+        };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
 
-  if (rowNumber === lastRow) row.height = 100;
-  if (rowNumber === 4 || rowNumber === 5) row.height = 30;
-});
-
+      if (rowNumber === lastRow) row.height = 100;
+      if (rowNumber === 4 || rowNumber === 5) row.height = 30;
+    });
 
     // ===== PAGE SETUP + FOOTER
     worksheet.pageSetup = {
@@ -311,7 +334,6 @@ const UserTableCheckList = () => {
           ⬇️ Xuất Excel
         </button>
 
-
         <input
           type="text"
           placeholder="🔍 Tìm theo mã NV..."
@@ -328,7 +350,7 @@ const UserTableCheckList = () => {
           onChange={(e) => setSelectedOption(e.target.value)}
           className="border px-3 py-2 rounded shadow-sm"
         >
-          <option value="">Số xe</option>
+          <option value="">Tùy chọn</option>
           {allOptionValues.map((option, idx) => (
             <option key={idx} value={option}>
               {option}
