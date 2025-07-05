@@ -67,8 +67,8 @@ const UserRowCheckList = ({ user, index }) => {
           const passed = allItems.filter((item) => item.dap_an === "Đ").length;
           const percent = total === 0 ? 0 : (passed / total) * 100;
 
-          if (percent <= 60) return "text-red-600";
-          if (percent <= 80) return "text-orange-500";
+          if (percent <= 79) return "text-red-600";
+          if (percent >= 80) return "text-green-500";
           return "text-green-600";
         })()}`}
       >
