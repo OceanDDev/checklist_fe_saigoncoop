@@ -19,7 +19,10 @@ const URL = {
     create:  ENDPOINT_PREFIX + "/checklist",
   },
   checklistform:{
-    form: ENDPOINT_PREFIX + "/checklistform"
+    form: ENDPOINT_PREFIX + "/checklistform",
+    delete : ENDPOINT_PREFIX + "/checklistform",
+    update : ENDPOINT_PREFIX + "/checklistform"
+
   },
   users: {
     users: ENDPOINT_PREFIX + "/users",

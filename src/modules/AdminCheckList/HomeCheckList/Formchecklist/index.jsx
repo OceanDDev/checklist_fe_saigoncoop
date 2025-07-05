@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkListFormService } from "@/services/checklistform.service";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { useParams } from "react-router-dom";
 
 const AdminChecklistForm = () => {
+  const { id } = useParams();
+
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -23,6 +26,18 @@ const AdminChecklistForm = () => {
       },
     ],
   });
+  useEffect(() => {
+    if (id) {
+      (async () => {
+        try {
+          const res = await checkListFormService.getByIdCheckListForm(id);
+          setForm(res);
+        } catch (error) {
+          toast.error("❌ Không tải được form để sửa", error);
+        }
+      })();
+    }
+  }, [id]);
 
   const handleChange = (field, value) => {
     setForm({ ...form, [field]: value });
@@ -57,12 +72,17 @@ const AdminChecklistForm = () => {
   const handleAddGroup = () => {
     setForm({
       ...form,
-      checklist_groups: [...form.checklist_groups, { label: "", items: [{ noidung: "" }] }],
+      checklist_groups: [
+        ...form.checklist_groups,
+        { label: "", items: [{ noidung: "" }] },
+      ],
     });
   };
 
   const handleRemoveGroup = (groupIndex) => {
-    const updatedGroups = form.checklist_groups.filter((_, i) => i !== groupIndex);
+    const updatedGroups = form.checklist_groups.filter(
+      (_, i) => i !== groupIndex
+    );
     setForm({ ...form, checklist_groups: updatedGroups });
   };
 
@@ -87,12 +107,17 @@ const AdminChecklistForm = () => {
 
   const handleRemoveChoice = (optIndex, choiceIndex) => {
     const updated = [...form.option];
-    updated[optIndex].choices = updated[optIndex].choices.filter((_, i) => i !== choiceIndex);
+    updated[optIndex].choices = updated[optIndex].choices.filter(
+      (_, i) => i !== choiceIndex
+    );
     setForm({ ...form, option: updated });
   };
 
   const handleAddOption = () => {
-    setForm({ ...form, option: [...form.option, { label: "", choices: [""] }] });
+    setForm({
+      ...form,
+      option: [...form.option, { label: "", choices: [""] }],
+    });
   };
 
   const handleRemoveOption = (index) => {
@@ -102,19 +127,31 @@ const AdminChecklistForm = () => {
 
   const handleSubmit = async () => {
     try {
-      await checkListFormService.createCheckListForm(form);
-      toast.success("✅ Tạo checklist thành công!", {
-        position: "top-center",
-        autoClose: 2000,
-      });
+      if (id) {
+        // Cập nhật
+        await checkListFormService.updateCheckListForm(id, form);
+        toast.success("✅ Cập nhật thành công!", {
+          position: "top-center",
+          autoClose: 2000,
+        });
+      } else {
+        // Tạo mới
+        await checkListFormService.createCheckListForm(form);
+        toast.success("✅ Tạo checklist thành công!", {
+          position: "top-center",
+          autoClose: 2000,
+        });
+      }
+
       setTimeout(() => {
         navigate("/");
       }, 1500);
     } catch (err) {
-      toast.error("❌ Có lỗi xảy ra khi tạo form!", {
+      toast.error("❌ Có lỗi xảy ra khi lưu form!", {
         position: "top-center",
         autoClose: 2500,
-      });err
+      });
+      console.error("Lỗi khi submit:", err);
     }
   };
 
@@ -122,10 +159,14 @@ const AdminChecklistForm = () => {
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <ToastContainer />
       <div className="max-w-4xl mx-auto p-8 bg-white border-2 border-blue-200 rounded-2xl shadow-xl">
-        <h2 className="text-3xl font-bold mb-6 text-blue-700">📝 Tạo Checklist Form</h2>
+        <h2 className="text-3xl font-bold mb-6 text-blue-700">
+          📝 Tạo Checklist Form
+        </h2>
 
         <div className="mb-4">
-          <label className="block mb-1 text-sm font-medium text-gray-700">Tiêu đề</label>
+          <label className="block mb-1 text-sm font-medium text-gray-700">
+            Tiêu đề
+          </label>
           <input
             className="border border-gray-300 p-2 w-full rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
             placeholder="Nhập tiêu đề"
@@ -135,7 +176,9 @@ const AdminChecklistForm = () => {
         </div>
 
         <div className="mb-6">
-          <label className="block mb-1 text-sm font-medium text-gray-700">Mô tả</label>
+          <label className="block mb-1 text-sm font-medium text-gray-700">
+            Mô tả
+          </label>
           <textarea
             className="border border-gray-300 p-2 w-full rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
             placeholder="Nhập mô tả"
@@ -196,15 +239,22 @@ const AdminChecklistForm = () => {
 
         {/* Options (unchanged) */}
         <div className="mb-8">
-          <h4 className="text-lg font-semibold text-gray-800 mb-2">🧩 Tuỳ chọn người dùng (Option)</h4>
+          <h4 className="text-lg font-semibold text-gray-800 mb-2">
+            🧩 Tuỳ chọn người dùng (Option)
+          </h4>
           {form.option.map((opt, optIndex) => (
-            <div key={optIndex} className="border border-gray-200 p-4 rounded-lg mb-4 bg-gray-50">
+            <div
+              key={optIndex}
+              className="border border-gray-200 p-4 rounded-lg mb-4 bg-gray-50"
+            >
               <div className="flex items-center gap-2 mb-2">
                 <input
                   className="border border-gray-300 p-2 flex-1 rounded-md"
                   placeholder="Nhập tiêu đề (label), ví dụ: Khu vực kiểm tra"
                   value={opt.label}
-                  onChange={(e) => handleOptionLabelChange(optIndex, e.target.value)}
+                  onChange={(e) =>
+                    handleOptionLabelChange(optIndex, e.target.value)
+                  }
                 />
                 <button
                   onClick={() => handleRemoveOption(optIndex)}
@@ -219,7 +269,9 @@ const AdminChecklistForm = () => {
                     className="border border-gray-300 p-2 flex-1 rounded-md"
                     placeholder={`Lựa chọn ${choiceIndex + 1}`}
                     value={choice}
-                    onChange={(e) => handleChoiceChange(optIndex, choiceIndex, e.target.value)}
+                    onChange={(e) =>
+                      handleChoiceChange(optIndex, choiceIndex, e.target.value)
+                    }
                   />
                   <button
                     onClick={() => handleRemoveChoice(optIndex, choiceIndex)}
@@ -250,7 +302,7 @@ const AdminChecklistForm = () => {
             onClick={handleSubmit}
             className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 transition"
           >
-            ✅ Tạo Form
+            {id ? "💾 Cập nhật Form" : "✅ Tạo Form"}
           </button>
         </div>
       </div>

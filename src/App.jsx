@@ -44,6 +44,16 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route
+          path="/checklistform/edit/:id"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <AdminChecklistForm />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
          <Route
           path="/checklist/fill/:id"
           element={
