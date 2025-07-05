@@ -49,16 +49,17 @@ const getByIdCheckList = async (id) => {
   }
 };
 
-const checkDuplicate = async (formId, ma_nhan_vien) => {
+const checkDuplicateByVehicle = async (formId, soHieuXe) => {
   try {
-    const path = `${URL.checklist.create}/check-duplicate/${formId}?ma_nhan_vien=${ma_nhan_vien}`;
+    const path = `${URL.checklist.create}/check-duplicate/${formId}?soHieuXe=${soHieuXe}`;
     const result = await requestService.get(path);
-    return result.exists; // ✅ kết quả là true/false
+    return result.exists; // ✅ true nếu đã tồn tại
   } catch (error) {
-    console.error("Lỗi khi kiểm tra trùng mã nhân viên:", error);
-    throw error;
+    console.error("Lỗi khi kiểm tra trùng số hiệu xe:", error);
+    throw error;  
   }
 };
+
 
 
 export const checkListService = {
@@ -66,6 +67,6 @@ export const checkListService = {
   createCheckList,
   getByIdCheckList,
   getCheckListsByFormId,
-  checkDuplicate
+  checkDuplicateByVehicle
   
 };

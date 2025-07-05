@@ -1,18 +1,26 @@
-// UserInfoForm.jsx
 import { useState } from "react";
 import PropTypes from "prop-types";
 import { IdCard } from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
-import { staffService } from "@/services/staff.service";   // 👈 thêm
+import { staffService } from "@/services/staff.service";
 import { checkListService } from "@/services/checklist.service";
 
-const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
+const UserInfoForm = ({
+  userInfo,
+  setUserInfo,
+  onConfirm,
+  formId,
+  options,
+  selectedOptions,
+  setSelectedOptions,
+  optionErrors,
+  setOptionErrors,
+}) => {
   const [employeeIdInput, setEmployeeIdInput] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
-  /** 1) Tìm mã NV → gọi API staff **/
   const handleCheckEmployee = async () => {
     const id = employeeIdInput.trim();
     if (!id) return toast.error("Vui lòng nhập mã nhân viên!");
@@ -20,16 +28,14 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
     try {
       setLoading(true);
       const res = await staffService.getStaff({ ma_nhan_vien: id });
-
-      // ‑ Nếu BE trả về mảng
       const data = Array.isArray(res) ? res[0] : res;
 
-      if (!data) {  
+      if (!data) {
         toast.error("⚠️ Không tìm thấy mã nhân viên.");
         return;
       }
 
-      setSelectedEmployee(data); // { ma_nhan_vien, ho_ten, don_vi }
+      setSelectedEmployee(data);
       setShowModal(true);
     } catch (err) {
       console.error(err);
@@ -39,7 +45,6 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
     }
   };
 
-  /** 2) Xác nhận trong modal **/
   const handleConfirmEmployee = () => {
     setUserInfo({
       employeeId: selectedEmployee.ma_nhan_vien,
@@ -49,38 +54,71 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
     setShowModal(false);
   };
 
-  /** 3) Gửi sang bước checklist **/
   const handleConfirm = async () => {
+    const newErrors = {};
+    const trimmedOptions = {};
+
+    options?.forEach((opt) => {
+      const trimmedLabel = opt.label.trim();
+      const selectedValue = selectedOptions?.[trimmedLabel];
+      if (!selectedValue) {
+        newErrors[trimmedLabel] = "Vui lòng chọn tuỳ chọn này";
+      } else {
+        trimmedOptions[trimmedLabel] = selectedValue.trim?.() || selectedValue;
+      }
+    });
+
+    if (Object.keys(newErrors).length > 0) {
+      setOptionErrors?.(newErrors);
+      toast.error("Vui lòng chọn đầy đủ các tuỳ chọn.");
+      return;
+    }
+
+    const soHieuXe = trimmedOptions["Số hiệu xe"];
+    if (!soHieuXe || soHieuXe === "") {
+      toast.error("Vui lòng chọn Số hiệu xe.");
+      return;
+    }
+
     try {
-      const duplicated = await checkListService.checkDuplicate(
+      const duplicated = await checkListService.checkDuplicateByVehicle(
         formId,
-        userInfo.employeeId
+        soHieuXe
       );
+
       if (duplicated) {
-        toast.error("⚠️ Mã nhân viên đã điền checklist hôm nay.");
+        toast.error("⚠️ Xe nâng này đã được kiểm tra hôm nay.");
         return;
       }
-      onConfirm(); // sang màn checklist
+
+      const option_da_chon = Object.entries(trimmedOptions).map(
+        ([label, value]) => ({
+          label,
+          value,
+        })
+      );
+
+      onConfirm({
+        ...userInfo,
+        option_da_chon,
+      });
     } catch (err) {
-      const msg =
-        err?.response?.data?.error || "Lỗi kiểm tra mã nhân viên.";
+      const msg = err?.response?.data?.error || "Lỗi kiểm tra số hiệu xe.";
       toast.error("❌ " + msg);
     }
   };
 
-  const filled = userInfo.employeeId && userInfo.userName && userInfo.department;
+  const filled =
+    userInfo.employeeId && userInfo.userName && userInfo.department;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 px-4 py-8">
       <ToastContainer />
-
       <div className="bg-white shadow-2xl rounded-2xl w-full max-w-md p-6 sm:p-8">
-        {/* Logo */}
         <div className="flex justify-center mb-4">
           <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
         </div>
 
-        {/* Ô nhập mã NV */}
         <div className="space-y-5">
           <div className="relative">
             <IdCard className="absolute top-3 left-3 text-gray-400 size-5" />
@@ -93,6 +131,50 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
               onKeyDown={(e) => e.key === "Enter" && handleCheckEmployee()}
             />
           </div>
+
+          {options?.length > 0 && (
+            <div className="space-y-4">
+              {options.map((opt, idx) => {
+                const trimmedLabel = opt.label.trim();
+                return (
+                  <div key={idx}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {trimmedLabel}
+                    </label>
+                    <select
+                      className={`w-full border rounded px-3 py-2 text-sm focus:outline-none ${
+                        optionErrors?.[trimmedLabel]
+                          ? "border-red-500 ring-red-400 ring-1"
+                          : "border-gray-300 focus:ring-2 focus:ring-blue-500"
+                      }`}
+                      value={selectedOptions?.[trimmedLabel]?.trim() || ""}
+                      onChange={(e) =>
+                        setSelectedOptions((prev) => ({
+                          ...prev,
+                          [trimmedLabel]: e.target.value.trim(),
+                        }))
+                      }
+                    >
+                      <option value="">-- Chọn --</option>
+                      {opt.choices.map((choice, cIdx) => {
+                        const trimmedChoice = choice.trim();
+                        return (
+                          <option key={cIdx} value={trimmedChoice}>
+                            {trimmedChoice}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {optionErrors?.[trimmedLabel] && (
+                      <p className="text-xs text-red-500 mt-1">
+                        {optionErrors[trimmedLabel]}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <button
             onClick={handleCheckEmployee}
@@ -107,19 +189,18 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
               onClick={handleConfirm}
               className="w-full py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700"
             >
-              Xác nhận &amp; Bắt đầu kiểm tra
+              Xác nhận & Bắt đầu kiểm tra
             </button>
           )}
 
           <p className="text-xs text-blue-600 text-left mt-2 leading-snug">
-            ⚠️ Mỗi mã nhân viên chỉ được kiểm tra <strong>một lần trong ngày</strong>.
-            <br />
+            ⚠️ Mỗi xe nâng chỉ được kiểm tra{" "}
+            <strong>một lần trong ngày</strong>.<br />
             Nếu có lỗi, vui lòng liên hệ bộ phận <strong>IT</strong>.
           </p>
         </div>
       </div>
 
-      {/* Modal xác nhận */}
       {showModal && selectedEmployee && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-lg w-[90%] max-w-sm">
@@ -133,7 +214,7 @@ const UserInfoForm = ({ userInfo, setUserInfo, onConfirm, formId }) => {
               <strong>Họ tên:</strong> {selectedEmployee.ho_ten}
             </p>
             <p>
-              <strong>Đơn vị:</strong> {selectedEmployee.don_vi}
+              <strong>Bộ phận:</strong> {selectedEmployee.don_vi}
             </p>
 
             <div className="flex justify-end gap-3 mt-5">
@@ -162,6 +243,11 @@ UserInfoForm.propTypes = {
   setUserInfo: PropTypes.func.isRequired,
   onConfirm: PropTypes.func.isRequired,
   formId: PropTypes.string.isRequired,
+  options: PropTypes.array,
+  selectedOptions: PropTypes.object,
+  setSelectedOptions: PropTypes.func,
+  optionErrors: PropTypes.object,
+  setOptionErrors: PropTypes.func,
 };
 
 export default UserInfoForm;

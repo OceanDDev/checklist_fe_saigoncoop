@@ -378,7 +378,7 @@ const UserTableCheckList = () => {
               <th className="px-4 py-3 font-semibold">STT</th>
               <th className="px-4 py-3 font-semibold">Mã NV</th>
               <th className="px-4 py-3 font-semibold">Họ tên</th>
-              <th className="px-4 py-3 font-semibold">Đơn vị</th>
+              <th className="px-4 py-3 font-semibold">Bộ phận</th>
               <th className="px-4 py-3 font-semibold">Tùy chọn</th>
               <th className="px-4 py-3 font-semibold">Ngày điền</th>
               <th className="px-4 py-3 font-semibold">Tổng quan</th>

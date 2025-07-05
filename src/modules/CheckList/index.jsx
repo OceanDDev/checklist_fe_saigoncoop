@@ -58,14 +58,6 @@ const ForkliftChecklistMobile = () => {
     setErrors((prev) => ({ ...prev, [qid]: "" }));
   };
 
-  const handleOptionChange = (label, value) => {
-    setSelectedOptions((prev) => ({
-      ...prev,
-      [label]: value,
-    }));
-    setOptionErrors((prev) => ({ ...prev, [label]: "" }));
-  };
-
   const validate = () => {
     const newErrors = {};
     Object.entries(answers).forEach(([qid, value]) => {
@@ -73,18 +65,7 @@ const ForkliftChecklistMobile = () => {
     });
     setErrors(newErrors);
 
-    const newOptionErrors = {};
-    options.forEach((opt) => {
-      if (!selectedOptions[opt.label]) {
-        newOptionErrors[opt.label] = "Vui lòng chọn tùy chọn này";
-      }
-    });
-    setOptionErrors(newOptionErrors);
-
-    return (
-      Object.keys(newErrors).length === 0 &&
-      Object.keys(newOptionErrors).length === 0
-    );
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
@@ -131,6 +112,11 @@ const ForkliftChecklistMobile = () => {
         setUserInfo={setUserInfo}
         onConfirm={() => setIsConfirmed(true)}
         formId={id}
+        options={options} // 👈 thêm
+        selectedOptions={selectedOptions} // 👈 thêm
+        setSelectedOptions={setSelectedOptions} // 👈 thêm
+        optionErrors={optionErrors} // 👈 thêm
+        setOptionErrors={setOptionErrors} // 👈 thêm
       />
     );
   }
@@ -142,42 +128,16 @@ const ForkliftChecklistMobile = () => {
       </h2>
 
       <div className="mb-4 text-sm text-gray-700 space-y-1">
-        <p><strong>Mã nhân viên:</strong> {userInfo.employeeId}</p>
-        <p><strong>Họ và tên:</strong> {userInfo.userName}</p>
-        <p><strong>Đơn vị:</strong> {userInfo.department}</p>
+        <p>
+          <strong>Mã nhân viên:</strong> {userInfo.employeeId}
+        </p>
+        <p>
+          <strong>Họ và tên:</strong> {userInfo.userName}
+        </p>
+        <p>
+          <strong>Bộ phận:</strong> {userInfo.department}
+        </p>
       </div>
-
-      {options.length > 0 && (
-        <div className="mb-6">
-          <h4 className="font-semibold text-gray-800 mb-2">🧩 Tuỳ chọn</h4>
-          {options.map((opt, idx) => (
-            <div key={idx} className="mb-3">
-              <label className="block mb-1 text-sm font-medium text-gray-700">
-                {opt.label}
-              </label>
-              <select
-                className={`w-full border rounded px-3 py-2 text-sm focus:outline-none ${
-                  optionErrors[opt.label]
-                    ? "border-red-500 ring-red-400 ring-1"
-                    : "border-gray-300 focus:ring-2 focus:ring-blue-500"
-                }`}
-                value={selectedOptions[opt.label] || ""}
-                onChange={(e) => handleOptionChange(opt.label, e.target.value)}
-              >
-                <option value="">-- Chọn --</option>
-                {opt.choices.map((choice, cIdx) => (
-                  <option key={cIdx} value={choice}>{choice}</option>
-                ))}
-              </select>
-              {optionErrors[opt.label] && (
-                <p className="text-xs text-red-500 mt-1">
-                  {optionErrors[opt.label]}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
 
       {checklistGroups.map((group, gIdx) => (
         <div key={gIdx}>
@@ -187,10 +147,15 @@ const ForkliftChecklistMobile = () => {
           </div>
 
           {group.items.map((item, idx) => (
-            <div key={item._id} className="mb-5 border rounded-xl p-4 shadow bg-white">
+            <div
+              key={item._id}
+              className="mb-5 border rounded-xl p-4 shadow bg-white"
+            >
               <div className="flex gap-2 items-start mb-2 text-sm text-gray-800 font-medium">
                 <AlertCircle className="size-4 text-yellow-500 mt-1" />
-                <span>{idx + 1}. {item.noidung}</span>
+                <span>
+                  {idx + 1}. {item.noidung}
+                </span>
               </div>
 
               <div className="flex gap-6 text-sm mb-2">
@@ -215,7 +180,9 @@ const ForkliftChecklistMobile = () => {
                         type="radio"
                         name={`status-${item._id}`}
                         checked={isChecked}
-                        onChange={() => handleAnswerChange(item._id, "dap_an", opt)}
+                        onChange={() =>
+                          handleAnswerChange(item._id, "dap_an", opt)
+                        }
                         className="hidden"
                       />
                       {opt}
@@ -225,7 +192,9 @@ const ForkliftChecklistMobile = () => {
               </div>
 
               {errors[item._id] && (
-                <div className="text-red-500 text-sm mt-1">{errors[item._id]}</div>
+                <div className="text-red-500 text-sm mt-1">
+                  {errors[item._id]}
+                </div>
               )}
             </div>
           ))}
