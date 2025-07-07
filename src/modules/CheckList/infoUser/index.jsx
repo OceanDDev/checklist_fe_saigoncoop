@@ -22,6 +22,8 @@ const UserInfoForm = ({
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
+  const isXeNang = formTitle?.trim().toLowerCase() === "xe nâng";
+
   const handleCheckEmployee = async () => {
     const id = employeeIdInput.trim();
     if (!id) return toast.error("Vui lòng nhập mã nhân viên!");
@@ -46,66 +48,95 @@ const UserInfoForm = ({
     }
   };
 
-  const handleConfirmEmployee = () => {
-    setUserInfo({
-      employeeId: selectedEmployee.ma_nhan_vien,
-      userName: selectedEmployee.ho_ten,
-      department: selectedEmployee.don_vi,
-    });
-    setShowModal(false);
+  const handleConfirmEmployee = async () => {
+  const info = {
+    employeeId: selectedEmployee.ma_nhan_vien,
+    userName: selectedEmployee.ho_ten,
+    department: selectedEmployee.don_vi,
   };
 
-  const handleConfirm = async () => {
-    const newErrors = {};
-    const trimmedOptions = {};
+  setUserInfo(info);
+  setShowModal(false);
 
-    // 👉 Chỉ kiểm tra option nếu form là Xe nâng
-    if (formTitle?.trim().toLowerCase() === "xe nâng") {
-      options?.forEach((opt) => {
-        const trimmedLabel = opt.label.trim();
-        const selectedValue = selectedOptions?.[trimmedLabel];
-        if (!selectedValue) {
-          newErrors[trimmedLabel] = "Vui lòng chọn tuỳ chọn này";
-        } else {
-          trimmedOptions[trimmedLabel] =
-            selectedValue.trim?.() || selectedValue;
-        }
-      });
-
-      if (Object.keys(newErrors).length > 0) {
-        setOptionErrors?.(newErrors);
-        toast.error("Vui lòng chọn đầy đủ các tuỳ chọn.");
-        return;
-      }
-
-      const soHieuXe = trimmedOptions["Số hiệu xe"];
-      if (!soHieuXe || soHieuXe === "") {
-        toast.error("Vui lòng chọn Số hiệu xe.");
-        return;
-      }
-
-      try {
-        const res = await checkListService.checkDuplicateByVehicle(
-          formId,
-          soHieuXe
-        );
-
-        if (res.exists) {
-          toast.error(
-            `Xe nâng này đã được kiểm tra hôm nay bởi ${res.ma_nhan_vien} - ${res.ho_ten}`
-          );
-          return;
-        }
-      } catch (err) {
-        const msg = err?.response?.data?.error || "Lỗi kiểm tra số hiệu xe.";
-        toast.error("❌ " + msg);
-        return;
-      }
-    }
+  if (!isXeNang) {
+    onConfirm({
+      ...info,
+      option_da_chon: [],
+    });
+  } else {
+    const trimmedOptions = await validateXeNangOptions();
+    if (!trimmedOptions) return;
 
     const option_da_chon = Object.entries(trimmedOptions).map(
       ([label, value]) => ({ label, value })
     );
+
+    onConfirm({
+      ...info,
+      option_da_chon,
+    });
+  }
+};
+
+  const validateXeNangOptions = async () => {
+    const errors = {};
+    const cleanedOptions = {};
+
+    options?.forEach((opt) => {
+      const label = opt.label.trim();
+      const value = selectedOptions?.[label];
+
+      if (!value) {
+        errors[label] = "Vui lòng chọn tuỳ chọn này";
+      } else {
+        cleanedOptions[label] = value.trim?.() || value;
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setOptionErrors?.(errors);
+      toast.error("Vui lòng chọn đầy đủ các tuỳ chọn.");
+      return null;
+    }
+
+    const soHieuXe = cleanedOptions["Số hiệu xe"];
+    if (!soHieuXe) {
+      toast.error("Vui lòng chọn Số hiệu xe.");
+      return null;
+    }
+
+    try {
+      const res = await checkListService.checkDuplicateByVehicle(
+        formId,
+        soHieuXe
+      );
+      if (res.exists) {
+        toast.error(
+          `Xe nâng này đã được kiểm tra hôm nay bởi ${res.ma_nhan_vien} - ${res.ho_ten}`
+        );
+        return null;
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.error || "Lỗi kiểm tra số hiệu xe.";
+      toast.error("❌ " + msg);
+      return null;
+    }
+
+    return cleanedOptions;
+  };
+
+  const handleConfirm = async () => {
+    let option_da_chon = [];
+
+    if (isXeNang) {
+      const trimmedOptions = await validateXeNangOptions();
+      if (!trimmedOptions) return;
+
+      option_da_chon = Object.entries(trimmedOptions).map(([label, value]) => ({
+        label,
+        value,
+      }));
+    }
 
     onConfirm({
       ...userInfo,
@@ -137,50 +168,49 @@ const UserInfoForm = ({
             />
           </div>
 
-          {formTitle?.trim().toLowerCase() === "xe nâng" &&
-            options?.length > 0 && (
-              <div className="space-y-4">
-                {options.map((opt, idx) => {
-                  const trimmedLabel = opt.label.trim();
-                  return (
-                    <div key={idx}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {trimmedLabel}
-                      </label>
-                      <select
-                        className={`w-full border rounded px-3 py-2 text-sm focus:outline-none ${
-                          optionErrors?.[trimmedLabel]
-                            ? "border-red-500 ring-red-400 ring-1"
-                            : "border-gray-300 focus:ring-2 focus:ring-blue-500"
-                        }`}
-                        value={selectedOptions?.[trimmedLabel]?.trim() || ""}
-                        onChange={(e) =>
-                          setSelectedOptions((prev) => ({
-                            ...prev,
-                            [trimmedLabel]: e.target.value.trim(),
-                          }))
-                        }
-                      >
-                        <option value="">-- Chọn --</option>
-                        {opt.choices.map((choice, cIdx) => {
-                          const trimmedChoice = choice.trim();
-                          return (
-                            <option key={cIdx} value={trimmedChoice}>
-                              {trimmedChoice}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      {optionErrors?.[trimmedLabel] && (
-                        <p className="text-xs text-red-500 mt-1">
-                          {optionErrors[trimmedLabel]}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+          {isXeNang && options?.length > 0 && (
+            <div className="space-y-4">
+              {options.map((opt, idx) => {
+                const label = opt.label.trim();
+                return (
+                  <div key={idx}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {label}
+                    </label>
+                    <select
+                      className={`w-full border rounded px-3 py-2 text-sm focus:outline-none ${
+                        optionErrors?.[label]
+                          ? "border-red-500 ring-red-400 ring-1"
+                          : "border-gray-300 focus:ring-2 focus:ring-blue-500"
+                      }`}
+                      value={selectedOptions?.[label]?.trim() || ""}
+                      onChange={(e) =>
+                        setSelectedOptions((prev) => ({
+                          ...prev,
+                          [label]: e.target.value.trim(),
+                        }))
+                      }
+                    >
+                      <option value="">-- Chọn --</option>
+                      {opt.choices.map((choice, cIdx) => {
+                        const trimmedChoice = choice.trim();
+                        return (
+                          <option key={cIdx} value={trimmedChoice}>
+                            {trimmedChoice}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {optionErrors?.[label] && (
+                      <p className="text-xs text-red-500 mt-1">
+                        {optionErrors[label]}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <button
             onClick={handleCheckEmployee}
@@ -199,15 +229,16 @@ const UserInfoForm = ({
             </button>
           )}
 
-          {formTitle?.trim().toLowerCase() === "xe nâng" && (
+          {isXeNang && (
             <p className="text-xs text-blue-600 text-left mt-2 leading-snug">
               ⚠️ Mỗi xe nâng chỉ được kiểm tra{" "}
               <strong>một lần trong ngày</strong>.<br />
             </p>
           )}
+
           <p className="text-xs text-blue-600 text-left mt-2 leading-snug">
-            {" "}
-            ⚠️ Nếu có lỗi, vui lòng liên hệ bộ phận <strong>IT</strong>.{" "}
+            ⚠️ Nếu có lỗi, vui lòng liên hệ bộ phận IT  <strong>21207</strong> hoặc{" "}
+            <strong>0338657685</strong>.
           </p>
         </div>
       </div>
