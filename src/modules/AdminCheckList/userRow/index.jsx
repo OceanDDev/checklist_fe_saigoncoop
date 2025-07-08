@@ -12,17 +12,9 @@ import { Button } from "@/components/ui/button";
 import { checkListService } from "@/services/checklist.service";
 import { toast } from "react-toastify";
 
-const UserRowCheckList = ({ user, index, allCheckTitles, fetchChecklists }) => {
+const UserRowCheckList = ({ user, index, fetchChecklists }) => {
   const [open, setOpen] = useState(false);
   const checklistGroups = user.checklist_groups || [];
-
-  const getAnswerByContent = (content) => {
-    for (const group of checklistGroups) {
-      const found = group.items.find((item) => item.noidung === content);
-      if (found) return found.dap_an || "";
-    }
-    return "";
-  };
 
   const getAllItems = () =>
     checklistGroups.flatMap((group) => group.items || []);
@@ -106,28 +98,47 @@ const UserRowCheckList = ({ user, index, allCheckTitles, fetchChecklists }) => {
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4 divide-y divide-gray-200">
-              {allCheckTitles.map((title, i) => {
-                const answer = getAnswerByContent(title);
-                return (
-                  <div
-                    key={i}
-                    className="py-2 flex justify-between items-center text-sm"
-                  >
-                    <span className="text-gray-700 w-2/3 pr-2">{title}</span>
-                    <span
-                      className={`text-right break-words px-2 py-1 rounded ${
-                        answer === "Đ"
-                          ? "bg-green-100 text-green-700 font-bold"
-                          : answer === "KĐ"
-                          ? "bg-red-100 text-red-700 font-bold"
-                          : "text-gray-800"
-                      }`}
-                    >
-                      {answer}
+              {(user.checklist_groups || []).map((group, groupIdx) => (
+                <div key={groupIdx} className="py-4">
+                  {/* Nhãn nhóm với icon + màu nổi bật */}
+                  <div className="flex items-center mb-2">
+                    <span className="text-xl mr-2">
+                      {/* Tùy chọn icon theo tên label */}
+                     
                     </span>
+                    <h4 className="text-base font-bold text-blue-700 uppercase">
+                      {"📋 " + group.label}
+                    </h4>
                   </div>
-                );
-              })}
+
+                  {/* Danh sách nội dung kiểm tra */}
+                  {(group.items || []).map((item, itemIdx) => {
+                    const answer = item.dap_an || "";
+                    return (
+                      <div
+                        key={itemIdx}
+                        className="py-1 flex justify-between items-center text-sm"
+                      >
+                        <span className="text-gray-700 w-2/3 pr-2">
+                          {item.noidung}
+                        </span>
+                        <span
+                          className={`text-right break-words px-2 py-1 rounded text-xs font-semibold
+                ${
+                  answer === "Đ"
+                    ? "bg-green-100 text-green-700"
+                    : answer === "KĐ"
+                    ? "bg-red-100 text-red-700"
+                    : "text-gray-800"
+                }`}
+                        >
+                          {answer}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
 
             {user.ghi_chu && (
@@ -143,7 +154,7 @@ const UserRowCheckList = ({ user, index, allCheckTitles, fetchChecklists }) => {
       </td>
       <td className="border px-3 py-2 min-w-[140px]">
         <button
-          onClick={handleDelete}  
+          onClick={handleDelete}
           className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
         >
           🗑️ Xóa
