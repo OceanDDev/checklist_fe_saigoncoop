@@ -49,6 +49,19 @@ const getByIdCheckList = async (id) => {
   }
 };
 
+const deleteByIdCheckList = async (id) =>{ 
+   try {
+    const results = await requestService.del(
+      `${URL.checklist.delete}/${id}`,
+      undefined,  // headers
+      ApiServer   // axiosInstance
+    );
+    return results;
+  } catch (error) {
+    console.error("Lỗi deleteCheckList:", error);
+  }
+}
+
 const checkDuplicateByVehicle = async (formId, soHieuXe) => {
   try {
     const path = `${URL.checklist.create}/check-duplicate/${formId}?soHieuXe=${encodeURIComponent(soHieuXe)}`;
@@ -68,6 +81,7 @@ export const checkListService = {
   createCheckList,
   getByIdCheckList,
   getCheckListsByFormId,
-  checkDuplicateByVehicle
+  checkDuplicateByVehicle,
+  deleteByIdCheckList
   
 };

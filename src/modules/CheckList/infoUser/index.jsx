@@ -237,8 +237,7 @@ const UserInfoForm = ({
           )}
 
           <p className="text-xs text-blue-600 text-left mt-2 leading-snug">
-            ⚠️ Nếu có lỗi, vui lòng liên hệ bộ phận IT  <strong>21207</strong> hoặc{" "}
-            <strong>0338657685</strong>.
+            ⚠️ Nếu có lỗi, vui lòng liên hệ bộ phận IT  <strong>21207</strong>
           </p>
         </div>
       </div>

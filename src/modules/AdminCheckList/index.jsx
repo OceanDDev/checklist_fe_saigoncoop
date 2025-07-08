@@ -405,6 +405,7 @@ const UserTableCheckList = () => {
               <th className="px-4 py-3 font-semibold">Ngày điền</th>
               <th className="px-4 py-3 font-semibold">Tổng quan</th>
               <th className="px-4 py-3 font-semibold">Chi tiết</th>
+              <th className="px-4 py-3 font-semibold">Chức năng</th>
 
               {/* Các tiêu đề nội dung kiểm tra */}
               {/* {allCheckTitles.map((title, idx) => (
@@ -435,6 +436,19 @@ const UserTableCheckList = () => {
                   user={user}
                   index={startIndex + index}
                   allCheckTitles={allCheckTitles}
+                  fetchChecklists={() => {
+                    const fetchData = async () => {
+                      const res = await checkListService.getCheckListsByFormId(
+                        formId
+                      );
+                      setCheckList(
+                        res.sort(
+                          (a, b) => new Date(b.ngay_tao) - new Date(a.ngay_tao)
+                        )
+                      );
+                    };
+                    fetchData();
+                  }}
                 />
               ))
             )}
