@@ -48,7 +48,17 @@ const UserInfoForm = ({
     }
   };
 
-  const handleConfirmEmployee = async () => {
+const handleConfirmEmployee = async () => {
+  const now = new Date();
+  const cutoffTime = new Date();
+  cutoffTime.setHours(16, 0, 0, 0); // 16:00:00.000 hôm nay
+
+  // Nếu đã quá 16h → Hiển thị cảnh báo và chặn xử lý tiếp theo
+  if (now > cutoffTime) {
+    toast.warning("⚠️ Đã quá thời gian kiểm tra checklist (sau 16h)!");
+    return;
+  }
+
   const info = {
     employeeId: selectedEmployee.ma_nhan_vien,
     userName: selectedEmployee.ho_ten,
@@ -77,6 +87,7 @@ const UserInfoForm = ({
     });
   }
 };
+
 
   const validateXeNangOptions = async () => {
     const errors = {};
