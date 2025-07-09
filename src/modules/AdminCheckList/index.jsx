@@ -105,33 +105,37 @@ const UserTableCheckList = () => {
     )
   ).sort();
 
-  const filteredUsers = checkList.filter((user) => {
-    const matchSearchHoTen = user.ho_ten
-      ?.toLowerCase()
-      .includes(searchTerm.toLowerCase());
+ const filteredUsers = checkList.filter((user) => {
+  const matchSearchHoTen = user.ho_ten
+    ?.toLowerCase()
+    .includes(searchTerm.toLowerCase());
 
-    const matchSearchMaNV = user.ma_nhan_vien
-      ?.toLowerCase()
-      .includes(searchMaNV.toLowerCase());
+  const matchSearchMaNV = user.ma_nhan_vien
+    ?.toLowerCase()
+    .includes(searchMaNV.toLowerCase());
 
-    const matchOption =
-      !selectedOption ||
-      user.option_da_chon?.some((opt) => {
-        const label = (opt.label || "").trim();
-        const value = (opt.value || "").trim();
-        const optionString = `${label}: ${value}`;
-        return optionString === selectedOption;
-      });
+  const matchOption =
+    !selectedOption ||
+    user.option_da_chon?.some((opt) => {
+      const label = (opt.label || "").trim();
+      const value = (opt.value || "").trim();
+      const optionString = `${label}: ${value}`;
+      return optionString === selectedOption;
+    });
 
-    const itemDate = dayjs(user.ngay_tao);
-    const matchDate =
-      dateRange[0].startDate && dateRange[0].endDate
-        ? itemDate.isAfter(dayjs(dateRange[0].startDate).subtract(1, "day")) &&
-          itemDate.isBefore(dayjs(dateRange[0].endDate).add(1, "day"))
-        : true;
+  let matchDate = true;
+  
+  if (dateRange[0].startDate && dateRange[0].endDate) {
+    const userDateString = dayjs(user.ngay_tao).format('YYYY-MM-DD');
+    const startDateString = dayjs(dateRange[0].startDate).format('YYYY-MM-DD');
+    const endDateString = dayjs(dateRange[0].endDate).format('YYYY-MM-DD');
+    
+    // So sánh string đơn giản
+    matchDate = userDateString >= startDateString && userDateString <= endDateString;
+  }
 
-    return matchSearchHoTen && matchSearchMaNV && matchOption && matchDate;
-  });
+  return matchSearchHoTen && matchSearchMaNV && matchOption && matchDate;
+});
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
   const startIndex = currentPage * itemsPerPage;
