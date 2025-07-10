@@ -6,6 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 const HomeCheckList = () => {
   const [checklists, setChecklists] = useState([]);
+  const [selectedLoai, setSelectedLoai] = useState("Nhà Kho"); // 🔹 Mặc định là "Nhà Kho"
   const navigate = useNavigate();
   const fetchedRef = useRef(false);
 
@@ -54,12 +55,15 @@ const HomeCheckList = () => {
     navigate(`/checklistform/edit/${id}`);
   };
 
+  // 🔹 Lọc checklist theo loại đã chọn
+  const filteredChecklists = checklists.filter((form) => form.loai === selectedLoai);
+
   return (
     <div className="px-4 py-10 max-w-6xl mx-auto">
       <ToastContainer />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold text-gray-800">Danh sách Checklist</h1>
         <button
           onClick={() => navigate("/checklistform")}
@@ -69,9 +73,26 @@ const HomeCheckList = () => {
         </button>
       </div>
 
+      {/* 🔹 Thanh chọn loại */}
+      <div className="flex gap-4 mb-6">
+        {["Nhà Kho", "Ban Điều Hành"].map((loai) => (
+          <button
+            key={loai}
+            onClick={() => setSelectedLoai(loai)}
+            className={`px-4 py-2 rounded-full font-medium border transition ${
+              selectedLoai === loai
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+            }`}
+          >
+            {loai}
+          </button>
+        ))}
+      </div>
+
       {/* Danh sách checklist */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {checklists.map((form) => {
+        {filteredChecklists.map((form) => {
           const fullLink = `${window.location.origin}/checklist/fill/${form._id}`;
           return (
             <div

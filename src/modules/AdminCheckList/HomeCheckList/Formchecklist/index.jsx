@@ -1,18 +1,17 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { checkListFormService } from "@/services/checklistform.service";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { useParams } from "react-router-dom";
 
 const AdminChecklistForm = () => {
   const { id } = useParams();
-
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
     tieu_de: "",
     mo_ta: "",
+    loai: "Ban Điều Hành", // ✅ Thêm trường mặc định
     checklist_groups: [
       {
         label: "",
@@ -26,6 +25,7 @@ const AdminChecklistForm = () => {
       },
     ],
   });
+
   useEffect(() => {
     if (id) {
       (async () => {
@@ -33,7 +33,7 @@ const AdminChecklistForm = () => {
           const res = await checkListFormService.getByIdCheckListForm(id);
           setForm(res);
         } catch (error) {
-          toast.error("❌ Không tải được form để sửa", error);
+          toast.error("❌ Không tải được form để sửa",error);
         }
       })();
     }
@@ -86,7 +86,6 @@ const AdminChecklistForm = () => {
     setForm({ ...form, checklist_groups: updatedGroups });
   };
 
-  // Option handlers remain unchanged
   const handleOptionLabelChange = (index, value) => {
     const updated = [...form.option];
     updated[index].label = value;
@@ -128,14 +127,12 @@ const AdminChecklistForm = () => {
   const handleSubmit = async () => {
     try {
       if (id) {
-        // Cập nhật
         await checkListFormService.updateCheckListForm(id, form);
         toast.success("✅ Cập nhật thành công!", {
           position: "top-center",
           autoClose: 2000,
         });
       } else {
-        // Tạo mới
         await checkListFormService.createCheckListForm(form);
         toast.success("✅ Tạo checklist thành công!", {
           position: "top-center",
@@ -175,7 +172,7 @@ const AdminChecklistForm = () => {
           />
         </div>
 
-        <div className="mb-6">
+        <div className="mb-4">
           <label className="block mb-1 text-sm font-medium text-gray-700">
             Mô tả
           </label>
@@ -188,6 +185,21 @@ const AdminChecklistForm = () => {
           />
         </div>
 
+        {/* ✅ Trường loại (dropdown) */}
+        <div className="mb-6">
+          <label className="block mb-1 text-sm font-medium text-gray-700">
+            Loại Checklist
+          </label>
+          <select
+            className="border border-gray-300 p-2 w-full rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
+            value={form.loai}
+            onChange={(e) => handleChange("loai", e.target.value)}
+          >
+            <option value="Ban Điều Hành">Ban Điều Hành</option>
+            <option value="Nhà Kho">Nhà Kho</option>
+          </select>
+        </div>
+
         {/* Checklist Groups */}
         {form.checklist_groups.map((group, gIdx) => (
           <div key={gIdx} className="mb-6 border rounded p-4 bg-gray-50">
@@ -196,7 +208,9 @@ const AdminChecklistForm = () => {
                 className="border border-gray-300 p-2 flex-1 rounded-md"
                 placeholder="Tên danh mục (VD: Kiểm tra bên ngoài)"
                 value={group.label}
-                onChange={(e) => handleGroupLabelChange(gIdx, e.target.value)}
+                onChange={(e) =>
+                  handleGroupLabelChange(gIdx, e.target.value)
+                }
               />
               <button
                 onClick={() => handleRemoveGroup(gIdx)}
@@ -212,7 +226,9 @@ const AdminChecklistForm = () => {
                   className="border border-gray-300 p-2 flex-1 rounded-md"
                   placeholder={`Mục ${iIdx + 1}`}
                   value={item.noidung}
-                  onChange={(e) => handleItemChange(gIdx, iIdx, e.target.value)}
+                  onChange={(e) =>
+                    handleItemChange(gIdx, iIdx, e.target.value)
+                  }
                 />
                 <button
                   onClick={() => handleRemoveItem(gIdx, iIdx)}
@@ -237,7 +253,7 @@ const AdminChecklistForm = () => {
           + Thêm danh mục mới
         </button>
 
-        {/* Options (unchanged) */}
+        {/* Option */}
         <div className="mb-8">
           <h4 className="text-lg font-semibold text-gray-800 mb-2">
             🧩 Tuỳ chọn người dùng (Option)
@@ -264,7 +280,10 @@ const AdminChecklistForm = () => {
                 </button>
               </div>
               {opt.choices.map((choice, choiceIndex) => (
-                <div key={choiceIndex} className="flex items-center gap-2 mb-1">
+                <div
+                  key={choiceIndex}
+                  className="flex items-center gap-2 mb-1"
+                >
                   <input
                     className="border border-gray-300 p-2 flex-1 rounded-md"
                     placeholder={`Lựa chọn ${choiceIndex + 1}`}
