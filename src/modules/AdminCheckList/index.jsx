@@ -105,37 +105,40 @@ const UserTableCheckList = () => {
     )
   ).sort();
 
- const filteredUsers = checkList.filter((user) => {
-  const matchSearchHoTen = user.ho_ten
-    ?.toLowerCase()
-    .includes(searchTerm.toLowerCase());
+  const filteredUsers = checkList.filter((user) => {
+    const matchSearchHoTen = user.ho_ten
+      ?.toLowerCase()
+      .includes(searchTerm.toLowerCase());
 
-  const matchSearchMaNV = user.ma_nhan_vien
-    ?.toLowerCase()
-    .includes(searchMaNV.toLowerCase());
+    const matchSearchMaNV = user.ma_nhan_vien
+      ?.toLowerCase()
+      .includes(searchMaNV.toLowerCase());
 
-  const matchOption =
-    !selectedOption ||
-    user.option_da_chon?.some((opt) => {
-      const label = (opt.label || "").trim();
-      const value = (opt.value || "").trim();
-      const optionString = `${label}: ${value}`;
-      return optionString === selectedOption;
-    });
+    const matchOption =
+      !selectedOption ||
+      user.option_da_chon?.some((opt) => {
+        const label = (opt.label || "").trim();
+        const value = (opt.value || "").trim();
+        const optionString = `${label}: ${value}`;
+        return optionString === selectedOption;
+      });
 
-  let matchDate = true;
-  
-  if (dateRange[0].startDate && dateRange[0].endDate) {
-    const userDateString = dayjs(user.ngay_tao).format('YYYY-MM-DD');
-    const startDateString = dayjs(dateRange[0].startDate).format('YYYY-MM-DD');
-    const endDateString = dayjs(dateRange[0].endDate).format('YYYY-MM-DD');
-    
-    // So sánh string đơn giản
-    matchDate = userDateString >= startDateString && userDateString <= endDateString;
-  }
+    let matchDate = true;
 
-  return matchSearchHoTen && matchSearchMaNV && matchOption && matchDate;
-});
+    if (dateRange[0].startDate && dateRange[0].endDate) {
+      const userDateString = dayjs(user.ngay_tao).format("YYYY-MM-DD");
+      const startDateString = dayjs(dateRange[0].startDate).format(
+        "YYYY-MM-DD"
+      );
+      const endDateString = dayjs(dateRange[0].endDate).format("YYYY-MM-DD");
+
+      // So sánh string đơn giản
+      matchDate =
+        userDateString >= startDateString && userDateString <= endDateString;
+    }
+
+    return matchSearchHoTen && matchSearchMaNV && matchOption && matchDate;
+  });
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
   const startIndex = currentPage * itemsPerPage;
@@ -147,7 +150,12 @@ const UserTableCheckList = () => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("CheckList");
 
-    const firstUser = filteredUsers[0];
+    // ===== SẮP XẾP USERS THEO NGÀY TẠO TĂNG DẦN NGAY TỪ ĐẦU
+    const sortedFilteredUsers = [...filteredUsers].sort(
+      (a, b) => new Date(a.ngay_tao) - new Date(b.ngay_tao)
+    );
+
+    const firstUser = sortedFilteredUsers[0];
     const user_donvi = firstUser?.don_vi || "................................";
     const so_hieu_xe =
       firstUser?.option_da_chon
@@ -165,31 +173,28 @@ const UserTableCheckList = () => {
     row1.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
     row2.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
 
-    // ===== HEADER BẢNG - HÀNG MÃ NHÂN VIÊN
+    // ===== HEADER BẢNG - HÀNG MÃ NHÂN VIÊN (sử dụng sortedFilteredUsers)
     const maNVRow = worksheet.addRow(["STT", "Mã NV"]);
-    filteredUsers.forEach((user) => {
+    sortedFilteredUsers.forEach((user) => {
       maNVRow.getCell(maNVRow.cellCount + 1).value = user.ma_nhan_vien || "";
     });
 
-    // ===== HEADER BẢNG - HÀNG STT VÀ NGÀY/MỤC KIỂM TRA
+    // ===== HEADER BẢNG - HÀNG STT VÀ NGÀY/MỤC KIỂM TRA (sử dụng sortedFilteredUsers)
     const headerMainRow = worksheet.addRow([
       "STT",
       "Ngày Kiểm tra\n        ╱\nMục Kiểm tra",
     ]);
-    filteredUsers.forEach((user) => {
+    sortedFilteredUsers.forEach((user) => {
       headerMainRow.getCell(headerMainRow.cellCount + 1).value = user.ngay_tao
         ? new Date(user.ngay_tao).toLocaleDateString("vi-VN")
         : "";
     });
 
     // ===== NỘI DUNG CHÍNH - Cập nhật theo schema mới
-    // Sắp xếp users theo ngày tạo
-    filteredUsers.sort((a, b) => new Date(a.ngay_tao) - new Date(b.ngay_tao));
-
     // Thêm các hàng nội dung kiểm tra
     allCheckTitles.forEach((fieldContent, index) => {
       const row = [index + 1, fieldContent];
-      filteredUsers.forEach((user) => {
+      sortedFilteredUsers.forEach((user) => {
         // Tìm đáp án trong tất cả các nhóm
         let foundAnswer = "";
         if (user.checklist_groups && Array.isArray(user.checklist_groups)) {
@@ -211,17 +216,17 @@ const UserTableCheckList = () => {
 
     worksheet.addRow([]);
 
-    const totalCols = filteredUsers.length + 2;
+    const totalCols = sortedFilteredUsers.length + 2;
 
-    // ===== GHI CHÚ VÀ CHỮ KÝ (cập nhật thêm các ô trống để đủ cột)
+    // ===== GHI CHÚ VÀ CHỮ KÝ (sử dụng sortedFilteredUsers)
     worksheet.addRow([
       "",
       "Nội dung không đạt (nếu có)",
-      ...Array(filteredUsers.length).fill(""),
+      ...Array(sortedFilteredUsers.length).fill(""),
     ]);
 
     const noteRow = ["", "Ghi chú"];
-    filteredUsers.forEach((user) => {
+    sortedFilteredUsers.forEach((user) => {
       noteRow.push(user.ghi_chu || "");
     });
     worksheet.addRow(noteRow);
@@ -229,7 +234,7 @@ const UserTableCheckList = () => {
     worksheet.addRow([
       "",
       "Nhân viên kiểm tra ký xác nhận hoàn thành",
-      ...Array(filteredUsers.length).fill(""),
+      ...Array(sortedFilteredUsers.length).fill(""),
     ]);
     worksheet.addRow([]);
 
