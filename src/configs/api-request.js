@@ -33,6 +33,10 @@ const URL = {
   },
   staff: {
     staff : ENDPOINT_PREFIX + "/staff"
+  },
+  dieuvan:{ 
+    rotkien : ENDPOINT_PREFIX + "/rotkien",
+    cuahang : ENDPOINT_PREFIX + "/cuahang"
   }
 };
 

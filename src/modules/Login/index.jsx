@@ -10,7 +10,7 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
- const handleLogin = async (e) => {
+const handleLogin = async (e) => {
   e.preventDefault();
   setError('');
 
@@ -18,7 +18,6 @@ const LoginPage = () => {
     const payload = { username, password };
     const res = await loginService.login(payload);
 
-    // 👇 KIỂM TRA NẾU ĐĂNG NHẬP THẤT BẠI
     if (!res || !res.user) {
       toast.error('Tên đăng nhập hoặc mật khẩu không đúng!', {
         position: 'top-right',
@@ -26,10 +25,17 @@ const LoginPage = () => {
       return;
     }
 
-    // 👇 THÀNH CÔNG MỚI VÀO ĐÂY
     toast.success('Đăng nhập thành công', { position: 'top-right' });
     localStorage.setItem('user', JSON.stringify(res.user));
-    setTimeout(() => navigate('/'), 1000);
+
+    // 👇 Điều hướng dựa vào role
+    setTimeout(() => {
+      if (res.user.role === 1) {
+        navigate('/dieuvan'); // chuyển tới trang admin nếu role === 1
+      } else {
+        navigate('/'); // còn lại thì về trang chính
+      }
+    }, 1000);
   } catch (err) {
     console.error('Lỗi đăng nhập:', err);
     setError(err?.message || 'Đăng nhập thất bại');
@@ -38,6 +44,7 @@ const LoginPage = () => {
     });
   }
 };
+
 
 
   return (

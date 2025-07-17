@@ -7,17 +7,20 @@ import MainLayout from "./page/home";
 import HomeCheckList from "./modules/AdminCheckList/HomeCheckList";
 import AdminChecklistForm from "./modules/AdminCheckList/HomeCheckList/Formchecklist";
 import ForkliftChecklistMobile from "./modules/CheckList";
+import ToolRotKien from "./modules/Homedieuvan/Toolrotkien";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
 
-        {/* Trang chủ chỉ vào được nếu đã login */}
+
+
+        {/* CHECKLIST */}
         <Route
           path="/checklistform/:formId"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <UserTable />
               </MainLayout>
@@ -27,7 +30,7 @@ function App() {
         <Route
           path="/"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <HomeCheckList />
               </MainLayout>
@@ -37,7 +40,7 @@ function App() {
         <Route
           path="/checklistform"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <AdminChecklistForm />
               </MainLayout>
@@ -47,24 +50,43 @@ function App() {
         <Route
           path="/checklistform/edit/:id"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <AdminChecklistForm />
               </MainLayout>
             </PrivateRoute>
           }
         />
-         <Route
+        
+        <Route
           path="/checklist/fill/:id"
-          element={
-                <ForkliftChecklistMobile  />
-          }
+          element={<ForkliftChecklistMobile />}
         />
 
         <Route path="/thank-you" element={<ThankYouScreen />} />
 
-        {/* Trang login */}
         <Route path="/login" element={<LoginPage />} />
+
+
+
+
+        {/* ĐIỀU VẬN */}
+
+         <Route
+          path="/dieuvan"
+          element={
+            <PrivateRoute allowRoles={[1]}>
+              <MainLayout>
+                <ToolRotKien/>
+          </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+
+
+
+        
       </Routes>
     </BrowserRouter>
   );
