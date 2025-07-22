@@ -23,7 +23,6 @@ const URL = {
     form: ENDPOINT_PREFIX + "/checklistform",
     delete : ENDPOINT_PREFIX + "/checklistform",
     update : ENDPOINT_PREFIX + "/checklistform"
-
   },
   users: {
     users: ENDPOINT_PREFIX + "/users",
@@ -33,6 +32,16 @@ const URL = {
   },
   staff: {
     staff : ENDPOINT_PREFIX + "/staff"
+  },
+  checklistbdh : { 
+     list: ENDPOINT_PREFIX + "/checklistbdh",
+    create:  ENDPOINT_PREFIX + "/checklistbdh",
+    delete:  ENDPOINT_PREFIX + "/checklistbdh",
+  },
+  checklistbdhform : { 
+     list: ENDPOINT_PREFIX + "/checklistbdhform",
+    create:  ENDPOINT_PREFIX + "/checklistbdhform",
+    delete:  ENDPOINT_PREFIX + "/checklistbdhform",
   }
 };
 

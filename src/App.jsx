@@ -7,6 +7,11 @@ import MainLayout from "./page/home";
 import HomeCheckList from "./modules/AdminCheckList/HomeCheckList";
 import AdminChecklistForm from "./modules/AdminCheckList/HomeCheckList/Formchecklist";
 import ForkliftChecklistMobile from "./modules/CheckList";
+import Home from "./modules/Home";
+import HomeCheckListBDH from "./modules/BDH/AdminCheckListBDH/HomeCheckListBDH";
+import AdminChecklistFormBDH from "./modules/BDH/AdminCheckListBDH/HomeCheckListBDH/FormCheckListBDH";
+import ChecklistBDHMobile from "./modules/BDH/CheckListBDH";
+import UserTableCheckListBDH from "./modules/BDH/AdminCheckListBDH";
 
 function App() {
   return (
@@ -24,12 +29,52 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route
+         <Route
+          path="/checklistbdhform/:formId"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <UserTableCheckListBDH />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+         <Route
           path="/"
           element={
             <PrivateRoute>
               <MainLayout>
+                <Home />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/checklistBDH"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <HomeCheckListBDH />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/checklist"
+          element={
+            <PrivateRoute>
+              <MainLayout>
                 <HomeCheckList />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/checklistformBDH"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <AdminChecklistFormBDH />
               </MainLayout>
             </PrivateRoute>
           }
@@ -54,10 +99,26 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route
+          path="/checklistbdhform/edit/:id"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <AdminChecklistFormBDH/>
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
          <Route
           path="/checklist/fill/:id"
           element={
                 <ForkliftChecklistMobile  />
+          }
+        />
+          <Route
+          path="/checklistbdh/fill/:id"
+          element={
+                <ChecklistBDHMobile  />
           }
         />
 

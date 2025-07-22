@@ -141,7 +141,7 @@ const AdminChecklistForm = () => {
       }
 
       setTimeout(() => {
-        navigate("/");
+        navigate("/checklist");
       }, 1500);
     } catch (err) {
       toast.error("❌ Có lỗi xảy ra khi lưu form!", {
@@ -183,21 +183,6 @@ const AdminChecklistForm = () => {
             value={form.mo_ta}
             onChange={(e) => handleChange("mo_ta", e.target.value)}
           />
-        </div>
-
-        {/* ✅ Trường loại (dropdown) */}
-        <div className="mb-6">
-          <label className="block mb-1 text-sm font-medium text-gray-700">
-            Loại Checklist
-          </label>
-          <select
-            className="border border-gray-300 p-2 w-full rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
-            value={form.loai}
-            onChange={(e) => handleChange("loai", e.target.value)}
-          >
-            <option value="Ban Điều Hành">Ban Điều Hành</option>
-            <option value="Nhà Kho">Nhà Kho</option>
-          </select>
         </div>
 
         {/* Checklist Groups */}

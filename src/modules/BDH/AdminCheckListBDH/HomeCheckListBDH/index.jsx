@@ -1,10 +1,10 @@
+import { checkListFormServiceBDH } from "@/services/checklistbdhform.service";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { checkListFormService } from "@/services/checklistform.service";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const HomeCheckList = () => {
+const HomeCheckListBDH = () => {
   const [checklists, setChecklists] = useState([]);
   const navigate = useNavigate();
   const fetchedRef = useRef(false);
@@ -18,14 +18,14 @@ const HomeCheckList = () => {
 
   const fetchChecklists = async () => {
     try {
-      const res = await checkListFormService.getCheckListForm();
+      const res = await checkListFormServiceBDH.getCheckListBDHForm();
       const sorted = [...res].sort(
         (a, b) =>
           new Date(b.createdAt || b.ngay_tao) - new Date(a.createdAt || a.ngay_tao)
       );
       setChecklists(sorted);
     } catch (error) {
-      console.error("Lỗi khi gọi API checklist form:", error);
+      console.error("Lỗi khi gọi API checklist BDH form:", error);
     }
   };
 
@@ -40,7 +40,7 @@ const HomeCheckList = () => {
   const handleDelete = async (id) => {
     if (confirm("Bạn có chắc muốn xoá checklist này không?")) {
       try {
-        await checkListFormService.deleteCheckListForm(id);
+        await checkListFormServiceBDH.deleteCheckListBDHForm(id)
         toast.success("🗑️ Xoá thành công!");
         fetchChecklists();
       } catch (err) {
@@ -51,7 +51,7 @@ const HomeCheckList = () => {
   };
 
   const handleEdit = (id) => {
-    navigate(`/checklistform/edit/${id}`);
+   navigate(`/checklistbdhform/edit/${id}`)
   };
 
   return (
@@ -60,9 +60,9 @@ const HomeCheckList = () => {
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-semibold text-gray-800">Danh sách Checklist</h1>
+        <h1 className="text-2xl font-semibold text-gray-800">Danh sách Checklist BDH</h1>
         <button
-          onClick={() => navigate("/checklistform")}
+          onClick={() => navigate("/checklistformBDH")}
           className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg shadow transition-transform hover:scale-105"
         >
           ➕ Tạo Checklist
@@ -72,14 +72,14 @@ const HomeCheckList = () => {
       {/* Danh sách checklist */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {checklists.map((form) => {
-          const fullLink = `${window.location.origin}/checklist/fill/${form._id}`;
+          const fullLink = `${window.location.origin}/checklistbdh/fill/${form._id}`;
           return (
             <div
               key={form._id}
               className="flex flex-col justify-between h-full p-5 rounded-xl border border-gray-200 bg-white shadow hover:shadow-lg transition-all duration-200"
             >
               <div
-                onClick={() => navigate(`/checklistform/${form._id}`)}
+                onClick={() => navigate(`/checklistbdhform/${form._id}`)}
                 className="cursor-pointer"
               >
                 <h3
@@ -123,4 +123,4 @@ const HomeCheckList = () => {
   );
 };
 
-export default HomeCheckList;
+export default HomeCheckListBDH;
