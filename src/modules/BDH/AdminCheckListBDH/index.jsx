@@ -2,14 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { checkListBDHService } from "@/services/checklistbdh.service";
 import CustomPagination from "@/components/ui/customPagination";
-// import { saveAs } from "file-saver";
+import { saveAs } from "file-saver";
 import dayjs from "@/utils/dayjs";
 import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import UserRowCheckListBDH from "./userRowBDH";
 import { checkListFormServiceBDH } from "@/services/checklistbdhform.service";
-// import ExcelJS from "exceljs";
+import ExcelJS from "exceljs";
 
 const UserTableCheckListBDH = () => {
   const { formId } = useParams();
@@ -22,6 +22,7 @@ const UserTableCheckListBDH = () => {
   ]);
   const [showCalendar, setShowCalendar] = useState(false);
   const [searchMaNV, setSearchMaNV] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 8;
@@ -65,14 +66,14 @@ const UserTableCheckListBDH = () => {
     }
   }, [formId]);
 
-
   const allCheckTitles = Array.from(
     new Set(
-      checkListBDH.flatMap((user) =>
-        user.checklist_groups?.flatMap((group) =>
-          group.items?.map((item) => item.noidung) || []
-        ) || []
-      )
+      checkListBDH.flatMap((user) => [
+        ...(user.cac_muc?.flatMap((muc) =>
+          muc.cong_viec?.map((cv) => cv.noidung) || []
+        ) || []),
+        ...(user.cong_viec_khac?.map((cv) => cv.noidung) || [])
+      ])
     )
   );
 
@@ -120,6 +121,303 @@ const UserTableCheckListBDH = () => {
     setCurrentPage(0);
   };
 
+
+
+
+
+// HOẶC CÁCH ĐƠN GIẢN HỞN: Bỏ qua xử lý đặc biệt cho tổ trưởng
+// Hàm xuất Excel với layout transpose (thông tin cá nhân dọc, checklist ngang)
+const exportToExcel = async () => {
+  try {
+    setIsExporting(true);
+    
+    // Dữ liệu để xuất
+    let dataToExport = filteredUsers;
+    
+    if (!dataToExport || dataToExport.length === 0) {
+      alert('Không có dữ liệu để xuất Excel!');
+      return;
+    }
+    
+    console.log('Exporting data (transposed):', dataToExport.length, 'users');
+    console.log('Checklist titles:', allCheckTitles);
+    
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Checklist BDH');
+    
+    // Tiêu đề form
+    const formTitle = title[0]?.tieu_de || 'Checklist BDH';
+    const totalColumns = 1 + dataToExport.length; // 1 cột field names + số user columns
+    
+    // Row 1: Tiêu đề form (merge toàn bộ)
+    worksheet.addRow([formTitle]);
+    worksheet.mergeCells(1, 1, 1, totalColumns);
+    const titleCell = worksheet.getCell(1, 1);
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleCell.font = { bold: true, size: 16, color: { argb: 'FF000080' } };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF0F8FF' }
+    };
+    
+    // Row 2: Trống
+    worksheet.addRow([]);
+    
+    // Row 3: Header với tên users
+    const headerRow = ['Thông tin'];
+    dataToExport.forEach((user, index) => {
+      headerRow.push(`User ${index + 1}`);
+    });
+    
+    const headerRowExcel = worksheet.addRow(headerRow);
+    headerRowExcel.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRowExcel.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Style cho header
+    headerRow.forEach((_, index) => {
+      const cell = headerRowExcel.getCell(index + 1);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+    
+    // Tạo map checklist data cho mỗi user
+    const userData = dataToExport.map(user => {
+      const checkedItems = new Set();
+      
+      // Thu thập từ cac_muc
+      if (user.cac_muc && Array.isArray(user.cac_muc)) {
+        user.cac_muc.forEach(muc => {
+          if (muc.cong_viec && Array.isArray(muc.cong_viec)) {
+            muc.cong_viec.forEach(cv => {
+              if (cv.noidung && cv.da_chon) {
+                checkedItems.add(cv.noidung);
+              }
+            });
+          }
+        });
+      }
+      
+      // Thu thập từ cong_viec_khac
+      if (user.cong_viec_khac && Array.isArray(user.cong_viec_khac)) {
+        user.cong_viec_khac.forEach(cv => {
+          if (cv.noidung && cv.da_chon) {
+            checkedItems.add(cv.noidung);
+          }
+        });
+      }
+      
+      return {
+        ...user,
+        checkedItems
+      };
+    });
+    
+    // Thêm các row thông tin cá nhân
+    const personalInfoRows = [
+      {
+        label: 'STT',
+        getValue: (user, index) => index + 1
+      },
+      {
+        label: 'Mã NV',
+        getValue: (user) => user.ma_nhan_vien || ''
+      },
+      {
+        label: 'Họ tên',
+        getValue: (user) => user.ho_ten || ''
+      },
+      {
+        label: 'Bộ phận',
+        getValue: (user) => user.don_vi || ''
+      },
+      {
+        label: 'Ngày điền',
+        getValue: (user) => user.ngay_tao ? dayjs(user.ngay_tao).format('DD/MM/YYYY HH:mm') : ''
+      }
+    ];
+    
+    // Thêm rows thông tin cá nhân
+    personalInfoRows.forEach(rowInfo => {
+      const rowData = [rowInfo.label];
+      userData.forEach((user, index) => {
+        rowData.push(rowInfo.getValue(user, index));
+      });
+      
+      const dataRow = worksheet.addRow(rowData);
+      
+      // Style cho personal info rows
+      rowData.forEach((_, cellIndex) => {
+        const cell = dataRow.getCell(cellIndex + 1);
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+          bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+          left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+          right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+        };
+        
+        if (cellIndex === 0) {
+          // Label column - bold và background
+          cell.font = { bold: true };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE7E6E6' }
+          };
+          cell.alignment = { horizontal: 'left', vertical: 'middle' };
+        } else {
+          // Data columns
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+      });
+    });
+    
+    // Row trắng phân cách
+    worksheet.addRow([]);
+    
+    // Thêm header cho checklist section
+    const checklistHeaderRow = ['DANH SÁCH KIỂM TRA'];
+    userData.forEach(() => {
+      checklistHeaderRow.push('');
+    });
+    
+    const checklistHeader = worksheet.addRow(checklistHeaderRow);
+    worksheet.mergeCells(checklistHeader.number, 1, checklistHeader.number, totalColumns);
+    const checklistHeaderCell = worksheet.getCell(checklistHeader.number, 1);
+    checklistHeaderCell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    checklistHeaderCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF70AD47' }
+    };
+    checklistHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Thêm rows cho từng checklist item
+    allCheckTitles.forEach(checkTitle => {
+      const rowData = [checkTitle];
+      userData.forEach(user => {
+        const isChecked = user.checkedItems.has(checkTitle);
+        rowData.push(isChecked ? '✓' : '');
+      });
+      
+      const dataRow = worksheet.addRow(rowData);
+      
+      // Style cho checklist rows
+      rowData.forEach((cellValue, cellIndex) => {
+        const cell = dataRow.getCell(cellIndex + 1);
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+          bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+          left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+          right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+        };
+        
+        if (cellIndex === 0) {
+          // Checklist item name - wrap text
+          cell.alignment = { 
+            horizontal: 'left', 
+            vertical: 'middle',
+            wrapText: true 
+          };
+          cell.font = { bold: false };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF2F2F2' }
+          };
+        } else {
+          // Check status - center align
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (cellValue === '✓') {
+            cell.font = { color: { argb: 'FF008000' }, bold: true, size: 14 };
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFE8F5E8' }
+            };
+          }
+        }
+      });
+    });
+    
+    // Row trắng
+    worksheet.addRow([]);
+    
+    // Thêm row ghi chú
+    const noteRowData = ['Ghi chú'];
+    userData.forEach(user => {
+      noteRowData.push(user.ghi_chu || '');
+    });
+    
+    const noteRow = worksheet.addRow(noteRowData);
+    noteRowData.forEach((_, cellIndex) => {
+      const cell = noteRow.getCell(cellIndex + 1);
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+      
+      if (cellIndex === 0) {
+        cell.font = { bold: true };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE7E6E6' }
+        };
+        cell.alignment = { horizontal: 'left', vertical: 'middle' };
+      } else {
+        cell.alignment = { horizontal: 'left', vertical: 'middle' };
+      }
+    });
+    
+    // Auto-fit column widths
+    worksheet.columns.forEach((column, index) => {
+      if (index === 0) {
+        // Label column - wider để chứa checklist titles
+        column.width = 40;
+      } else {
+        // User data columns
+        column.width = 15;
+      }
+    });
+    
+    // Set row heights cho checklist items để text đọc được
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 8) { // Từ checklist section trở đi
+        row.height = 20;
+      }
+    });
+    
+    // Tạo file và download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    
+    const fileName = `${formTitle}_Transposed_${dayjs().format('DD-MM-YYYY_HH-mm')}.xlsx`;
+    saveAs(blob, fileName);
+    
+    console.log('Transposed Excel file created successfully!');
+    
+  } catch (error) {
+    console.error('Lỗi xuất Excel:', error);
+    alert(`Có lỗi xảy ra khi xuất file Excel: ${error.message}`);
+  } finally {
+    setIsExporting(false);
+  }
+};
+
   return (
     <div className="px-4 sm:px-8 py-8">
       {title.map((form, index) => (
@@ -128,7 +426,7 @@ const UserTableCheckListBDH = () => {
         </h2>
       ))}
 
-      {/* Bộ lọc */}
+      {/* Bộ lọc và nút xuất Excel */}
       <div className="mb-6 flex flex-wrap gap-4 items-center">
         <input
           type="text"
@@ -171,6 +469,19 @@ const UserTableCheckListBDH = () => {
         >
           ❌ Xóa lọc
         </button>
+
+        {/* Nút xuất Excel */}
+        <button
+          onClick={exportToExcel}
+          disabled={isExporting || filteredUsers.length === 0}
+          className={`px-4 py-2 rounded font-medium ${
+            isExporting || filteredUsers.length === 0
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-green-600 text-white hover:bg-green-700'
+          }`}
+        >
+          {isExporting ? '📊 Đang xuất...' : '📊 Xuất Excel'}
+        </button>
       </div>
 
       {/* Bảng dữ liệu */}
@@ -190,7 +501,7 @@ const UserTableCheckListBDH = () => {
           <tbody>
             {currentUsers.length === 0 ? (
               <tr>
-                <td colSpan={9} className="text-center py-5 text-gray-500">
+                <td colSpan={7} className="text-center py-5 text-gray-500">
                   Không tìm thấy người dùng nào.
                 </td>
               </tr>
