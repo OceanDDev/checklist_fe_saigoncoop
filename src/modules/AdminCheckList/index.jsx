@@ -11,6 +11,35 @@ import "react-date-range/dist/theme/default.css";
 import UserRowCheckList from "./userRow";
 import ExcelJS from "exceljs";
 
+// Loading Components
+const LoadingSpinner = () => {
+  return (
+    <tr>
+      <td colSpan={9} className="py-12">
+        <div className="flex flex-col items-center justify-center space-y-4">
+          {/* Main spinner */}
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-r-blue-400 rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '0.8s'}}></div>
+          </div>
+          
+          {/* Loading text with pulse effect */}
+          <div className="text-gray-600 font-medium animate-pulse">
+            Đang tải dữ liệu...
+          </div>
+          
+          {/* Dots animation */}
+          <div className="flex space-x-1">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0s'}}></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+};
+
 const UserTableCheckList = () => {
   const { formId } = useParams();
   const [checkList, setCheckList] = useState([]);
@@ -22,6 +51,8 @@ const UserTableCheckList = () => {
   ]);
   const [showCalendar, setShowCalendar] = useState(false);
   const [searchMaNV, setSearchMaNV] = useState("");
+  const [isLoading, setIsLoading] = useState(true); // Thêm state loading
+  const [isTitleLoading, setIsTitleLoading] = useState(true); // Loading cho title
 
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 8;
@@ -35,6 +66,7 @@ const UserTableCheckList = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setIsLoading(true); // Bắt đầu loading
         const res = await checkListService.getCheckListsByFormId(formId);
         const sorted = Array.isArray(res)
           ? res.sort((a, b) => new Date(b.ngay_tao) - new Date(a.ngay_tao))
@@ -42,6 +74,8 @@ const UserTableCheckList = () => {
         setCheckList(sorted);
       } catch (error) {
         console.error("Lỗi lấy checklist:", error);
+      } finally {
+        setIsLoading(false); // Kết thúc loading
       }
     };
 
@@ -51,11 +85,14 @@ const UserTableCheckList = () => {
   useEffect(() => {
     const fetchTitle = async () => {
       try {
+        setIsTitleLoading(true);
         if (!formId) return;
         const res = await checkListFormService.getByIdCheckListForm(formId);
         setTitle([res]);
       } catch (error) {
         console.error(error);
+      } finally {
+        setIsTitleLoading(false);
       }
     };
 
@@ -325,20 +362,28 @@ const UserTableCheckList = () => {
 
   return (
     <div className="px-4 sm:px-8 py-8">
-      {title.map((form, index) => (
-        <h2
-          key={index}
-          className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2"
-        >
-          {form.tieu_de || "Không có tiêu đề"}
-        </h2>
-      ))}
+      {/* Title with loading */}
+      {isTitleLoading ? (
+        <div className="mb-6">
+          <div className="h-8 bg-gray-200 rounded animate-pulse w-96"></div>
+        </div>
+      ) : (
+        title.map((form, index) => (
+          <h2
+            key={index}
+            className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2"
+          >
+            {form.tieu_de || "Không có tiêu đề"}
+          </h2>
+        ))
+      )}
 
       {/* Filter Controls */}
       <div className="mb-6 flex flex-wrap gap-4 items-center">
         <button
           onClick={exportToExcel}
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+          disabled={isLoading}
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
           ⬇️ Xuất Excel
         </button>
@@ -415,27 +460,24 @@ const UserTableCheckList = () => {
               <th className="px-4 py-3 font-semibold">Tổng quan</th>
               <th className="px-4 py-3 font-semibold">Chi tiết</th>
               <th className="px-4 py-3 font-semibold">Chức năng</th>
-
-              {/* Các tiêu đề nội dung kiểm tra */}
-              {/* {allCheckTitles.map((title, idx) => (
-                <th
-                  key={idx}
-                  className="px-4 py-3 font-semibold whitespace-nowrap"
-                >
-                  {title}
-                </th>
-              ))} */}
             </tr>
           </thead>
 
           <tbody>
-            {currentUsers.length === 0 ? (
+            {isLoading ? (
+              <LoadingSpinner />
+            ) : currentUsers.length === 0 ? (
               <tr>
-                <td
-                  colSpan={6 + allCheckTitles.length}
-                  className="text-center py-5 text-gray-500"
-                >
-                  Không tìm thấy người dùng nào.
+                <td colSpan={9} className="text-center py-8">
+                  <div className="flex flex-col items-center justify-center space-y-3">
+                    <div className="text-6xl text-gray-300">📋</div>
+                    <div className="text-gray-500 font-medium">
+                      Không có dữ liệu
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      Thử thay đổi bộ lọc để tìm kiếm dữ liệu khác
+                    </div>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -447,14 +489,21 @@ const UserTableCheckList = () => {
                   allCheckTitles={allCheckTitles}
                   fetchChecklists={() => {
                     const fetchData = async () => {
-                      const res = await checkListService.getCheckListsByFormId(
-                        formId
-                      );
-                      setCheckList(
-                        res.sort(
-                          (a, b) => new Date(b.ngay_tao) - new Date(a.ngay_tao)
-                        )
-                      );
+                      setIsLoading(true);
+                      try {
+                        const res = await checkListService.getCheckListsByFormId(
+                          formId
+                        );
+                        setCheckList(
+                          res.sort(
+                            (a, b) => new Date(b.ngay_tao) - new Date(a.ngay_tao)
+                          )
+                        );
+                      } catch (error) {
+                        console.error("Lỗi lấy checklist:", error);
+                      } finally {
+                        setIsLoading(false);
+                      }
                     };
                     fetchData();
                   }}
@@ -465,7 +514,7 @@ const UserTableCheckList = () => {
         </table>
       </div>
 
-      {!isFiltering && totalPages > 1 && (
+      {!isFiltering && totalPages > 1 && !isLoading && (
         <div className="mt-6 flex justify-center">
           <CustomPagination
             pageCount={totalPages}
