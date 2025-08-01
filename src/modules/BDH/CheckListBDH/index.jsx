@@ -20,7 +20,6 @@ const ChecklistBDHMobile = () => {
     department: "",
   });
   const [isConfirmed, setIsConfirmed] = useState(false);
-  const [existingChecklist, setExistingChecklist] = useState(null);
   
   // State cho số lần thực hiện của form Vệ sinh
   const [jobCounts, setJobCounts] = useState({});
@@ -39,16 +38,6 @@ const ChecklistBDHMobile = () => {
         const result = await checkListFormServiceBDH.getByIdCheckListBDHForm(formId);
         console.log("Dữ liệu form:", result);
         setForm(result);
-
-        // Nếu là form "TỔ TRƯỞNG", kiểm tra checklist đã tồn tại
-        if (result?.tieu_de === TO_TRUONG_FORM_TITLE) {
-          await checkExistingChecklist();
-        }
-        
-        // Nếu là form "VỆ SINH 14H HẰNG NGÀY", khởi tạo jobCounts
-        if (result?.tieu_de === VE_SINH_FORM_TITLE) {
-          await checkExistingChecklistVeSinh();
-        }
       } catch (err) {
         console.error("Lỗi khi tải form:", err);
         toast.error("Không thể tải form checklist.");
@@ -56,78 +45,6 @@ const ChecklistBDHMobile = () => {
     };
     if (formId) fetchForm();
   }, [formId]);
-
-  const checkExistingChecklist = async () => {
-    try {
-      // Tìm checklist đã tồn tại cho form này
-      const existing = await checkListBDHService.getChecklistByFormId(formId);
-      if (existing) {
-        setExistingChecklist(existing);
-        
-        // Load dữ liệu đã check trước đó
-        const preSelectedJobs = [];
-        existing.cac_muc?.forEach(section => {
-          section.cong_viec?.forEach(job => {
-            if (job.da_chon) {
-              preSelectedJobs.push({ noidung: job.noidung });
-            }
-          });
-        });
-        setSelectedJobs(preSelectedJobs);
-        
-        // Load công việc khác đã thêm
-        if (existing.cong_viec_khac) {
-          setCustomJobs(existing.cong_viec_khac.filter(job => job.da_chon));
-        }
-      }
-    } catch (err) {
-      console.error("Lỗi khi kiểm tra checklist tồn tại:", err);
-    }
-  };
-
-  const checkExistingChecklistVeSinh = async () => {
-    try {
-      const existing = await checkListBDHService.getCheckListsByFormBDHId(formId);
-      if (existing) {
-        setExistingChecklist(existing);
-        
-        // Load dữ liệu đã check và số lần từ cac_muc
-        const preSelectedJobs = [];
-        const counts = {};
-        
-        existing.cac_muc?.forEach(section => {
-          section.cong_viec?.forEach(job => {
-            if (job.da_chon) {
-              preSelectedJobs.push({ noidung: job.noidung });
-              // Nếu có so_lan thì load, không thì mặc định 1
-              counts[job.noidung] = job.so_lan || 1;
-            }
-          });
-        });
-        
-        setSelectedJobs(preSelectedJobs);
-        setJobCounts(counts);
-        
-        // Load công việc khác đã thêm
-        if (existing.cong_viec_khac) {
-          const loadedCustomJobs = [];
-          const customCounts = {};
-          
-          existing.cong_viec_khac.forEach(job => {
-            if (job.da_chon) {
-              loadedCustomJobs.push({ noidung: job.noidung });
-              customCounts[job.noidung] = job.so_lan || 1;
-            }
-          });
-          
-          setCustomJobs(loadedCustomJobs);
-          setCustomJobCounts(customCounts);
-        }
-      }
-    } catch (err) {
-      console.error("Lỗi khi kiểm tra checklist vệ sinh tồn tại:", err);
-    }
-  };
 
   // Kiểm tra quyền truy cập section theo mã nhân viên
   const canAccessSection = (sectionName) => {
@@ -271,35 +188,6 @@ const ChecklistBDHMobile = () => {
       }),
     }));
 
-    // Nếu có checklist tồn tại, merge data
-    let finalMucChecklist = transformedMucChecklist;
-    if (existingChecklist && form?.tieu_de === TO_TRUONG_FORM_TITLE) {
-      // Merge với data cũ, ưu tiên data mới
-      const existingSections = existingChecklist.cac_muc || [];
-      const mergedSections = [...existingSections];
-
-      transformedMucChecklist.forEach(newSection => {
-        const existingIndex = mergedSections.findIndex(
-          existing => existing.ten_muc === newSection.ten_muc
-        );
-        
-        if (existingIndex !== -1) {
-          // Update section đã tồn tại
-          mergedSections[existingIndex] = newSection;
-        } else {
-          // Thêm section mới
-          mergedSections.push(newSection);
-        }
-      });
-
-      finalMucChecklist = mergedSections;
-    }
-
-    // Xác định ai là người check cuối (ưu tiên Tổ trưởng)
-    const finalUserInfo = userInfo.employeeId === TO_TRUONG_ID 
-      ? userInfo 
-      : (existingChecklist ? existingChecklist : userInfo);
-
     // Xử lý công việc khác
     const transformedCustomJobs = customJobs.map((job) => {
       if (isVeSinhForm) {
@@ -319,28 +207,22 @@ const ChecklistBDHMobile = () => {
     });
 
     const payload = {
-      ma_nhan_vien: finalUserInfo.employeeId,
-      ho_ten: finalUserInfo.userName,
-      don_vi: finalUserInfo.department,
-      ghi_chu: existingChecklist?.ghi_chu || "",
-      cac_muc: finalMucChecklist,
+      ma_nhan_vien: userInfo.employeeId,
+      ho_ten: userInfo.userName,
+      don_vi: userInfo.department,
+      ghi_chu: "",
+      cac_muc: transformedMucChecklist,
       cong_viec_khac: transformedCustomJobs,
-      // Metadata để track ai đã check
-      nguoi_check_cuoi: userInfo.employeeId,
-      thoi_gian_check: new Date().toISOString(),
+      // Metadata để track thời gian tạo
+      thoi_gian_tao: new Date().toISOString(),
     };
 
     try {
-      if (existingChecklist && (form?.tieu_de === TO_TRUONG_FORM_TITLE || form?.tieu_de === VE_SINH_FORM_TITLE)) {
-        // Update checklist tồn tại
-        await checkListBDHService.updateCheckListBDH(existingChecklist._id, payload);
-        toast.success("✅ Cập nhật checklist thành công!");
-      } else {
-        // Tạo mới
-        await checkListBDHService.createCheckListBDH(formId, payload);
-        toast.success("✅ Gửi checklist thành công!");
-      }
+      // Luôn tạo mới checklist
+      await checkListBDHService.createCheckListBDH(formId, payload);
+      toast.success("✅ Gửi checklist thành công!");
       
+      // Reset form sau khi gửi thành công
       setSelectedJobs([]);
       setCustomJobs([]);
       setJobCounts({});
@@ -556,7 +438,7 @@ const ChecklistBDHMobile = () => {
         onClick={handleSubmit}
         className="bg-green-600 text-white w-full py-3 mt-6 rounded-lg font-semibold text-base hover:bg-green-700 shadow-md transition"
       >
-        ✅ {existingChecklist && (form?.tieu_de === TO_TRUONG_FORM_TITLE || form?.tieu_de === VE_SINH_FORM_TITLE) ? "Cập nhật" : "Gửi"} Checklist
+        ✅ Gửi Checklist
       </button>
     </div>
   );
