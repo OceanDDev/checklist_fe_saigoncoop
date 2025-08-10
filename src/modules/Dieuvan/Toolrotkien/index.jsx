@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import RotKienRow from "./RotKienRow";
 import { rotKienService } from "@/services/dieuvan/rotkien.service";
 import { cuaHangService } from "@/services/dieuvan/cuahang.service";
@@ -16,6 +16,22 @@ import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
 import KienHT from "./rotKienRow/kienHT";
 
+// Helper: YYYY-MM-DD (local timezone)
+const toDateInputValue = (d = new Date()) => {
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tz).toISOString().slice(0, 10);
+};
+
+// Small debounce hook
+const useDebouncedValue = (value, delay = 200) => {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return v;
+};
+
 const ToolRotKien = () => {
   const [viewMode, setViewMode] = useState("chua");
   const [data, setData] = useState([]);
@@ -23,6 +39,7 @@ const ToolRotKien = () => {
   const [open, setOpen] = useState(false);
 
   const [searchMaCH, setSearchMaCH] = useState("");
+  const debouncedSearch = useDebouncedValue(searchMaCH, 200);
   const [filterNgayRotKien, setFilterNgayRotKien] = useState("");
 
   const [formData, setFormData] = useState({
@@ -30,166 +47,180 @@ const ToolRotKien = () => {
     tenCH: "",
     soKienRot: "",
     soSoda: "",
-    ngayRotKien: "",
+    ngayRotKien: toDateInputValue(), // mặc định hôm nay
     ghiChu: "",
   });
 
-  // --- GỢI Ý MÃ CỬA HÀNG ---
-  const [suggests, setSuggests] = useState([]);
+  // --- Suggestion state ---
   const [showSuggest, setShowSuggest] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
 
-  const buildSuggests = (q) => {
-    const key = q.trim().toLowerCase();
-    if (key.length >= 3) {
-      const list = cuahangs
-        .filter((ch) => ch.maCH.toLowerCase().includes(key))
-        .slice(0, 12);
-      setSuggests(list);
-      setShowSuggest(true);
-      setActiveIndex(list.length ? 0 : -1);
-    } else {
-      setSuggests([]);
-      setShowSuggest(false);
-      setActiveIndex(-1);
-    }
-  };
+  // --- Validation state ---
+  const [errors, setErrors] = useState({}); // { maCH?: string, ngayRotKien?: string }
 
-  const selectSuggest = (ch) => {
+  // Map tra cứu nhanh cửa hàng theo mã
+  const cuahangByCode = useMemo(() => {
+    const map = new Map();
+    cuahangs.forEach((ch) => map.set((ch.maCH || "").trim(), ch));
+    return map;
+  }, [cuahangs]);
+
+  // Gợi ý theo mã (khi người dùng gõ ≥ 3 ký tự)
+  const suggestions = useMemo(() => {
+    const key = formData.maCH.trim().toLowerCase();
+    if (key.length < 3) return [];
+    return cuahangs
+      .filter((ch) => (ch.maCH || "").toLowerCase().includes(key))
+      .slice(0, 12);
+  }, [formData.maCH, cuahangs]);
+
+  // Lọc dữ liệu (memoized)
+  const filteredDataChuaHT = useMemo(() => {
+    const q = (debouncedSearch || "").toLowerCase();
+    return data
+      .filter((item) => !item.trangThai)
+      .filter(
+        (item) =>
+          (item.maCH || "").toLowerCase().includes(q) &&
+          (!filterNgayRotKien || item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
+      );
+  }, [data, debouncedSearch, filterNgayRotKien]);
+
+  const filteredDataDaHT = useMemo(() => {
+    const q = (debouncedSearch || "").toLowerCase();
+    return data
+      .filter((item) => item.trangThai)
+      .filter(
+        (item) =>
+          (item.maCH || "").toLowerCase().includes(q) &&
+          (!filterNgayRotKien || item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
+      );
+  }, [data, debouncedSearch, filterNgayRotKien]);
+
+  // Fetch (chặn double-fetch ở Strict Mode)
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+
+    (async () => {
+      try {
+        const [rotkien, ch] = await Promise.all([
+          rotKienService.getAllRotKien(),
+          cuaHangService.getAllCuaHang(),
+        ]);
+        setData(rotkien || []);
+        setCuahangs(ch || []);
+      } catch (err) {
+        console.error("Fetch error:", err);
+      }
+    })();
+  }, []);
+
+  // Handlers (ổn định bằng useCallback)
+  const handleChange = useCallback(
+    (e) => {
+      const { name, value } = e.target;
+      setErrors((prev) => ({ ...prev, [name]: undefined }));
+
+      if (name === "maCH") {
+        const trimmed = value.trim();
+        setShowSuggest(trimmed.length >= 3);
+        if (trimmed.length >= 3 && !suggestions.length) setActiveIndex(-1);
+        const matched = cuahangByCode.get(trimmed);
+        setFormData((prev) => ({
+          ...prev,
+          maCH: value,
+          tenCH: matched ? matched.tenCH : "",
+        }));
+        return;
+      }
+
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    },
+    [cuahangByCode, suggestions.length]
+  );
+
+  const selectSuggest = useCallback((ch) => {
     setFormData((prev) => ({ ...prev, maCH: ch.maCH, tenCH: ch.tenCH }));
     setShowSuggest(false);
     setActiveIndex(-1);
-  };
-  // --- /GỢI Ý ---
-
-  const filteredDataChuaHT = data
-    .filter((item) => !item.trangThai)
-    .filter(
-      (item) =>
-        item.maCH.toLowerCase().includes(searchMaCH.toLowerCase()) &&
-        (!filterNgayRotKien ||
-          item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
-    );
-
-  const filteredDataDaHT = data
-    .filter((item) => item.trangThai)
-    .filter(
-      (item) =>
-        item.maCH.toLowerCase().includes(searchMaCH.toLowerCase()) &&
-        (!filterNgayRotKien ||
-          item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
-    );
-
-  useEffect(() => {
-    fetchData();
-    fetchCuahangs();
+    setErrors((e) => ({ ...e, maCH: undefined }));
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const res = await rotKienService.getAllRotKien();
-      setData(res);
-    } catch (err) {
-      console.error("Lỗi khi fetch RotKien:", err);
-    }
-  };
+  const handleComplete = useCallback(
+    async (id) => {
+      try {
+        await rotKienService.updateRotKien(id, { trangThai: true });
+        const list = await rotKienService.getAllRotKien();
+        setData(list || []);
+      } catch (error) {
+        console.error("Cập nhật trạng thái thất bại:", error);
+      }
+    },
+    []
+  );
 
-  const fetchCuahangs = async () => {
-    try {
-      const res = await cuaHangService.getAllCuaHang();
-      setCuahangs(res);
-    } catch (err) {
-      console.error("Lỗi khi fetch cửa hàng:", err);
-    }
-  };
+  const handleUncomplete = useCallback(
+    async (id) => {
+      try {
+        await rotKienService.updateRotKien(id, { trangThai: false });
+        const list = await rotKienService.getAllRotKien();
+        setData(list || []);
+      } catch (error) {
+        console.error("Hoàn tác trạng thái thất bại:", error);
+      }
+    },
+    []
+  );
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
+  const handleSubmit = useCallback(async () => {
+    const errs = {};
+    const matched = cuahangByCode.get(formData.maCH.trim());
+    if (!matched) errs.maCH = "Mã cửa hàng không tồn tại";
+    if (!formData.ngayRotKien) errs.ngayRotKien = "Vui lòng chọn ngày";
 
-    if (name === "maCH") {
-      // Gợi ý theo 3 ký tự
-      buildSuggests(value);
-
-      const matched = cuahangs.find((ch) => ch.maCH === value.trim());
-      setFormData((prev) => ({
-        ...prev,
-        maCH: value,
-        tenCH: matched ? matched.tenCH : "",
-      }));
-      // Không warn khi đang gõ để tránh ồn; kiểm tra khi submit
-      return;
-    }
-
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm("Bạn có chắc muốn xóa mục này?")) return;
-    try {
-      await rotKienService.deleteRotKienById(id);
-      fetchData();
-    } catch (err) {
-      console.error("Lỗi khi xóa kiện rớt:", err);
-    }
-  };
-
-  const handleComplete = async (id) => {
-    try {
-      await rotKienService.updateRotKien(id, { trangThai: true });
-      fetchData();
-    } catch (error) {
-      console.error("Cập nhật trạng thái thất bại:", error);
-    }
-  };
-
-  const handleUncomplete = async (id) => {
-    try {
-      await rotKienService.updateRotKien(id, { trangThai: false });
-      fetchData();
-    } catch (error) {
-      console.error("Hoàn tác trạng thái thất bại:", error);
-    }
-  };
-
-  const handleSubmit = async () => {
-    const matched = cuahangs.find((ch) => ch.maCH === formData.maCH.trim());
-    if (!matched) {
-      toast.error("❌ Mã cửa hàng không tồn tại!");
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      toast.error("❌ Vui lòng kiểm tra lại thông tin bắt buộc!");
       return;
     }
 
     try {
       await rotKienService.createRotKien({ ...formData, trangThai: false });
+
       setOpen(false);
       setFormData({
         maCH: "",
         tenCH: "",
         soKienRot: "",
         soSoda: "",
-        ngayRotKien: "",
+        ngayRotKien: toDateInputValue(), // reset về hôm nay
         ghiChu: "",
       });
-      setSuggests([]);
       setShowSuggest(false);
       setActiveIndex(-1);
-      fetchData();
-      toast.success("✅ Thêm kiện rớt thành công!");
-    } catch (err) {
-      console.error("Lỗi tạo kiện rớt:", err);
-      toast.error("❌ Lỗi tạo kiện rớt");
-    }
-  };
+      setErrors({});
 
-  const handleClearFilter = () => {
+      const list = await rotKienService.getAllRotKien();
+      setData(list || []);
+      toast.success("✅ Thêm kiện thành công!");
+    } catch (err) {
+      console.error("Lỗi tạo kiện:", err);
+      toast.error("❌ Lỗi tạo kiện ");
+    }
+  }, [cuahangByCode, formData]);
+
+  const handleClearFilter = useCallback(() => {
     setSearchMaCH("");
     setFilterNgayRotKien("");
-  };
+  }, []);
 
   return (
     <div className="px-4 sm:px-8 py-8">
       {/* Tiêu đề */}
       <h2 className="text-2xl font-bold text-gray-800 border-b pb-2 mb-4">
-        TOOL RỚT KIỆN
+        TOOL BÁO KIỆN
       </h2>
 
       {/* Trạng thái */}
@@ -208,7 +239,7 @@ const ToolRotKien = () => {
         </select>
       </div>
 
-      {/* Bộ lọc và thêm */}
+      {/* Bộ lọc & thêm */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
         <Input
           type="text"
@@ -229,17 +260,33 @@ const ToolRotKien = () => {
           🧹 Xóa bộ lọc
         </Button>
 
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setShowSuggest(false); } }}>
+        <Dialog
+          open={open}
+          onOpenChange={(v) => {
+            setOpen(v);
+            if (v) {
+              setFormData((prev) => ({
+                ...prev,
+                ngayRotKien: prev.ngayRotKien || toDateInputValue(),
+              }));
+              setErrors({});
+            } else {
+              setShowSuggest(false);
+            }
+          }}
+        >
           <DialogTrigger asChild>
-            <Button variant="default">➕ Thêm kiện rớt</Button>
+            <Button variant="default">➕ Thêm kiện</Button>
           </DialogTrigger>
+
           <DialogContent className="sm:max-w-[600px] text-[15px] md:text-base">
             <DialogHeader>
               <DialogTitle className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-                Thêm thông tin kiện rớt
+                Thêm thông tin kiện
               </DialogTitle>
               <p className="mt-1 text-sm text-slate-600">
-                <span className="text-rose-600 font-semibold">*</span> Mã CH và Ngày rớt kiện là bắt buộc.
+                <span className="text-rose-600 font-semibold">*</span> Mã CH và
+                Ngày cập nhập là bắt buộc.
               </p>
             </DialogHeader>
 
@@ -256,33 +303,36 @@ const ToolRotKien = () => {
                     placeholder="VD: 2001 / CH00123 (gõ ≥ 3 ký tự để gợi ý)"
                     value={formData.maCH}
                     onChange={handleChange}
-                    onFocus={() => buildSuggests(formData.maCH)}
+                    onFocus={() => setShowSuggest(formData.maCH.trim().length >= 3)}
                     onBlur={() => setTimeout(() => setShowSuggest(false), 120)}
                     onKeyDown={(e) => {
-                      if (!showSuggest || !suggests.length) return;
+                      if (!showSuggest || !suggestions.length) return;
                       if (e.key === "ArrowDown") {
                         e.preventDefault();
-                        setActiveIndex((i) => Math.min(i + 1, suggests.length - 1));
+                        setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
                       } else if (e.key === "ArrowUp") {
                         e.preventDefault();
                         setActiveIndex((i) => Math.max(i - 1, 0));
                       } else if (e.key === "Enter") {
                         if (activeIndex >= 0) {
                           e.preventDefault();
-                          selectSuggest(suggests[activeIndex]);
+                          selectSuggest(suggestions[activeIndex]);
                         }
                       } else if (e.key === "Escape") {
                         setShowSuggest(false);
                       }
                     }}
-                    className="h-11 text-[15px] text-slate-900 placeholder:text-slate-400"
+                    className={[
+                      "h-11 text-[15px] text-slate-900 placeholder:text-slate-400",
+                      errors.maCH ? "border-rose-500 ring-2 ring-rose-500" : "",
+                    ].join(" ")}
                   />
 
                   {/* Dropdown gợi ý */}
                   {showSuggest && (
                     <div className="absolute left-0 right-0 mt-1 z-[60] rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
-                      {suggests.length ? (
-                        suggests.map((ch, idx) => (
+                      {suggestions.length ? (
+                        suggestions.map((ch, idx) => (
                           <button
                             key={ch.maCH}
                             type="button"
@@ -313,6 +363,7 @@ const ToolRotKien = () => {
                   )}
                 </div>
 
+                {errors.maCH && <p className="text-sm text-rose-600">{errors.maCH}</p>}
                 <p className="text-xs md:text-sm text-slate-600">
                   Nhập đúng mã, tên cửa hàng sẽ tự điền.
                 </p>
@@ -333,7 +384,7 @@ const ToolRotKien = () => {
               {/* Số & Ngày */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-800">Số kiện rớt</label>
+                  <label className="text-sm font-semibold text-slate-800">Số kiện</label>
                   <Input
                     name="soKienRot"
                     placeholder="0"
@@ -346,7 +397,7 @@ const ToolRotKien = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-800">Số soda</label>
+                  <label className="text-sm font-semibold text-slate-800">Số soda - hóa đơn</label>
                   <Input
                     name="soSoda"
                     placeholder="0"
@@ -359,15 +410,22 @@ const ToolRotKien = () => {
 
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-800">
-                    Ngày rớt kiện <span className="text-rose-600">*</span>
+                    Ngày cập nhập <span className="text-rose-600">*</span>
                   </label>
                   <Input
                     name="ngayRotKien"
                     type="date"
                     value={formData.ngayRotKien}
                     onChange={handleChange}
-                    className="h-11 text-[15px] text-slate-900"
+                    max={toDateInputValue()} // khoá tương lai (xoá nếu muốn cho phép)
+                    className={[
+                      "h-11 text-[15px] text-slate-900",
+                      errors.ngayRotKien ? "border-rose-500 ring-2 ring-rose-500" : "",
+                    ].join(" ")}
                   />
+                  {errors.ngayRotKien && (
+                    <p className="text-sm text-rose-600">{errors.ngayRotKien}</p>
+                  )}
                 </div>
               </div>
 
@@ -376,7 +434,7 @@ const ToolRotKien = () => {
                 <label className="text-sm font-semibold text-slate-800">Ghi chú</label>
                 <Textarea
                   name="ghiChu"
-                  placeholder="Ví dụ: rớt khi bốc dỡ, đã xử lý..."
+                  placeholder="Ví dụ: khi bốc dỡ, đã xử lý..."
                   value={formData.ghiChu}
                   onChange={handleChange}
                   className="min-h-[110px] text-[15px] text-slate-900 placeholder:text-slate-400"
@@ -407,13 +465,13 @@ const ToolRotKien = () => {
             <thead className="text-xs bg-gray-50 border-b text-center">
               <tr>
                 <th className="px-4 py-3 font-semibold">STT</th>
-                <th className="px-4 py-3 font-semibold">Mã CH</th>
-                <th className="px-4 py-3 font-semibold">Tên CH</th>
-                <th className="px-4 py-3 font-semibold">Số kiện rớt</th>
-                <th className="px-4 py-3 font-semibold">Số soda</th>
-                <th className="px-4 py-3 font-semibold">Ngày rớt kiện</th>
-                <th className="px-4 py-3 font-semibold">Ghi chú</th>
-                <th className="px-4 py-3 font-semibold">Chức năng</th>
+                <th className="px-4 py-3 font-semibold">MÃ CH</th>
+                <th className="px-4 py-3 font-semibold">TÊN CH</th>
+                <th className="px-4 py-3 font-semibold">SỐ KIỆN</th>
+                <th className="px-4 py-3 font-semibold">SỐ SODA - HÓA ĐƠN</th>
+                <th className="px-4 py-3 font-semibold">NGÀY CẬP NHẬP</th>
+                <th className="px-4 py-3 font-semibold">GHI CHÚ</th>
+                <th className="px-4 py-3 font-semibold">CHỨC NĂNG</th>
               </tr>
             </thead>
             <tbody>
@@ -429,7 +487,6 @@ const ToolRotKien = () => {
                     key={item._id}
                     data={item}
                     index={index}
-                    onDelete={handleDelete}
                     onComplete={handleComplete}
                   />
                 ))
@@ -438,11 +495,7 @@ const ToolRotKien = () => {
           </table>
         </div>
       ) : (
-        <KienHT
-          data={filteredDataDaHT}
-          onDelete={handleDelete}
-          onUncomplete={handleUncomplete}
-        />
+        <KienHT data={filteredDataDaHT} onUncomplete={handleUncomplete} />
       )}
     </div>
   );

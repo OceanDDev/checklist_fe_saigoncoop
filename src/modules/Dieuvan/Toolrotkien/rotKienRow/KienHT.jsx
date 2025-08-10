@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 
-const KienHT = ({ data, onDelete, onUncomplete }) => {
+const KienHT = ({ data, onUncomplete }) => {
   const fmtDate = (v) => (v ? new Date(v).toLocaleDateString("vi-VN") : "—");
   const fmtNum = (v) => v ?? "—"; // vẫn hiển thị 0
 
@@ -12,22 +12,22 @@ const KienHT = ({ data, onDelete, onUncomplete }) => {
             <th className="px-3 py-3 font-semibold whitespace-nowrap">STT</th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">Mã CH</th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              Tên CH
+              TÊN CH
             </th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              Số kiện rớt
+              SỐ KIỆN
             </th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              Số soda
+              SỐ SODA - HÓA ĐƠN
             </th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              Ngày rớt kiện
+              NGÀY CẬP NHẬP
             </th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              Ghi chú
+              GHI CHÚ
             </th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              Chức năng
+              CHỨC NĂNG
             </th>
           </tr>
         </thead>
@@ -102,18 +102,7 @@ const KienHT = ({ data, onDelete, onUncomplete }) => {
                       ↩ Đã hoàn thành
                     </button>
 
-                    <button
-                      onClick={() => onDelete(item._id)}
-                      className="
-                        inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium
-                        border border-rose-200 bg-rose-50 text-rose-700
-                        hover:bg-rose-100 shadow-sm transition
-                        focus:outline-none focus:ring-2 focus:ring-rose-500
-                      "
-                      title="Xóa dòng này"
-                    >
-                      🗑️ Xóa
-                    </button>
+                   
                   </div>
                 </td>
               </tr>
