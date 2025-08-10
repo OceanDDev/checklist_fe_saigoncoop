@@ -31,10 +31,13 @@ const getRotKienById = async (id) => {
 
 const createRotKien = async (payload) => {
   try {
+    const user = JSON.parse(localStorage.getItem("user"));
     const results = await requestService.post(
       URL.dieuvan.rotkien,
       payload,
-      undefined,
+      {
+        "x-user-name": user?.name || "Unknown"
+      },
       ApiServer
     );
     return results;
@@ -43,6 +46,7 @@ const createRotKien = async (payload) => {
     throw error;
   }
 };
+
 
 const updateRotKien = async (id, payload) => {
   try {

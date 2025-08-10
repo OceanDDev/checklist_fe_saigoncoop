@@ -1,7 +1,24 @@
 /* eslint-disable react/prop-types */
 
 const KienHT = ({ data, onUncomplete }) => {
-  const fmtDate = (v) => (v ? new Date(v).toLocaleDateString("vi-VN") : "—");
+  // dd/MM/yyyy HH:mm (24h), timezone VN, không CH/SA
+  const fmtDateTimeVN = (v) => {
+    if (!v) return "—";
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d
+      .toLocaleString("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+      .replace(",", "");
+  };
+
   const fmtNum = (v) => v ?? "—"; // vẫn hiển thị 0
 
   return (
@@ -11,34 +28,22 @@ const KienHT = ({ data, onUncomplete }) => {
           <tr className="text-[12px] uppercase tracking-wide text-slate-600 text-center">
             <th className="px-3 py-3 font-semibold whitespace-nowrap">STT</th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">Mã CH</th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              TÊN CH
-            </th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              SỐ KIỆN
-            </th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              SỐ SODA - HÓA ĐƠN
-            </th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              NGÀY CẬP NHẬP
-            </th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              GHI CHÚ
-            </th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">
-              CHỨC NĂNG
-            </th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">TÊN CH</th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">SỐ KIỆN</th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">SỐ SODA - HÓA ĐƠN</th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">NGÀY GIỜ CẬP NHẬP</th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">GHI CHÚ</th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">CHỨC NĂNG</th>
+                        <th className="px-3 py-3 font-semibold whitespace-nowrap">BỘ PHẬN</th>
+
+            
           </tr>
         </thead>
 
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td
-                colSpan={8}
-                className="text-center py-8 text-slate-500 italic"
-              >
+              <td colSpan={8} className="text-center py-8 text-slate-500 italic">
                 Không có dữ liệu đã hoàn thành
               </td>
             </tr>
@@ -67,16 +72,19 @@ const KienHT = ({ data, onUncomplete }) => {
 
                 <td className="px-3 py-3 text-slate-800">{item.tenCH}</td>
 
-                <td className="px-3 py-3  text-center tabular-nums text-slate-800">
+                <td className="px-3 py-3 text-center tabular-nums text-slate-800">
                   {fmtNum(item.soKienRot)}
                 </td>
-                <td className="px-3 py-3 text-center  tabular-nums text-slate-800">
+                <td className="px-3 py-3 text-center tabular-nums text-slate-800">
                   {fmtNum(item.soSoda)}
                 </td>
 
                 <td className="px-3 py-3">
-                  <span className="inline-flex rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                    {fmtDate(item.ngayRotKien)}
+                  <span
+                    className="inline-flex rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                    title={fmtDateTimeVN(item.ngayRotKien)}
+                  >
+                    {fmtDateTimeVN(item.ngayRotKien)}
                   </span>
                 </td>
 
@@ -85,6 +93,14 @@ const KienHT = ({ data, onUncomplete }) => {
                   title={item.ghiChu || ""}
                 >
                   {item.ghiChu || "—"}
+                </td>
+                <td className="px-3 py-3">
+                  <span
+                    className="inline-flex items-center font-mono text-[12px] rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-slate-700"
+                    title={item.boPhan}
+                  >
+                    {item.boPhan}
+                  </span>
                 </td>
 
                 <td className="px-3 py-3">
@@ -101,8 +117,6 @@ const KienHT = ({ data, onUncomplete }) => {
                     >
                       ↩ Đã hoàn thành
                     </button>
-
-                   
                   </div>
                 </td>
               </tr>
