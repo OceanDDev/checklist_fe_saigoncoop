@@ -7,14 +7,12 @@ const RotKienRow = ({
   onComplete,
   isCompletedView = false,
 }) => {
-  // dd/MM/yyyy HH:mm (24h), timezone VN
-  const fmtDateTimeVN = (v) => {
-    if (!v) return "—";
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return "—";
-    return d
+  // Format ngày giờ VN (UTC+7), 24h chuẩn
+  const formatDate = (isoStr) => {
+    const d = new Date(isoStr);
+    const vnTime = new Date(d.getTime() - 7 * 60 * 60 * 1000);
+    return vnTime
       .toLocaleString("vi-VN", {
-        timeZone: "Asia/Ho_Chi_Minh",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -25,7 +23,7 @@ const RotKienRow = ({
       .replace(",", "");
   };
 
-  const fmtNum = (v) => (v ?? "—"); // giữ được số 0
+  const fmtNum = (v) => v ?? "—"; // giữ được số 0
 
   // Chuẩn hoá và map bộ phận -> chip + màu
   const normalize = (s = "") =>
@@ -38,10 +36,16 @@ const RotKienRow = ({
   const getDeptChip = (raw) => {
     const n = normalize(raw || "");
     if (n === "dieu van") {
-      return { label: "ĐIỀU VẬN", cls: "bg-sky-50 text-sky-700 border-sky-200" };
+      return {
+        label: "ĐIỀU VẬN",
+        cls: "bg-sky-50 text-sky-700 border-sky-200",
+      };
     }
     if (n === "xu ly don hang") {
-      return { label: "XLĐH", cls: "bg-violet-50 text-violet-700 border-violet-200" };
+      return {
+        label: "XLĐH",
+        cls: "bg-violet-50 text-violet-700 border-violet-200",
+      };
     }
     return {
       label: raw || "—",
@@ -54,12 +58,12 @@ const RotKienRow = ({
   return (
     <tr
       className="
-        group align-middle
-        odd:bg-white even:bg-slate-50
-        hover:bg-sky-50/60
-        border-b border-slate-200 transition-colors
-        text-sm md:text-[15px]
-      "
+          group align-middle
+          odd:bg-white even:bg-slate-50
+          hover:bg-sky-50/60
+          border-b border-slate-200 transition-colors
+          text-sm md:text-[15px]
+        "
     >
       {/* STT */}
       <td className="px-3 py-3 text-center text-slate-600">{index + 1}</td>
@@ -68,10 +72,10 @@ const RotKienRow = ({
       <td className="px-3 py-3 text-center whitespace-nowrap">
         <span
           className="
-            inline-flex items-center font-mono text-[12px] md:text-xs
-            rounded-md border bg-slate-100
-            border-slate-200 px-2 py-0.5 text-slate-700
-          "
+              inline-flex items-center font-mono text-[12px] md:text-xs
+              rounded-md border bg-slate-100
+              border-slate-200 px-2 py-0.5 text-slate-700
+            "
           title={data.maCH}
         >
           {data.maCH}
@@ -91,11 +95,8 @@ const RotKienRow = ({
 
       {/* Ngày giờ */}
       <td className="px-3 py-3 text-center whitespace-nowrap">
-        <span
-          className="inline-flex rounded-md border bg-white/70 backdrop-blur px-2 py-1 text-xs text-slate-700 border-slate-200"
-          title={fmtDateTimeVN(data.ngayRotKien)}
-        >
-          {fmtDateTimeVN(data.ngayRotKien)}
+        <span className="inline-flex rounded-md border bg-white/70 backdrop-blur px-2 py-1 text-xs text-slate-700 border-slate-200">
+          {formatDate(data.ngayRotKien)}
         </span>
       </td>
 
@@ -147,11 +148,11 @@ const RotKienRow = ({
             <button
               onClick={() => onDelete(data._id)}
               className="
-                inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium
-                border border-rose-200 bg-rose-50 text-rose-700
-                hover:bg-rose-100 shadow-sm transition
-                focus:outline-none focus:ring-2 focus:ring-rose-500
-              "
+                  inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium
+                  border border-rose-200 bg-rose-50 text-rose-700
+                  hover:bg-rose-100 shadow-sm transition
+                  focus:outline-none focus:ring-2 focus:ring-rose-500
+                "
               title="Xóa dòng này"
             >
               🗑️ Xóa

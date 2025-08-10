@@ -2,13 +2,12 @@
 
 const KienHT = ({ data, onUncomplete }) => {
   // dd/MM/yyyy HH:mm (24h), timezone VN, không CH/SA
-  const fmtDateTimeVN = (v) => {
-    if (!v) return "—";
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return "—";
-    return d
+ // Hàm format giờ theo Asia/Ho_Chi_Minh
+  const formatDate = (isoStr) => {
+    const d = new Date(isoStr);
+    const vnTime = new Date(d.getTime() - 7 * 60 * 60 * 1000);
+    return vnTime
       .toLocaleString("vi-VN", {
-        timeZone: "Asia/Ho_Chi_Minh",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -82,9 +81,8 @@ const KienHT = ({ data, onUncomplete }) => {
                 <td className="px-3 py-3">
                   <span
                     className="inline-flex rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                    title={fmtDateTimeVN(item.ngayRotKien)}
                   >
-                    {fmtDateTimeVN(item.ngayRotKien)}
+                    {formatDate(item.ngayRotKien)}
                   </span>
                 </td>
 
