@@ -14,6 +14,7 @@ import ChecklistBDHMobile from "./modules/BDH/CheckListBDH";
 import UserTableCheckListBDH from "./modules/BDH/AdminCheckListBDH";
 import HomeKPI from "./modules/KPI/HomeKPI";
 import HomeStaffKPI from "./modules/KPI/KPINV";
+import ToolRotKien from "./modules/Dieuvan/Toolrotkien";
 
 function App() {
   return (
@@ -121,7 +122,7 @@ function App() {
           path="/dieuvan"
           element={
             <PrivateRoute allowRoles={[1]}>
-              <MainLayout>{/* <ToolRotKien/> */}</MainLayout>
+              <MainLayout> <ToolRotKien/> </MainLayout>
             </PrivateRoute>
           }
         />

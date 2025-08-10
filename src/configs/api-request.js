@@ -47,6 +47,11 @@ const URL = {
      list: ENDPOINT_PREFIX + "/kpistaff",
     create:  ENDPOINT_PREFIX + "/kpistaff",
     delete:  ENDPOINT_PREFIX + "/kpistaff",
+  },
+  
+  dieuvan:{ 
+    rotkien : ENDPOINT_PREFIX + "/rotkien",
+    cuahang : ENDPOINT_PREFIX + "/cuahang"
   }
 };
 
