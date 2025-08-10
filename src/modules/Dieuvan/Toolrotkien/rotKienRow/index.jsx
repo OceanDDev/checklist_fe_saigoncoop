@@ -37,10 +37,10 @@ const RotKienRow = ({
 
       <td className="px-3 py-3 text-slate-800">{data.tenCH}</td>
 
-      <td className="px-3 py-3 text-right tabular-nums text-slate-800">
+      <td className="px-3 py-3 tabular-nums text-slate-800">
         {fmtNum(data.soKienRot)}
       </td>
-      <td className="px-3 py-3 text-right tabular-nums text-slate-800">
+      <td className="px-3 py-3 tabular-nums text-slate-800">
         {fmtNum(data.soSoda)}
       </td>
 

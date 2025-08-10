@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
 import KienHT from "./rotKienRow/kienHT";
+import ExcelJS from "exceljs";
 
 // Helper: YYYY-MM-DD (local timezone)
 const toDateInputValue = (d = new Date()) => {
@@ -82,7 +83,8 @@ const ToolRotKien = () => {
       .filter(
         (item) =>
           (item.maCH || "").toLowerCase().includes(q) &&
-          (!filterNgayRotKien || item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
+          (!filterNgayRotKien ||
+            item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
       );
   }, [data, debouncedSearch, filterNgayRotKien]);
 
@@ -93,7 +95,8 @@ const ToolRotKien = () => {
       .filter(
         (item) =>
           (item.maCH || "").toLowerCase().includes(q) &&
-          (!filterNgayRotKien || item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
+          (!filterNgayRotKien ||
+            item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
       );
   }, [data, debouncedSearch, filterNgayRotKien]);
 
@@ -148,31 +151,25 @@ const ToolRotKien = () => {
     setErrors((e) => ({ ...e, maCH: undefined }));
   }, []);
 
-  const handleComplete = useCallback(
-    async (id) => {
-      try {
-        await rotKienService.updateRotKien(id, { trangThai: true });
-        const list = await rotKienService.getAllRotKien();
-        setData(list || []);
-      } catch (error) {
-        console.error("Cập nhật trạng thái thất bại:", error);
-      }
-    },
-    []
-  );
+  const handleComplete = useCallback(async (id) => {
+    try {
+      await rotKienService.updateRotKien(id, { trangThai: true });
+      const list = await rotKienService.getAllRotKien();
+      setData(list || []);
+    } catch (error) {
+      console.error("Cập nhật trạng thái thất bại:", error);
+    }
+  }, []);
 
-  const handleUncomplete = useCallback(
-    async (id) => {
-      try {
-        await rotKienService.updateRotKien(id, { trangThai: false });
-        const list = await rotKienService.getAllRotKien();
-        setData(list || []);
-      } catch (error) {
-        console.error("Hoàn tác trạng thái thất bại:", error);
-      }
-    },
-    []
-  );
+  const handleUncomplete = useCallback(async (id) => {
+    try {
+      await rotKienService.updateRotKien(id, { trangThai: false });
+      const list = await rotKienService.getAllRotKien();
+      setData(list || []);
+    } catch (error) {
+      console.error("Hoàn tác trạng thái thất bại:", error);
+    }
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     const errs = {};
@@ -216,6 +213,117 @@ const ToolRotKien = () => {
     setFilterNgayRotKien("");
   }, []);
 
+  // ===== Excel helpers =====
+  const stamp = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+      d.getDate()
+    )}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+  };
+
+  const mapRowsForExcel = (rows) =>
+    rows.map((item, i) => ({
+      STT: i + 1,
+      "Mã CH": item?.maCH || "",
+      "Tên CH": item?.tenCH || "",
+      "Số kiện": item?.soKienRot ?? "",
+      "Số soda - hóa đơn": item?.soSoda ?? "",
+      "Ngày cập nhập": item?.ngayRotKien
+        ? new Date(item.ngayRotKien).toLocaleDateString("vi-VN")
+        : "",
+      "Ghi chú": item?.ghiChu || "",
+      "Trạng thái": item?.trangThai ? "Đã hoàn thành" : "Chưa hoàn thành",
+    }));
+
+  const autoFitColumns = (ws) => {
+    ws.columns.forEach((col) => {
+      let max = col.header ? String(col.header).length : 10;
+      col.eachCell?.((cell) => {
+        const v = cell.value == null ? "" : String(cell.value);
+        max = Math.max(max, v.length);
+      });
+      col.width = Math.min(Math.max(max + 2, 10), 60); // min 10, max 60
+    });
+  };
+
+  const exportToExcel = async (rows, fileName) => {
+    if (!rows?.length) {
+      toast.info("Danh sách đang trống, không có gì để xuất.");
+      return;
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("BaoKien");
+
+    ws.columns = [
+      { header: "STT", key: "STT" },
+      { header: "Mã CH", key: "Mã CH" },
+      { header: "Tên CH", key: "Tên CH" },
+      { header: "Số kiện", key: "Số kiện" },
+      { header: "Số soda - hóa đơn", key: "Số soda - hóa đơn" },
+      { header: "Ngày cập nhập", key: "Ngày cập nhập" },
+      { header: "Ghi chú", key: "Ghi chú" },
+      { header: "Trạng thái", key: "Trạng thái" },
+    ];
+
+    const rowsMapped = mapRowsForExcel(rows);
+    rowsMapped.forEach((r) => ws.addRow(r));
+
+    // Header style
+    const header = ws.getRow(1);
+    header.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    header.alignment = { vertical: "middle", horizontal: "center" };
+    header.height = 22;
+    header.eachCell((cell) => {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1F2937" },
+      }; // slate-800
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFCBD5E1" } },
+        left: { style: "thin", color: { argb: "FFCBD5E1" } },
+        bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
+        right: { style: "thin", color: { argb: "FFCBD5E1" } },
+      };
+    });
+
+    // Body style
+    ws.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      row.eachCell((cell, colNumber) => {
+        cell.border = { top: { style: "hair" }, bottom: { style: "hair" } };
+
+        const headerText = ws.getColumn(colNumber).header;
+        if (headerText === "Số kiện" || headerText === "Số soda - hóa đơn") {
+          cell.alignment = { horizontal: "right" };
+        } else if (headerText === "Ngày cập nhập") {
+          cell.alignment = { horizontal: "center" };
+        }
+      });
+    });
+
+    autoFitColumns(ws);
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportVisible = async () => {
+    const visible = viewMode === "chua" ? filteredDataChuaHT : filteredDataDaHT;
+    const suffix = viewMode === "chua" ? "chuaHT" : "daHT";
+    await exportToExcel(visible, `bao-kien_${suffix}_${stamp()}.xlsx`);
+  };
+
   return (
     <div className="px-4 sm:px-8 py-8">
       {/* Tiêu đề */}
@@ -258,6 +366,14 @@ const ToolRotKien = () => {
 
         <Button variant="secondary" onClick={handleClearFilter}>
           🧹 Xóa bộ lọc
+        </Button>
+        <Button
+          onClick={handleExportVisible}
+                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+
+          title="Xuất đúng nội dung đang hiển thị (đã lọc)"
+        >
+          ⬇️ Xuất Excel
         </Button>
 
         <Dialog
@@ -303,13 +419,17 @@ const ToolRotKien = () => {
                     placeholder="VD: 2001 / CH00123 (gõ ≥ 3 ký tự để gợi ý)"
                     value={formData.maCH}
                     onChange={handleChange}
-                    onFocus={() => setShowSuggest(formData.maCH.trim().length >= 3)}
+                    onFocus={() =>
+                      setShowSuggest(formData.maCH.trim().length >= 3)
+                    }
                     onBlur={() => setTimeout(() => setShowSuggest(false), 120)}
                     onKeyDown={(e) => {
                       if (!showSuggest || !suggestions.length) return;
                       if (e.key === "ArrowDown") {
                         e.preventDefault();
-                        setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                        setActiveIndex((i) =>
+                          Math.min(i + 1, suggestions.length - 1)
+                        );
                       } else if (e.key === "ArrowUp") {
                         e.preventDefault();
                         setActiveIndex((i) => Math.max(i - 1, 0));
@@ -340,7 +460,9 @@ const ToolRotKien = () => {
                             onClick={() => selectSuggest(ch)}
                             className={[
                               "w-full flex items-center gap-2 px-3 py-2 text-left",
-                              idx === activeIndex ? "bg-sky-50" : "hover:bg-slate-50",
+                              idx === activeIndex
+                                ? "bg-sky-50"
+                                : "hover:bg-slate-50",
                             ].join(" ")}
                           >
                             <span className="inline-flex items-center font-mono text-xs rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-slate-700">
@@ -363,7 +485,9 @@ const ToolRotKien = () => {
                   )}
                 </div>
 
-                {errors.maCH && <p className="text-sm text-rose-600">{errors.maCH}</p>}
+                {errors.maCH && (
+                  <p className="text-sm text-rose-600">{errors.maCH}</p>
+                )}
                 <p className="text-xs md:text-sm text-slate-600">
                   Nhập đúng mã, tên cửa hàng sẽ tự điền.
                 </p>
@@ -371,7 +495,9 @@ const ToolRotKien = () => {
 
               {/* Tên CH (tự fill) */}
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-800">Tên cửa hàng</label>
+                <label className="text-sm font-semibold text-slate-800">
+                  Tên cửa hàng
+                </label>
                 <Input
                   name="tenCH"
                   placeholder="Tự động điền từ mã CH"
@@ -384,7 +510,9 @@ const ToolRotKien = () => {
               {/* Số & Ngày */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-800">Số kiện</label>
+                  <label className="text-sm font-semibold text-slate-800">
+                    Số kiện
+                  </label>
                   <Input
                     name="soKienRot"
                     placeholder="0"
@@ -397,7 +525,9 @@ const ToolRotKien = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-800">Số soda - hóa đơn</label>
+                  <label className="text-sm font-semibold text-slate-800">
+                    Số soda - hóa đơn
+                  </label>
                   <Input
                     name="soSoda"
                     placeholder="0"
@@ -420,18 +550,24 @@ const ToolRotKien = () => {
                     max={toDateInputValue()} // khoá tương lai (xoá nếu muốn cho phép)
                     className={[
                       "h-11 text-[15px] text-slate-900",
-                      errors.ngayRotKien ? "border-rose-500 ring-2 ring-rose-500" : "",
+                      errors.ngayRotKien
+                        ? "border-rose-500 ring-2 ring-rose-500"
+                        : "",
                     ].join(" ")}
                   />
                   {errors.ngayRotKien && (
-                    <p className="text-sm text-rose-600">{errors.ngayRotKien}</p>
+                    <p className="text-sm text-rose-600">
+                      {errors.ngayRotKien}
+                    </p>
                   )}
                 </div>
               </div>
 
               {/* Ghi chú */}
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-800">Ghi chú</label>
+                <label className="text-sm font-semibold text-slate-800">
+                  Ghi chú
+                </label>
                 <Textarea
                   name="ghiChu"
                   placeholder="Ví dụ: khi bốc dỡ, đã xử lý..."
@@ -450,7 +586,10 @@ const ToolRotKien = () => {
               >
                 Hủy
               </Button>
-              <Button onClick={handleSubmit} className="h-11 px-6 text-[15px] font-semibold">
+              <Button
+                onClick={handleSubmit}
+                className="h-11 px-6 text-[15px] font-semibold"
+              >
                 Lưu
               </Button>
             </DialogFooter>
