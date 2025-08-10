@@ -5,7 +5,7 @@ const MainLayout = ({ children }) => {
   return (
     <div> 
       <HeaderCheckList />
-      <main className="pt-[80px] px-4">{children}</main>
+      <main className="pt-[80px]">{children}</main>
     </div>
   );
 };

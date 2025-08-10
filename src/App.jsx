@@ -12,37 +12,38 @@ import HomeCheckListBDH from "./modules/BDH/AdminCheckListBDH/HomeCheckListBDH";
 import AdminChecklistFormBDH from "./modules/BDH/AdminCheckListBDH/HomeCheckListBDH/FormCheckListBDH";
 import ChecklistBDHMobile from "./modules/BDH/CheckListBDH";
 import UserTableCheckListBDH from "./modules/BDH/AdminCheckListBDH";
+import HomeKPI from "./modules/KPI/HomeKPI";
+import HomeStaffKPI from "./modules/KPI/KPINV";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-
         {/* Trang chủ chỉ vào được nếu đã login */}
         <Route
           path="/checklistform/:formId"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <UserTable />
               </MainLayout>
             </PrivateRoute>
           }
         />
-         <Route
+        <Route
           path="/checklistbdhform/:formId"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <UserTableCheckListBDH />
               </MainLayout>
             </PrivateRoute>
           }
         />
-         <Route
+        <Route
           path="/"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <Home />
               </MainLayout>
@@ -52,7 +53,7 @@ function App() {
         <Route
           path="/checklistBDH"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <HomeCheckListBDH />
               </MainLayout>
@@ -62,7 +63,7 @@ function App() {
         <Route
           path="/checklist"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <HomeCheckList />
               </MainLayout>
@@ -72,7 +73,7 @@ function App() {
         <Route
           path="/checklistformBDH"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <AdminChecklistFormBDH />
               </MainLayout>
@@ -82,7 +83,7 @@ function App() {
         <Route
           path="/checklistform"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <AdminChecklistForm />
               </MainLayout>
@@ -92,7 +93,7 @@ function App() {
         <Route
           path="/checklistform/edit/:id"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <AdminChecklistForm />
               </MainLayout>
@@ -102,23 +103,50 @@ function App() {
         <Route
           path="/checklistbdhform/edit/:id"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowRoles={[0]}>
               <MainLayout>
-                <AdminChecklistFormBDH/>
+                <AdminChecklistFormBDH />
               </MainLayout>
             </PrivateRoute>
           }
         />
-         <Route
+        <Route
           path="/checklist/fill/:id"
+          element={<ForkliftChecklistMobile />}
+        />
+        <Route path="/checklistbdh/fill/:id" element={<ChecklistBDHMobile />} />
+        {/* ĐIỀU VẬN */}
+
+        <Route
+          path="/dieuvan"
           element={
-                <ForkliftChecklistMobile  />
+            <PrivateRoute allowRoles={[1]}>
+              <MainLayout>{/* <ToolRotKien/> */}</MainLayout>
+            </PrivateRoute>
           }
         />
-          <Route
-          path="/checklistbdh/fill/:id"
+        <Route
+          path="/bgdkpi"
           element={
-                <ChecklistBDHMobile  />
+            <PrivateRoute allowRoles={[2]}>
+              <MainLayout><HomeKPI/></MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/bdhkpi"
+          element={
+            <PrivateRoute allowRoles={[3]}>
+              <MainLayout><HomeKPI/></MainLayout>
+            </PrivateRoute>
+          }
+        />
+         <Route
+          path="/bdhkpi/homestaff"
+          element={
+            <PrivateRoute allowRoles={[2,3]}>
+              <MainLayout><HomeStaffKPI/></MainLayout>
+            </PrivateRoute>
           }
         />
 

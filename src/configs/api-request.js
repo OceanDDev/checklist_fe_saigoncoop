@@ -42,6 +42,11 @@ const URL = {
      list: ENDPOINT_PREFIX + "/checklistbdhform",
     create:  ENDPOINT_PREFIX + "/checklistbdhform",
     delete:  ENDPOINT_PREFIX + "/checklistbdhform",
+  },
+  kpistaff :{ 
+     list: ENDPOINT_PREFIX + "/kpistaff",
+    create:  ENDPOINT_PREFIX + "/kpistaff",
+    delete:  ENDPOINT_PREFIX + "/kpistaff",
   }
 };
 
