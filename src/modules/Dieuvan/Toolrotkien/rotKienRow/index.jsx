@@ -63,6 +63,7 @@ const RotKienRow = ({
           hover:bg-sky-50/60
           border-b border-slate-200 transition-colors
           text-sm md:text-[15px]
+          text-center
         "
     >
       {/* STT */}
@@ -86,10 +87,10 @@ const RotKienRow = ({
       <td className="px-3 py-3 text-left text-slate-800">{data.tenCH}</td>
 
       {/* Số kiện / Số soda */}
-      <td className="px-3 py-3 text-right tabular-nums text-slate-800">
+      <td className="px-3 py-3  tabular-nums text-slate-800">
         {fmtNum(data.soKienRot)}
       </td>
-      <td className="px-3 py-3 text-right tabular-nums text-slate-800">
+      <td className="px-3 py-3  tabular-nums text-slate-800">
         {fmtNum(data.soSoda)}
       </td>
 
@@ -102,7 +103,7 @@ const RotKienRow = ({
 
       {/* Ghi chú (truncate + tooltip) */}
       <td
-        className="px-3 py-3 max-w-[260px] md:max-w-[360px] truncate text-left text-slate-700"
+        className="px-3 py-3 max-w-[260px] md:max-w-[360px] truncate  text-slate-700"
         title={data.ghiChu || ""}
       >
         {data.ghiChu || "—"}

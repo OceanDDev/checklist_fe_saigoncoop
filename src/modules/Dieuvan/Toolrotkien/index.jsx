@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import RotKienRow from "./RotKienRow";
 import KienHT from "./rotKienRow/kienHT";
@@ -8,9 +9,10 @@ import { cuaHangService } from "@/services/dieuvan/cuahang.service";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
-
 import ExcelJS from "exceljs";
+
 import AddKienDialog from "./addKien";
+import CustomPagination from "@/components/ui/customPagination";
 
 // Helper: YYYY-MM-DD (local timezone)
 const toDateInputValue = (d = new Date()) => {
@@ -51,6 +53,12 @@ const ToolRotKien = () => {
   const [searchMaCH, setSearchMaCH] = useState("");
   const debouncedSearch = useDebouncedValue(searchMaCH, 200);
   const [filterNgayRotKien, setFilterNgayRotKien] = useState("");
+  const [filterBoPhan, setFilterBoPhan] = useState(""); // <— NEW
+
+  // PHÂN TRANG (cố định 10 dòng/trang)
+  const pageSize = 10;
+  const [pageChua, setPageChua] = useState(0);
+  const [pageDa, setPageDa] = useState(0);
 
   // Fetch (chặn double-fetch ở Strict Mode)
   const loadedRef = useRef(false);
@@ -77,25 +85,45 @@ const ToolRotKien = () => {
     const q = (debouncedSearch || "").toLowerCase();
     return data
       .filter((item) => !item.trangThai)
-      .filter(
-        (item) =>
-          (item.maCH || "").toLowerCase().includes(q) &&
-          (!filterNgayRotKien ||
-            item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
+      .filter((item) =>
+        (item.maCH || "").toLowerCase().includes(q) &&
+        (!filterNgayRotKien || item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
+        (!filterBoPhan || item.boPhan === filterBoPhan) // <— NEW
       );
-  }, [data, debouncedSearch, filterNgayRotKien]);
+  }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan]);
 
   const filteredDataDaHT = useMemo(() => {
     const q = (debouncedSearch || "").toLowerCase();
     return data
       .filter((item) => item.trangThai)
-      .filter(
-        (item) =>
-          (item.maCH || "").toLowerCase().includes(q) &&
-          (!filterNgayRotKien ||
-            item.ngayRotKien?.slice(0, 10) === filterNgayRotKien)
+      .filter((item) =>
+        (item.maCH || "").toLowerCase().includes(q) &&
+        (!filterNgayRotKien || item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
+        (!filterBoPhan || item.boPhan === filterBoPhan) // <— NEW
       );
-  }, [data, debouncedSearch, filterNgayRotKien]);
+  }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan]);
+
+  // Reset trang khi đổi filter / view
+  useEffect(() => {
+    setPageChua(0);
+    setPageDa(0);
+  }, [debouncedSearch, filterNgayRotKien, filterBoPhan, viewMode, data.length]);
+
+  // Tính toán phân trang
+  const pageCountChua = Math.max(0, Math.ceil(filteredDataChuaHT.length / pageSize));
+  const pageCountDa = Math.max(0, Math.ceil(filteredDataDaHT.length / pageSize));
+
+  const currentSliceChua = useMemo(() => {
+    const start = pageChua * pageSize;
+    const end = start + pageSize;
+    return filteredDataChuaHT.slice(start, end);
+  }, [filteredDataChuaHT, pageChua]);
+
+  const currentSliceDa = useMemo(() => {
+    const start = pageDa * pageSize;
+    const end = start + pageSize;
+    return filteredDataDaHT.slice(start, end);
+  }, [filteredDataDaHT, pageDa]);
 
   // Handlers trạng thái
   const handleComplete = useCallback(async (id) => {
@@ -134,6 +162,7 @@ const ToolRotKien = () => {
   const handleClearFilter = useCallback(() => {
     setSearchMaCH("");
     setFilterNgayRotKien("");
+    setFilterBoPhan(""); // <— NEW
   }, []);
 
   // ===== Excel helpers =====
@@ -152,7 +181,7 @@ const ToolRotKien = () => {
       "Tên CH": item?.tenCH || "",
       "Số kiện": item?.soKienRot ?? "",
       "Số soda - hóa đơn": item?.soSoda ?? "",
-      "Ngày cập nhập": item?.ngayRotKien
+      "Ngày cập nhật": item?.ngayRotKien
         ? new Date(item.ngayRotKien).toLocaleString("vi-VN", {
             year: "numeric",
             month: "2-digit",
@@ -164,6 +193,8 @@ const ToolRotKien = () => {
         : "",
       "Ghi chú": item?.ghiChu || "",
       "Trạng thái": item?.trangThai ? "Đã hoàn thành" : "Chưa hoàn thành",
+      // Nếu muốn export cả Bộ phận, có thể thêm:
+      // "Bộ phận": item?.boPhan || "",
     }));
 
   const autoFitColumns = (ws) => {
@@ -173,7 +204,7 @@ const ToolRotKien = () => {
         const v = cell.value == null ? "" : String(cell.value);
         max = Math.max(max, v.length);
       });
-      col.width = Math.min(Math.max(max + 2, 10), 60); // min 10, max 60
+      col.width = Math.min(Math.max(max + 2, 10), 60);
     });
   };
 
@@ -192,9 +223,11 @@ const ToolRotKien = () => {
       { header: "Tên CH", key: "Tên CH" },
       { header: "Số kiện", key: "Số kiện" },
       { header: "Số soda - hóa đơn", key: "Số soda - hóa đơn" },
-      { header: "Ngày cập nhập", key: "Ngày cập nhập" },
+      { header: "Ngày cập nhật", key: "Ngày cập nhật" },
       { header: "Ghi chú", key: "Ghi chú" },
       { header: "Trạng thái", key: "Trạng thái" },
+      // Nếu muốn export cả Bộ phận, mở khóa dòng dưới:
+      // { header: "Bộ phận", key: "Bộ phận" },
     ];
 
     const rowsMapped = mapRowsForExcel(rows);
@@ -205,11 +238,7 @@ const ToolRotKien = () => {
     header.alignment = { vertical: "middle", horizontal: "center" };
     header.height = 22;
     header.eachCell((cell) => {
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF1F2937" },
-      };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F2937" } };
       cell.border = {
         top: { style: "thin", color: { argb: "FFCBD5E1" } },
         left: { style: "thin", color: { argb: "FFCBD5E1" } },
@@ -225,7 +254,7 @@ const ToolRotKien = () => {
         const headerText = ws.getColumn(colNumber).header;
         if (headerText === "Số kiện" || headerText === "Số soda - hóa đơn") {
           cell.alignment = { horizontal: "right" };
-        } else if (headerText === "Ngày cập nhập") {
+        } else if (headerText === "Ngày cập nhật") {
           cell.alignment = { horizontal: "center" };
         }
       });
@@ -257,24 +286,43 @@ const ToolRotKien = () => {
         TOOL BÁO KIỆN
       </h2>
 
-      {/* Trạng thái */}
-      <div className="flex items-center gap-2 mb-4">
-        <label htmlFor="viewMode" className="text-sm font-medium text-gray-700">
-          Trạng thái:
-        </label>
-        <select
-          id="viewMode"
-          value={viewMode}
-          onChange={(e) => setViewMode(e.target.value)}
-          className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="chua">Chưa hoàn thành</option>
-          <option value="hoan">Đã hoàn thành</option>
-        </select>
+      {/* Trạng thái + Bộ phận */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <label htmlFor="viewMode" className="text-sm font-medium text-gray-700">
+            Trạng thái:
+          </label>
+          <select
+            id="viewMode"
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="chua">Chưa hoàn thành</option>
+            <option value="hoan">Đã hoàn thành</option>
+          </select>
+        </div>
+
+        
       </div>
 
       {/* Bộ lọc & thêm */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+      <div className="flex items-center gap-2">
+          <label htmlFor="filterBoPhan" className="text-sm font-medium text-gray-700">
+            Bộ phận:
+          </label>
+          <select
+            id="filterBoPhan"
+            value={filterBoPhan}
+            onChange={(e) => setFilterBoPhan(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Tất cả</option>
+            <option value="XLĐH">XLĐH</option>
+            <option value="Điều Vận">Điều Vận</option>
+          </select>
+        </div>
         <Input
           type="text"
           placeholder="🔍 Mã cửa hàng..."
@@ -307,52 +355,78 @@ const ToolRotKien = () => {
         <AddKienDialog cuahangs={cuahangs} onSubmit={handleCreate} />
       </div>
 
-      {/* Bảng dữ liệu */}
+      {/* Bảng dữ liệu + phân trang */}
       {viewMode === "chua" ? (
-        <div className="overflow-x-auto shadow border rounded">
-          <table className="w-full text-sm text-left bg-white">
-            <thead className="text-xs bg-gray-50 border-b text-center">
-              <tr>
-                <th className="px-4 py-3 font-semibold">STT</th>
-                <th className="px-4 py-3 font-semibold">MÃ CH</th>
-                <th className="px-4 py-3 font-semibold">TÊN CH</th>
-                <th className="px-4 py-3 font-semibold">SỐ KIỆN</th>
-                <th className="px-4 py-3 font-semibold">SỐ SODA - HÓA ĐƠN</th>
-                <th className="px-4 py-3 font-semibold">NGÀY GIỜ CẬP NHẬP</th>
-                <th className="px-4 py-3 font-semibold">GHI CHÚ</th>
-                 <th className="px-4 py-3 font-semibold">BỘ PHẬN</th>
-
-                <th className="px-4 py-3 font-semibold">CHỨC NĂNG</th>
-
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDataChuaHT.length === 0 ? (
+        <>
+          <div className="overflow-x-auto shadow border rounded">
+            <table className="w-full text-sm text-left bg-white">
+              <thead className="text-xs bg-gray-50 border-b text-center">
                 <tr>
-                  <td colSpan="8" className="text-center py-5 text-gray-500">
-                    Không có dữ liệu
-                  </td>
+                  <th className="px-4 py-3 font-semibold">STT</th>
+                  <th className="px-4 py-3 font-semibold">MÃ CH</th>
+                  <th className="px-4 py-3 font-semibold">TÊN CH</th>
+                  <th className="px-4 py-3 font-semibold">SỐ KIỆN</th>
+                  <th className="px-4 py-3 font-semibold">SỐ SODA - HÓA ĐƠN</th>
+                  <th className="px-4 py-3 font-semibold">NGÀY GIỜ CẬP NHẬT</th>
+                  <th className="px-4 py-3 font-semibold">GHI CHÚ</th>
+                  <th className="px-4 py-3 font-semibold">BỘ PHẬN</th>
+                  <th className="px-4 py-3 font-semibold">CHỨC NĂNG</th>
                 </tr>
-              ) : (
-                filteredDataChuaHT.map((item, index) => (
-                  <RotKienRow
-                    key={item._id}
-                    data={item}
-                    index={index}
-                    onComplete={handleComplete}
-                    formatDateTimeVN={formatDateTimeVN}
-                  />
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {currentSliceChua.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" className="text-center py-5 text-gray-500">
+                      Không có dữ liệu
+                    </td>
+                  </tr>
+                ) : (
+                  currentSliceChua.map((item, index) => (
+                    <RotKienRow
+                      key={item._id}
+                      data={item}
+                      index={pageChua * pageSize + index}
+                      onComplete={handleComplete}
+                      formatDateTimeVN={formatDateTimeVN}
+                    />
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer phân trang */}
+          <div className="mt-4 flex justify-center">
+            <CustomPagination
+              pageCount={pageCountChua}
+              forcePage={pageChua}
+              onPageChange={({ selected }) => setPageChua(selected)}
+              marginPagesDisplayed={2}
+              pageRangeDisplayed={3}
+              additionalClassname="gap-2 justify-center"
+            />
+          </div>
+        </>
       ) : (
-        <KienHT
-          data={filteredDataDaHT}
-          onUncomplete={handleUncomplete}
-          formatDateTimeVN={formatDateTimeVN}
-        />
+        <>
+          <KienHT
+            data={currentSliceDa}
+            onUncomplete={handleUncomplete}
+            formatDateTimeVN={formatDateTimeVN}
+          />
+
+          {/* Footer phân trang */}
+          <div className="mt-4 flex justify-center">
+            <CustomPagination
+              pageCount={pageCountDa}
+              forcePage={pageDa}
+              onPageChange={({ selected }) => setPageDa(selected)}
+              marginPagesDisplayed={2}
+              pageRangeDisplayed={3}
+              additionalClassname="gap-2 justify-center"
+            />
+          </div>
+        </>
       )}
     </div>
   );
