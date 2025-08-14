@@ -95,12 +95,19 @@ const RotKienRow = ({
       </td>
 
       {/* Số soda (không tooltip, tự xuống hàng nếu dài) */}
-<td className="px-3 py-3 tabular-nums text-slate-800">
-  <span className="block max-w-[80px] mx-auto whitespace-normal break-words">
-    {fmtNum(data.soSoda)}
-  </span>
-</td>
-
+      {/* Số soda (truncate + tooltip) */}
+      <td className="px-3 py-3 tabular-nums text-slate-800">
+        <Tippy
+          content={fmtNum(data.soSoda)}
+          placement="top"
+          arrow={true}
+          maxWidth="400px"
+        >
+          <span className="block truncate max-w-[80px] mx-auto cursor-help">
+            {fmtNum(data.soSoda)}
+          </span>
+        </Tippy>
+      </td>
 
       {/* Ngày giờ */}
       <td className="px-3 py-3 text-center whitespace-nowrap">
