@@ -1,5 +1,8 @@
 /* eslint-disable react/prop-types */
 
+import Tippy from "@tippyjs/react";
+import "tippy.js/dist/tippy.css"; // style mặc định của tooltip
+
 const RotKienRow = ({
   data,
   index,
@@ -23,7 +26,7 @@ const RotKienRow = ({
       .replace(",", "");
   };
 
-  const fmtNum = (v) => v ?? "—"; // giữ được số 0
+  const fmtNum = (v) => (v ?? v === 0 ? v : "—"); // giữ được số 0
 
   // Chuẩn hoá và map bộ phận -> chip + màu
   const normalize = (s = "") =>
@@ -58,25 +61,25 @@ const RotKienRow = ({
   return (
     <tr
       className="
-          group align-middle
-          odd:bg-white even:bg-slate-50
-          hover:bg-sky-50/60
-          border-b border-slate-200 transition-colors
-          text-sm md:text-[15px]
-          text-center
-        "
+        group align-middle
+        odd:bg-white even:bg-slate-50
+        hover:bg-sky-50/60
+        border-b border-slate-200 transition-colors
+        text-sm md:text-[15px]
+        text-center
+      "
     >
       {/* STT */}
       <td className="px-3 py-3 text-center text-slate-600">{index + 1}</td>
 
-      {/* Mã CH (badge mono) */}
+      {/* Mã CH */}
       <td className="px-3 py-3 text-center whitespace-nowrap">
         <span
           className="
-              inline-flex items-center font-mono text-[12px] md:text-xs
-              rounded-md border bg-slate-100
-              border-slate-200 px-2 py-0.5 text-slate-700
-            "
+            inline-flex items-center font-mono text-[12px] md:text-xs
+            rounded-md border bg-slate-100
+            border-slate-200 px-2 py-0.5 text-slate-700
+          "
           title={data.maCH}
         >
           {data.maCH}
@@ -86,13 +89,18 @@ const RotKienRow = ({
       {/* Tên CH */}
       <td className="px-3 py-3 text-left text-slate-800">{data.tenCH}</td>
 
-      {/* Số kiện / Số soda */}
-      <td className="px-3 py-3  tabular-nums text-slate-800">
+      {/* Số kiện */}
+      <td className="px-3 py-3 tabular-nums text-slate-800">
         {fmtNum(data.soKienRot)}
       </td>
-      <td className="px-3 py-3  tabular-nums text-slate-800">
-        {fmtNum(data.soSoda)}
-      </td>
+
+      {/* Số soda (không tooltip, tự xuống hàng nếu dài) */}
+<td className="px-3 py-3 tabular-nums text-slate-800">
+  <span className="block max-w-[80px] mx-auto whitespace-normal break-words">
+    {fmtNum(data.soSoda)}
+  </span>
+</td>
+
 
       {/* Ngày giờ */}
       <td className="px-3 py-3 text-center whitespace-nowrap">
@@ -101,15 +109,27 @@ const RotKienRow = ({
         </span>
       </td>
 
-      {/* Ghi chú (truncate + tooltip) */}
-      <td
-        className="px-3 py-3 max-w-[260px] md:max-w-[360px] truncate  text-slate-700"
-        title={data.ghiChu || ""}
-      >
-        {data.ghiChu || "—"}
+      {/* Ghi chú (tooltip) */}
+      <td className="px-3 py-3 text-slate-700">
+        <Tippy
+          content={data.ghiChu || "—"}
+          placement="top"
+          arrow={true}
+          maxWidth="400px"
+        >
+          <span
+            className="
+              block truncate
+              max-w-[260px] md:max-w-[360px]
+              text-left cursor-help
+            "
+          >
+            {data.ghiChu || "—"}
+          </span>
+        </Tippy>
       </td>
 
-      {/* Bộ phận (chip) */}
+      {/* Bộ phận */}
       <td className="px-3 py-3 text-center whitespace-nowrap">
         <span
           className={[
@@ -149,11 +169,11 @@ const RotKienRow = ({
             <button
               onClick={() => onDelete(data._id)}
               className="
-                  inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium
-                  border border-rose-200 bg-rose-50 text-rose-700
-                  hover:bg-rose-100 shadow-sm transition
-                  focus:outline-none focus:ring-2 focus:ring-rose-500
-                "
+                inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium
+                border border-rose-200 bg-rose-50 text-rose-700
+                hover:bg-rose-100 shadow-sm transition
+                focus:outline-none focus:ring-2 focus:ring-rose-500
+              "
               title="Xóa dòng này"
             >
               🗑️ Xóa
