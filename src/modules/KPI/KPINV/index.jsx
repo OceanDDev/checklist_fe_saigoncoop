@@ -7,13 +7,13 @@ const departments = [
   { key: "xuat",  title: "XUẤT HÀNG",  desc: "Theo dõi đơn xuất, đối chiếu phiếu xuất.", to: "/xuat-hang" },
   { key: "nhap",  title: "NHẬP HÀNG",  desc: "Tiếp nhận, kiểm đếm, nhập kho theo quy trình.", to: "/nhap-hang" },
   { key: "hotro", title: "HỖ TRỢ KHO", desc: "Điều phối, sắp xếp, kiểm tra tồn.",            to: "/ho-tro-kho" },
-  { key: "ketoan",title: "KẾ TOÁN",    desc: "Đối soát chứng từ, báo cáo thuế/kế toán.",     to: "/ke-toan" },
+  { key: "ketoan",title: "KẾ TOÁN",    desc: "Đối soát chứng từ, báo cáo thuế/kế toán.",     to: "/kpi/homestaff/homeKeToan" },
 ];
 
 const HomeStaffKPI = () => {
   const [currentImage, setCurrentImage] = useState(0);
 
-  useEffect(() => {
+  useEffect(() => { 
     const id = setInterval(() => {
       setCurrentImage((p) => (p + 1) % images.length);
     }, 5000);

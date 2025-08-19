@@ -23,9 +23,7 @@ const Header = () => {
       case 1:
         return "TOOL ĐIỀU VẬN";
       case 2:
-        return "BGĐ KPI";
-      case 3:
-        return "BDH KPI";
+        return "KPIs";
       default:
         return "CHECKLIST";
     }

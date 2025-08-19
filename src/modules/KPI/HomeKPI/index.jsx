@@ -45,7 +45,7 @@ const HomeKPI = () => {
 
           {/* KPI Nhân viên */}
           <Link
-            to="/bdhkpi/homestaff"
+            to="/kpi/homestaff"
             className="bg-white/80 backdrop-blur-md border border-white/30 rounded-2xl shadow-md p-6 md:p-8 text-center transition-transform duration-300 hover:scale-[1.03] hover:shadow-xl hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2"
           >
             <div className="flex flex-col items-center">

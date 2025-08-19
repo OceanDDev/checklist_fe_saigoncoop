@@ -15,8 +15,7 @@ const PrivateRoute = ({ children, allowRoles = [] }) => {
     // Optional: redirect về đúng trang theo role
     if (user.role === 0) return <Navigate to="/" replace />;
     if (user.role === 1) return <Navigate to="/dieuvan" replace />;
-    if (user.role === 2) return <Navigate to="/bgdkpi" replace />;
-    if (user.role === 3) return <Navigate to="/bdhkpi" replace />;
+    if (user.role === 2) return <Navigate to="/kpi" replace />;
 
     return <Navigate to="/login" replace />;
   }

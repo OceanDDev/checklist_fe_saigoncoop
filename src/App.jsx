@@ -15,6 +15,8 @@ import UserTableCheckListBDH from "./modules/BDH/AdminCheckListBDH";
 import HomeKPI from "./modules/KPI/HomeKPI";
 import HomeStaffKPI from "./modules/KPI/KPINV";
 import ToolRotKien from "./modules/Dieuvan/Toolrotkien";
+import HomeKeToan from "./modules/KPI/KPINV/KETOAN";
+import TableKeToan from "./modules/KPI/KPINV/KETOAN/table";
 
 function App() {
   return (
@@ -127,26 +129,34 @@ function App() {
           }
         />
         <Route
-          path="/bgdkpi"
+          path="/kpi"
           element={
             <PrivateRoute allowRoles={[2]}>
               <MainLayout><HomeKPI/></MainLayout>
             </PrivateRoute>
           }
         />
-        <Route
-          path="/bdhkpi"
+         <Route
+          path="/kpi/homestaff"
           element={
-            <PrivateRoute allowRoles={[3]}>
-              <MainLayout><HomeKPI/></MainLayout>
+            <PrivateRoute allowRoles={[2]}>
+              <MainLayout><HomeStaffKPI/></MainLayout>
             </PrivateRoute>
           }
         />
          <Route
-          path="/bdhkpi/homestaff"
+          path="/kpi/homestaff/homeKeToan"
           element={
-            <PrivateRoute allowRoles={[2,3]}>
-              <MainLayout><HomeStaffKPI/></MainLayout>
+            <PrivateRoute allowRoles={[2]}>
+              <MainLayout><HomeKeToan/></MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/kpi/homestaff/homeKeToan/table"
+          element={
+            <PrivateRoute allowRoles={[2]}>
+              <MainLayout><TableKeToan/></MainLayout>
             </PrivateRoute>
           }
         />

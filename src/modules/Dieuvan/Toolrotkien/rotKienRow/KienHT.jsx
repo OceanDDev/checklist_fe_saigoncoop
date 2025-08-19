@@ -1,8 +1,9 @@
 /* eslint-disable react/prop-types */
+import Tippy from "@tippyjs/react";
+import "tippy.js/dist/tippy.css"; // style mặc định của tooltip
 
 const KienHT = ({ data, onUncomplete }) => {
-  // dd/MM/yyyy HH:mm (24h), timezone VN, không CH/SA
- // Hàm format giờ theo Asia/Ho_Chi_Minh
+  // Hàm format giờ theo Asia/Ho_Chi_Minh
   const formatDate = (isoStr) => {
     const d = new Date(isoStr);
     const vnTime = new Date(d.getTime() - 7 * 60 * 60 * 1000);
@@ -18,7 +19,7 @@ const KienHT = ({ data, onUncomplete }) => {
       .replace(",", "");
   };
 
-  const fmtNum = (v) => v ?? "—"; // vẫn hiển thị 0
+  const fmtNum = (v) => (v ?? v === 0 ? v : "—"); // vẫn hiển thị 0
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow">
@@ -32,17 +33,15 @@ const KienHT = ({ data, onUncomplete }) => {
             <th className="px-3 py-3 font-semibold whitespace-nowrap">SỐ SODA - HÓA ĐƠN</th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">NGÀY GIỜ CẬP NHẬP</th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">GHI CHÚ</th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">BỘ PHẬN</th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">CHỨC NĂNG</th>
-                        <th className="px-3 py-3 font-semibold whitespace-nowrap">BỘ PHẬN</th>
-
-            
           </tr>
         </thead>
 
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={8} className="text-center py-8 text-slate-500 italic">
+              <td colSpan={9} className="text-center py-8 text-slate-500 italic">
                 Không có dữ liệu đã hoàn thành
               </td>
             </tr>
@@ -74,24 +73,42 @@ const KienHT = ({ data, onUncomplete }) => {
                 <td className="px-3 py-3 text-center tabular-nums text-slate-800">
                   {fmtNum(item.soKienRot)}
                 </td>
+
+                {/* Số SODA (truncate + tooltip) */}
                 <td className="px-3 py-3 text-center tabular-nums text-slate-800">
-                  {fmtNum(item.soSoda)}
+                  <Tippy
+                    content={fmtNum(item.soSoda)}
+                    placement="top"
+                    arrow={true}
+                    maxWidth="400px"
+                  >
+                    <span className="block truncate max-w-[120px] mx-auto cursor-help">
+                      {fmtNum(item.soSoda)}
+                    </span>
+                  </Tippy>
                 </td>
 
                 <td className="px-3 py-3">
-                  <span
-                    className="inline-flex rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                  >
+                  <span className="inline-flex rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700">
                     {formatDate(item.ngayRotKien)}
                   </span>
                 </td>
 
-                <td
-                  className="px-3 py-3 max-w-[260px] md:max-w-[360px] truncate text-slate-700"
-                  title={item.ghiChu || ""}
-                >
-                  {item.ghiChu || "—"}
+                {/* Ghi chú (truncate + tooltip) */}
+                <td className="px-3 py-3 text-slate-700">
+                  <Tippy
+                    content={item.ghiChu || "—"}
+                    placement="top"
+                    arrow={true}
+                    maxWidth="400px"
+                  >
+                    <span className="block truncate max-w-[260px] md:max-w-[360px] text-left cursor-help">
+                      {item.ghiChu || "—"}
+                    </span>
+                  </Tippy>
                 </td>
+
+                {/* Bộ phận */}
                 <td className="px-3 py-3">
                   <span
                     className="inline-flex items-center font-mono text-[12px] rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-slate-700"
