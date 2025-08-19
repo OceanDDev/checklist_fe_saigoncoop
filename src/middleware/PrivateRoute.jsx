@@ -10,13 +10,20 @@ const PrivateRoute = ({ children, allowRoles = [] }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // ❌ Nếu truyền allowRoles mà user.role không hợp lệ → redirect
+  // Nếu user.role = 3 → chỉ được vào đúng 1 link duy nhất
+  if (user.role === 3) {
+    const allowedPath = "/checklistform/68672ef4c68c3523675f210c";
+    if (window.location.pathname !== allowedPath) {
+      return <Navigate to={allowedPath} replace />;
+    }
+    return children; // ✅ cho phép render trang đó
+  }
+
+  // ❌ Nếu truyền allowRoles mà user.role không hợp lệ → redirect theo role
   if (allowRoles.length > 0 && !allowRoles.includes(user.role)) {
-    // Optional: redirect về đúng trang theo role
     if (user.role === 0) return <Navigate to="/" replace />;
     if (user.role === 1) return <Navigate to="/dieuvan" replace />;
     if (user.role === 2) return <Navigate to="/kpi" replace />;
-
     return <Navigate to="/login" replace />;
   }
 
