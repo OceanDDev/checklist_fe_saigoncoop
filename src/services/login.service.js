@@ -12,6 +12,18 @@ const login = async (payload) => {
 	}
 }
 
+const getUser = async () => {
+  try {
+    // nếu API là GET thì dùng requestService.get(...)
+    const results = await requestService.get(URL.users.users, {}, undefined, ApiServer);
+    return results;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+};
+
 export const loginService ={ 
     login,
+	getUser,
 }

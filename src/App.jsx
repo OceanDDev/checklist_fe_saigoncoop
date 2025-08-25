@@ -153,7 +153,7 @@ function App() {
           }
         />
         <Route
-          path="/kpi/homestaff/homeKeToan/table"
+          path="/kpi/homestaff/homeKeToan/table/:year"
           element={
             <PrivateRoute allowRoles={[2]}>
               <MainLayout><TableKeToan/></MainLayout>

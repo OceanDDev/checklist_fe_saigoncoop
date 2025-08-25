@@ -3,14 +3,47 @@ import { useMemo, useState } from "react";
 import { formkpistaffService } from "@/services/formkpistaff.service";
 import { checkKPIService } from "@/services/checkkpistaff.service";
 
-// Chuẩn hoá KPI items từ Form KPI
+// Chuẩn hoá KPI items từ Form KPI - CẬP NHẬT MỚI với 2 field mới
 const mapFormToEditable = (rec) =>
   (rec?.kpis ?? []).map((it) => ({
     _id: it?._id,
     kpi: it?.kpi ?? "",
     ty_trong: it?.ty_trong ?? 0,
-    loi: { so_loi: 0, noi_dung: "" },
+    ky_hieu: it?.ky_hieu ?? "",
+    don_vi_tinh: it?.don_vi_tinh ?? "",
+    loi: { 
+      so_loi: 0, 
+      noi_dung: "",
+      // Giữ nguyên ky_hieu và don_vi_tinh từ form, không cho edit trong modal này
+    },
   }));
+
+// Function tính điểm trừ - ĐỒNG BỘ với StaffKPIDetailModal
+const calculateDeduction = (tyTrong, soLoi, donViTinh = "") => {
+  const weight = Number(tyTrong || 0);
+  const errors = Number(soLoi || 0);
+  
+  if (errors === 0) return 0;
+  
+  // Xử lý đơn vị tính %
+  if (donViTinh.toLowerCase().includes('%') || donViTinh === '%') {
+    // Nếu đơn vị tính là %, số lỗi là % của tỷ trọng
+    // Ví dụ: tỷ trọng 5%, số lỗi 90% → điểm trừ = 5 * 0.9 = 4.5%
+    return (weight * errors) / 100;
+  }
+  
+  if (weight >= 1 && weight <= 9) {
+    // Tỷ trọng 1-9%: mỗi lỗi trừ 1%
+    return errors * 1;
+  } else if (weight >= 10) {
+    // Tỷ trọng ≥10%: mỗi lỗi trừ một nửa tỷ trọng (không làm tròn)
+    // Ví dụ: tỷ trọng 15% → mỗi lỗi trừ 7.5%
+    const deductionPerError = weight / 2;
+    return errors * deductionPerError;
+  }
+  
+  return 0;
+};
 
 // Chọn bản ghi Form KPI mới nhất
 const pickNewestIndex = (arr) => {
@@ -48,6 +81,24 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
   const [monthInput, setMonthInput] = useState(new Date().getMonth() + 1);
 
   const currentYear = useMemo(() => new Date().getFullYear(), []);
+
+  // Tính toán tổng điểm trừ và điểm cuối - CẬP NHẬT MỚI
+  const { totalDeduction, finalScore } = useMemo(() => {
+    let deduction = 0;
+    
+    formKpis.forEach(item => {
+      const soLoi = Number(item.loi?.so_loi || 0);
+      deduction += calculateDeduction(item.ty_trong, soLoi, item.don_vi_tinh);
+    });
+    
+    const baseScore = 100;
+    const final = Math.max(0, baseScore - deduction);
+    
+    return {
+      totalDeduction: Math.round(deduction * 100) / 100,
+      finalScore: Math.round(final * 100) / 100
+    };
+  }, [formKpis]);
 
   const handleFind = async () => {
     setFindError("");
@@ -134,6 +185,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
           thang,
           nam: currentYear,
           kpis: formKpis, // nếu BE chấp nhận kèm kpis khi tạo
+          ty_trong_thang: finalScore, // Thêm điểm cuối cùng
         });
       } catch {
         // Fallback: nếu BE không có route create theo form_kpi_id
@@ -143,6 +195,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
           thang,
           nam: currentYear,
           kpis: formKpis,
+          ty_trong_thang: finalScore, // Thêm điểm cuối cùng
         });
       }
 
@@ -157,7 +210,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-      <div className="w-full max-w-5xl rounded-2xl bg-white shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
+      <div className="w-full max-w-6xl rounded-2xl bg-white shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b shrink-0">
           <h3 className="text-base md:text-lg font-semibold text-slate-800">Đánh giá KPI</h3>
@@ -222,65 +275,144 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
                 </span>
               </div>
 
-              {/* Bảng KPI */}
+              {/* Thông tin tính điểm - MỚI */}
+              <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 p-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center gap-6 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-600">Điểm gốc:</span>
+                      <span className="font-semibold text-slate-800">100%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-600">Tổng điểm trừ:</span>
+                      <span className={`font-bold ${totalDeduction > 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                        -{totalDeduction}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-600 text-sm">Điểm cuối cùng:</span>
+                    <div className={`inline-flex items-center rounded-full px-4 py-2 text-lg font-bold ring-2 ${
+                      finalScore < 100 
+                        ? 'bg-orange-50 text-orange-700 ring-orange-200' 
+                        : 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                    }`}>
+                      {finalScore}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bảng KPI - CẬP NHẬT MỚI với 2 cột mới */}
               <div className="overflow-x-auto rounded-xl border">
                 <table className="w-full text-sm table-fixed">
                   <colgroup>
-                    <col className="w-[52%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[24%]" />
+                    <col className="w-[35%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[23%]" />
                   </colgroup>
                   <thead className="bg-slate-50 sticky top-0">
                     <tr className="text-left">
                       <th className="p-3 font-semibold text-slate-600">KPI</th>
+                      <th className="p-3 font-semibold text-slate-600">Ký hiệu</th>
+                      <th className="p-3 font-semibold text-slate-600">Đơn vị</th>
                       <th className="p-3 font-semibold text-slate-600">Tỷ trọng</th>
                       <th className="p-3 font-semibold text-slate-600">Số lỗi</th>
+                      <th className="p-3 font-semibold text-slate-600">Điểm trừ</th>
                       <th className="p-3 font-semibold text-slate-600">Nội dung lỗi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {formKpis.map((row, i) => (
-                      <tr key={row._id || i} className="align-top">
-                        <td className="p-3 whitespace-pre-wrap break-words text-slate-800 min-w-0">{row.kpi}</td>
-                        <td className="p-3">
-                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
-                            {row.ty_trong}%
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <input
-                            type="number"
-                            min={0}
-                            value={row.loi?.so_loi ?? 0}
-                            onChange={(e) => {
-                              // dùng chung updater để rõ ràng
-                              const val = e.target.value;
-                              setFormKpis((prev) => {
-                                const next = [...prev];
-                                const curr = { ...next[i] };
-                                const loi = { ...(curr.loi || {}) };
-                                const num = Number(val);
-                                loi.so_loi = Number.isNaN(num) || num < 0 ? 0 : num;
-                                curr.loi = loi;
-                                next[i] = curr;
-                                return next;
-                              });
-                            }}
-                            className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                          />
-                        </td>
-                        <td className="p-3">
-                          <textarea
-                            rows={2}
-                            value={row.loi?.noi_dung ?? ""}
-                            onChange={(e) => updateKpiField(i, "noi_dung", e.target.value)}
-                            placeholder="Mô tả ngắn lỗi (nếu có)"
-                            className="w-full min-w-0 max-h-32 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 resize-y"
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                    {formKpis.map((row, i) => {
+                      const soLoi = Number(row.loi?.so_loi ?? 0);
+                      const diemTru = calculateDeduction(row.ty_trong, soLoi, row.don_vi_tinh);
+                      const donViTinh = String(row.don_vi_tinh ?? "");
+                      
+                      return (
+                        <tr key={row._id || i} className="align-top hover:bg-slate-50/50">
+                          <td className="p-3 whitespace-pre-wrap break-words text-slate-800 min-w-0">{row.kpi}</td>
+                          
+                          {/* Ký hiệu - MỚI (chỉ hiển thị, không cho edit) */}
+                          <td className="p-3 text-center">
+                            <span className="text-slate-600 text-sm">
+                              {row.ky_hieu || '---'}
+                            </span>
+                          </td>
+
+                          {/* Đơn vị tính - MỚI (chỉ hiển thị, không cho edit) */}
+                          <td className="p-3 text-center">
+                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                              donViTinh.toLowerCase().includes('%') || donViTinh === '%'
+                                ? 'bg-purple-50 text-purple-700 ring-1 ring-purple-200'
+                                : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
+                            }`}>
+                              {donViTinh || '---'}
+                            </span>
+                          </td>
+
+                          <td className="p-3 text-center">
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
+                              {row.ty_trong}%
+                            </span>
+                          </td>
+                          
+                          <td className="p-3">
+                            <div className="space-y-1">
+                              <input
+                                type="number"
+                                min={0}
+                                step={donViTinh.toLowerCase().includes('%') || donViTinh === '%' ? "0.1" : "1"}
+                                value={soLoi}
+                                onChange={(e) => {
+                                  // dùng chung updater để rõ ràng
+                                  const val = e.target.value;
+                                  setFormKpis((prev) => {
+                                    const next = [...prev];
+                                    const curr = { ...next[i] };
+                                    const loi = { ...(curr.loi || {}) };
+                                    const num = Number(val);
+                                    loi.so_loi = Number.isNaN(num) || num < 0 ? 0 : num;
+                                    curr.loi = loi;
+                                    next[i] = curr;
+                                    return next;
+                                  });
+                                }}
+                                className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                              />
+                              
+                            </div>
+                          </td>
+
+                          {/* Điểm trừ - MỚI */}
+                          <td className="p-3 text-center">
+                            <div className="space-y-1">
+                              <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold ${
+                                diemTru > 0 
+                                  ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-200' 
+                                  : 'bg-slate-50 text-slate-700 ring-1 ring-slate-200'
+                              }`}>
+                                -{diemTru.toFixed(1)}%
+                              </span>
+                              
+                            </div>
+                          </td>
+                          
+                          <td className="p-3">
+                            <textarea
+                              rows={2}
+                              value={row.loi?.noi_dung ?? ""}
+                              onChange={(e) => updateKpiField(i, "noi_dung", e.target.value)}
+                              placeholder="Mô tả ngắn lỗi (nếu có)"
+                              className="w-full min-w-0 max-h-32 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 resize-y"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
