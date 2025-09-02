@@ -17,10 +17,21 @@ import HomeStaffKPI from "./modules/KPI/KPINV";
 import ToolRotKien from "./modules/Dieuvan/Toolrotkien";
 import HomeKeToan from "./modules/KPI/KPINV/KETOAN";
 import TableKeToan from "./modules/KPI/KPINV/KETOAN/table";
+import { ToastContainer } from "react-toastify";
 
 function App() {
   return (
     <BrowserRouter>
+    <ToastContainer
+        position="top-right"
+        autoClose={2500}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        draggable
+        theme="colored"
+        style={{ zIndex: 999999 }} // đảm bảo nổi trên mọi overlay
+      />
       <Routes>
         {/* Trang chủ chỉ vào được nếu đã login */}
         <Route

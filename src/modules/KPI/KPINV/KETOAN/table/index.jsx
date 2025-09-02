@@ -8,12 +8,12 @@ import CheckKPISimpleModal from "./CheckKPISimpleModal";
 const TableKeToan = () => {
   const { year } = useParams(); // Lấy năm từ URL parameter
   const selectedYear = parseInt(year) || new Date().getFullYear(); // Parse năm hoặc dùng năm hiện tại
-  
+
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [kpiStatusMap, setKpiStatusMap] = useState(new Map()); // Map để lưu trạng thái KPI
   const [yearlyWeightMap, setYearlyWeightMap] = useState(new Map()); // Map để lưu tỷ trọng năm
-  
+
   // Modal states
   const [detailOpen, setDetailOpen] = useState(false);
   const [checkOpen, setCheckOpen] = useState(false);
@@ -26,7 +26,7 @@ const TableKeToan = () => {
       const list = await formkpistaffService.getAllFormKPI();
       const staffList = Array.isArray(list) ? list : [];
       setData(staffList);
-      
+
       // Sau khi có danh sách nhân viên, check trạng thái KPI cho từng người theo năm được chọn
       await checkAllKPIStatus(staffList);
       // Và tính tỷ trọng năm cho từng người theo năm được chọn
@@ -45,7 +45,7 @@ const TableKeToan = () => {
     try {
       // Lấy tất cả check KPI của năm được chọn
       const response = await checkKPIService.getAllCheckKPI({
-        nam: selectedYear
+        nam: selectedYear,
       });
 
       // Xử lý response data
@@ -65,31 +65,35 @@ const TableKeToan = () => {
           }
           kpiByStaff.get(checkKPI.ma_nhan_vien).push({
             thang: checkKPI.thang,
-            ty_trong_thang: Number(checkKPI.ty_trong_thang) || 0
+            ty_trong_thang: Number(checkKPI.ty_trong_thang) || 0,
           });
         }
       });
 
       // Tính trung bình cho từng nhân viên
-      staffList.forEach(staff => {
+      staffList.forEach((staff) => {
         const staffKPIs = kpiByStaff.get(staff.ma_nhan_vien) || [];
-        
+
         if (staffKPIs.length > 0) {
           // Tính trung bình tỷ trọng các tháng
-          const totalWeight = staffKPIs.reduce((sum, kpi) => sum + kpi.ty_trong_thang, 0);
-          const averageWeight = Math.round((totalWeight / staffKPIs.length) * 100) / 100; // Làm tròn 2 chữ số thập phân
-          
+          const totalWeight = staffKPIs.reduce(
+            (sum, kpi) => sum + kpi.ty_trong_thang,
+            0
+          );
+          const averageWeight =
+            Math.round((totalWeight / staffKPIs.length) * 100) / 100; // Làm tròn 2 chữ số thập phân
+
           weightMap.set(staff.ma_nhan_vien, {
             averageWeight,
             monthCount: staffKPIs.length,
-            months: staffKPIs.map(kpi => kpi.thang).sort((a, b) => a - b)
+            months: staffKPIs.map((kpi) => kpi.thang).sort((a, b) => a - b),
           });
         } else {
           // Chưa có dữ liệu KPI nào
           weightMap.set(staff.ma_nhan_vien, {
             averageWeight: null,
             monthCount: 0,
-            months: []
+            months: [],
           });
         }
       });
@@ -97,13 +101,13 @@ const TableKeToan = () => {
       setYearlyWeightMap(weightMap);
     } catch (error) {
       console.error("❌ Lỗi khi tính tỷ trọng năm:", error);
-      
+
       // Nếu lỗi, set tất cả về null
-      staffList.forEach(staff => {
+      staffList.forEach((staff) => {
         weightMap.set(staff.ma_nhan_vien, {
           averageWeight: null,
           monthCount: 0,
-          months: []
+          months: [],
         });
       });
       setYearlyWeightMap(weightMap);
@@ -133,7 +137,7 @@ const TableKeToan = () => {
       // Lấy tất cả check KPI của tháng target trong năm được chọn
       const response = await checkKPIService.getAllCheckKPI({
         thang: targetMonth,
-        nam: selectedYear
+        nam: selectedYear,
       });
 
       // Xử lý response data - API trả về object có structure {success, count, data}
@@ -153,25 +157,25 @@ const TableKeToan = () => {
       });
 
       // Check trạng thái cho từng nhân viên
-      staffList.forEach(staff => {
+      staffList.forEach((staff) => {
         const hasKPI = checkedStaffSet.has(staff.ma_nhan_vien);
-        const status = hasKPI ? 'completed' : 'pending';
-        
+        const status = hasKPI ? "completed" : "pending";
+
         statusMap.set(staff.ma_nhan_vien, {
           status: status,
-          monthYear: `${targetMonth}/${selectedYear}`
+          monthYear: `${targetMonth}/${selectedYear}`,
         });
       });
 
       setKpiStatusMap(statusMap);
     } catch (error) {
       console.error("❌ Lỗi khi check trạng thái KPI:", error);
-      
+
       // Nếu lỗi, set tất cả về pending
-      staffList.forEach(staff => {
+      staffList.forEach((staff) => {
         statusMap.set(staff.ma_nhan_vien, {
-          status: 'pending',
-          monthYear: `${targetMonth}/${selectedYear}`
+          status: "pending",
+          monthYear: `${targetMonth}/${selectedYear}`,
         });
       });
       setKpiStatusMap(statusMap);
@@ -186,7 +190,7 @@ const TableKeToan = () => {
   useEffect(() => {
     const hasOpenModal = detailOpen || checkOpen;
     if (!hasOpenModal) return;
-    
+
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => (document.body.style.overflow = previousOverflow);
@@ -195,7 +199,7 @@ const TableKeToan = () => {
   const openDetail = (staff) => {
     setSelectedStaff({
       ...staff,
-      selectedYear: selectedYear // Truyền thêm năm được chọn
+      selectedYear: selectedYear, // Truyền thêm năm được chọn
     });
     setDetailOpen(true);
   };
@@ -206,11 +210,11 @@ const TableKeToan = () => {
     if (status) {
       return status;
     }
-    
+
     // Default nếu chưa có trong map
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1;
-    
+
     let targetMonth;
     if (selectedYear > currentDate.getFullYear()) {
       targetMonth = 1;
@@ -219,28 +223,30 @@ const TableKeToan = () => {
     } else {
       targetMonth = 12;
     }
-    
+
     return {
-      status: 'pending',
-      monthYear: `${targetMonth}/${selectedYear}`
+      status: "pending",
+      monthYear: `${targetMonth}/${selectedYear}`,
     };
   };
 
   // Helper function để get tỷ trọng năm từ Map
   const getYearlyWeight = (ma_nhan_vien) => {
-    return yearlyWeightMap.get(ma_nhan_vien) || {
-      averageWeight: null,
-      monthCount: 0,
-      months: []
-    };
+    return (
+      yearlyWeightMap.get(ma_nhan_vien) || {
+        averageWeight: null,
+        monthCount: 0,
+        months: [],
+      }
+    );
   };
 
   // Helper function để xác định trạng thái năm
   const getYearStatus = () => {
     const currentYear = new Date().getFullYear();
-    if (selectedYear > currentYear) return 'future';
-    if (selectedYear === currentYear) return 'current';
-    return 'past';
+    if (selectedYear > currentYear) return "future";
+    if (selectedYear === currentYear) return "current";
+    return "past";
   };
 
   const yearStatus = getYearStatus();
@@ -255,14 +261,20 @@ const TableKeToan = () => {
               <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 bg-clip-text text-transparent">
                 KPI Kế Toán - Năm {selectedYear}
               </h1>
-              <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                yearStatus === 'current' 
-                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' 
-                  : yearStatus === 'future'
-                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                  : 'bg-amber-100 text-amber-700 border border-amber-200'
-              }`}>
-                {yearStatus === 'current' ? '📅 Năm hiện tại' : yearStatus === 'future' ? '🚀 Năm tương lai' : '📚 Năm quá khứ'}
+              <div
+                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                  yearStatus === "current"
+                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                    : yearStatus === "future"
+                    ? "bg-blue-100 text-blue-700 border border-blue-200"
+                    : "bg-amber-100 text-amber-700 border border-amber-200"
+                }`}
+              >
+                {yearStatus === "current"
+                  ? "📅 Năm hiện tại"
+                  : yearStatus === "future"
+                  ? "🚀 Năm tương lai"
+                  : "📚 Năm quá khứ"}
               </div>
             </div>
             <p className="text-slate-600 flex items-center gap-2">
@@ -270,22 +282,33 @@ const TableKeToan = () => {
                 {data.length}
               </span>
               nhân viên đang được theo dõi
-              {yearStatus !== 'current' && (
+              {yearStatus !== "current" && (
                 <span className="text-slate-500">
-                  • {yearStatus === 'future' ? 'Chuẩn bị cho năm tới' : 'Dữ liệu lịch sử'}
+                  •{" "}
+                  {yearStatus === "future"
+                    ? "Chuẩn bị cho năm tới"
+                    : "Dữ liệu lịch sử"}
                 </span>
               )}
             </p>
           </div>
-          
+
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-2xl border border-blue-200 shadow-sm">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                yearStatus === 'current' ? 'bg-green-500' : yearStatus === 'future' ? 'bg-blue-500' : 'bg-amber-500'
-              }`}></div>
-              <span className="text-sm font-medium text-slate-700">Kế toán</span>
+              <div
+                className={`w-2 h-2 rounded-full animate-pulse ${
+                  yearStatus === "current"
+                    ? "bg-green-500"
+                    : yearStatus === "future"
+                    ? "bg-blue-500"
+                    : "bg-amber-500"
+                }`}
+              ></div>
+              <span className="text-sm font-medium text-slate-700">
+                Kế toán
+              </span>
             </div>
-            
+
             <button
               onClick={() => setCheckOpen(true)}
               className="group relative inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-6 py-3 rounded-2xl font-semibold text-sm shadow-lg shadow-emerald-200 transition-all duration-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
@@ -307,31 +330,43 @@ const TableKeToan = () => {
               <tr className="bg-gradient-to-r from-slate-50 to-gray-50 border-b border-slate-200">
                 <th className="px-6 py-4 text-left">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Mã NV</span>
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      Mã NV
+                    </span>
                   </div>
                 </th>
                 <th className="px-6 py-4 text-left">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Họ Tên</span>
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      Họ Tên
+                    </span>
                   </div>
                 </th>
                 <th className="px-6 py-4 text-left">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Bộ Phận</span>
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      Bộ Phận
+                    </span>
                   </div>
                 </th>
                 <th className="px-6 py-4 text-center">
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Trạng Thái KPI</span>
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      Trạng Thái KPI
+                    </span>
                   </div>
                 </th>
                 <th className="px-6 py-4 text-center">
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Tỷ Trọng {selectedYear}</span>
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      Tỷ Trọng {selectedYear}
+                    </span>
                   </div>
                 </th>
                 <th className="px-6 py-4 text-center">
-                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Thao Tác</span>
+                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    Thao Tác
+                  </span>
                 </th>
               </tr>
             </thead>
@@ -363,104 +398,118 @@ const TableKeToan = () => {
                 ))}
 
               {/* Data Rows */}
-              {!loading && data.length > 0 &&
+              {!loading &&
+                data.length > 0 &&
                 data.map((item, index) => {
                   const kpiStatus = getKPIStatus(item.ma_nhan_vien);
                   const yearlyWeight = getYearlyWeight(item.ma_nhan_vien);
-                  
-                  return (
-                  <tr 
-                    key={item._id} 
-                    className="group hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 transition-all duration-200"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white text-xs font-bold">
-                          {index + 1}
-                        </div>
-                        <span className="font-mono text-sm font-semibold text-slate-800">
-                          {item.ma_nhan_vien}
-                        </span>
-                      </div>
-                    </td>
-                    
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                          {item.ho_ten?.charAt(0)?.toUpperCase() || '?'}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-slate-900">{item.ho_ten}</div>
-                        </div>
-                      </div>
-                    </td>
-                    
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                        {item.don_vi}
-                      </span>
-                    </td>
-                    
-                    <td className="px-6 py-4 text-center">
-                      {kpiStatus.status === 'completed' ? (
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200">
-                          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                          <span className="text-sm font-semibold text-emerald-700">
-                            Đã chấm {kpiStatus.monthYear}
-                          </span>
-                          <span className="text-emerald-600">✅</span>
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
-                          <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                          <span className="text-sm font-semibold text-amber-700">
-                            Chưa chấm {kpiStatus.monthYear}
-                          </span>
-                          <span className="text-amber-600">⏳</span>
-                        </div>
-                      )}
-                    </td>
 
-                    <td className="px-6 py-4 text-center">
-                      {yearlyWeight.averageWeight !== null ? (
-                        <div className="inline-flex flex-col items-center gap-1">
-                          <div className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-bold ring-2 ${
-                            yearlyWeight.averageWeight >= 90 
-                              ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' 
-                              : yearlyWeight.averageWeight >= 80
-                              ? 'bg-blue-50 text-blue-700 ring-blue-200'
-                              : yearlyWeight.averageWeight >= 70
-                              ? 'bg-amber-50 text-amber-700 ring-amber-200'
-                              : 'bg-red-50 text-red-700 ring-red-200'
-                          }`}>
-                            {yearlyWeight.averageWeight}%
+                  return (
+                    <tr
+                      key={item._id}
+                      className="group hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 transition-all duration-200"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white text-xs font-bold">
+                            {index + 1}
                           </div>
-                          <div className="text-xs text-slate-500" title={`Các tháng đã chấm: ${yearlyWeight.months.join(', ')}`}>
-                            ({yearlyWeight.monthCount} tháng)
+                          <span className="font-mono text-sm font-semibold text-slate-800">
+                            {item.ma_nhan_vien}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            {item.ho_ten?.charAt(0)?.toUpperCase() || "?"}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-900">
+                              {item.ho_ten}
+                            </div>
                           </div>
                         </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-500 ring-1 ring-slate-200">
-                          {yearStatus === 'future' ? 'Sắp mở' : 'Chưa có dữ liệu'}
-                        </div>
-                      )}
-                    </td>
-                    
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => openDetail({
-                          ma_nhan_vien: item.ma_nhan_vien,
-                          ho_ten: item.ho_ten,
-                          don_vi: item.don_vi,
-                        })}
-                        className="group/btn relative inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 py-2 rounded-xl font-medium text-sm shadow-lg shadow-blue-200 transition-all duration-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
-                      >
-                        <span className="text-sm">📊</span>
-                        Chi tiết {selectedYear}
-                        <div className="absolute inset-0 rounded-xl bg-white opacity-0 group-hover/btn:opacity-20 transition-opacity duration-200"></div>
-                      </button>
-                    </td>
-                  </tr>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                          {item.don_vi}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4 text-center">
+                        {kpiStatus.status === "completed" ? (
+                          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200">
+                            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                            <span className="text-sm font-semibold text-emerald-700">
+                              Đã chấm {kpiStatus.monthYear}
+                            </span>
+                            <span className="text-emerald-600">✅</span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
+                            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                            <span className="text-sm font-semibold text-amber-700">
+                              Chưa chấm {kpiStatus.monthYear}
+                            </span>
+                            <span className="text-amber-600">⏳</span>
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-4 text-center">
+                        {yearlyWeight.averageWeight !== null ? (
+                          <div className="inline-flex flex-col items-center gap-1">
+                            <div
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-bold ring-2 ${
+                                yearlyWeight.averageWeight >= 90
+                                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                                  : yearlyWeight.averageWeight >= 80
+                                  ? "bg-blue-50 text-blue-700 ring-blue-200"
+                                  : yearlyWeight.averageWeight >= 70
+                                  ? "bg-amber-50 text-amber-700 ring-amber-200"
+                                  : "bg-red-50 text-red-700 ring-red-200"
+                              }`}
+                            >
+                              {yearlyWeight.averageWeight}%
+                            </div>
+                            <div
+                              className="text-xs text-slate-500"
+                              title={`Các tháng đã chấm: ${yearlyWeight.months.join(
+                                ", "
+                              )}`}
+                            >
+                              ({yearlyWeight.monthCount} tháng)
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-500 ring-1 ring-slate-200">
+                            {yearStatus === "future"
+                              ? "Sắp mở"
+                              : "Chưa có dữ liệu"}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() =>
+                            openDetail({
+                              ma_nhan_vien: item.ma_nhan_vien,
+                              ho_ten: item.ho_ten,
+                              don_vi: item.don_vi,
+                            })
+                          }
+                          className="group/btn relative inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 py-2 rounded-xl font-medium text-sm shadow-lg shadow-blue-200 transition-all duration-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                          <span className="text-sm">📊</span>
+                          Chi tiết {selectedYear}
+                          <div className="absolute inset-0 rounded-xl bg-white opacity-0 group-hover/btn:opacity-20 transition-opacity duration-200"></div>
+                        </button>
+                      </td>
+                    </tr>
                   );
                 })}
 
@@ -473,12 +522,13 @@ const TableKeToan = () => {
                         <span className="text-3xl">📋</span>
                       </div>
                       <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-slate-900">Chưa có dữ liệu KPI năm {selectedYear}</h3>
+                        <h3 className="text-lg font-semibold text-slate-900">
+                          Chưa có dữ liệu KPI năm {selectedYear}
+                        </h3>
                         <p className="text-slate-500 max-w-md mx-auto">
-                          {yearStatus === 'future' 
+                          {yearStatus === "future"
                             ? `Năm ${selectedYear} chưa bắt đầu. Hãy chuẩn bị dữ liệu cho năm tới.`
-                            : `Hiện tại chưa có dữ liệu KPI cho năm ${selectedYear}. Hãy thêm dữ liệu để bắt đầu quản lý.`
-                          }
+                            : `Hiện tại chưa có dữ liệu KPI cho năm ${selectedYear}. Hãy thêm dữ liệu để bắt đầu quản lý.`}
                         </p>
                       </div>
                       <button

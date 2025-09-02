@@ -15,7 +15,9 @@ const RowKeToan = ({ item }) => {
 
   return (
     <tr className="hover:bg-slate-50/60">
-      <td className="p-3 font-mono text-[13px] text-slate-800">{item.ma_nhan_vien}</td>
+      <td className="p-3 font-mono text-[13px] text-slate-800">
+        {item.ma_nhan_vien}
+      </td>
       <td className="p-3 text-slate-800">{item.ho_ten}</td>
       <td className="p-3 text-slate-700">{item.don_vi}</td>
       {/* BỎ Tháng/Năm */}
