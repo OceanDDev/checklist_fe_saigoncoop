@@ -4,6 +4,7 @@ import { formkpistaffService } from "@/services/formkpistaff.service";
 import { checkKPIService } from "@/services/checkkpistaff.service";
 import StaffKPIDetailModal from "./StaffKPIDetailModal";
 import CheckKPISimpleModal from "./CheckKPISimpleModal";
+import ExportExcelModal from "./excel";
 
 const TableKeToan = () => {
   const { year } = useParams(); // Lấy năm từ URL parameter
@@ -17,6 +18,7 @@ const TableKeToan = () => {
   // Modal states
   const [detailOpen, setDetailOpen] = useState(false);
   const [checkOpen, setCheckOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false); // State cho Export Excel Modal
   const [selectedStaff, setSelectedStaff] = useState(null);
 
   // Fetch data
@@ -188,13 +190,13 @@ const TableKeToan = () => {
 
   // Lock body scroll when modal is open
   useEffect(() => {
-    const hasOpenModal = detailOpen || checkOpen;
+    const hasOpenModal = detailOpen || checkOpen || exportOpen; // Thêm exportOpen
     if (!hasOpenModal) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => (document.body.style.overflow = previousOverflow);
-  }, [detailOpen, checkOpen]);
+  }, [detailOpen, checkOpen, exportOpen]); // Thêm exportOpen vào dependencies
 
   const openDetail = (staff) => {
     setSelectedStaff({
@@ -202,6 +204,16 @@ const TableKeToan = () => {
       selectedYear: selectedYear, // Truyền thêm năm được chọn
     });
     setDetailOpen(true);
+  };
+
+  // Function để mở Export Excel Modal
+  const openExportModal = (staff) => {
+    setSelectedStaff({
+      ma_nhan_vien: staff.ma_nhan_vien,
+      ho_ten: staff.ho_ten,
+      don_vi: staff.don_vi,
+    });
+    setExportOpen(true);
   };
 
   // Helper function để get trạng thái chấm KPI từ Map
@@ -392,7 +404,7 @@ const TableKeToan = () => {
                       <div className="h-8 w-20 bg-slate-200 rounded-full mx-auto"></div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <div className="h-10 w-24 bg-slate-200 rounded-xl mx-auto"></div>
+                      <div className="h-10 w-48 bg-slate-200 rounded-xl mx-auto"></div>
                     </td>
                   </tr>
                 ))}
@@ -494,20 +506,33 @@ const TableKeToan = () => {
                       </td>
 
                       <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() =>
-                            openDetail({
-                              ma_nhan_vien: item.ma_nhan_vien,
-                              ho_ten: item.ho_ten,
-                              don_vi: item.don_vi,
-                            })
-                          }
-                          className="group/btn relative inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 py-2 rounded-xl font-medium text-sm shadow-lg shadow-blue-200 transition-all duration-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
-                        >
-                          <span className="text-sm">📊</span>
-                          Chi tiết {selectedYear}
-                          <div className="absolute inset-0 rounded-xl bg-white opacity-0 group-hover/btn:opacity-20 transition-opacity duration-200"></div>
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          {/* Nút Chi tiết */}
+                          <button
+                            onClick={() =>
+                              openDetail({
+                                ma_nhan_vien: item.ma_nhan_vien,
+                                ho_ten: item.ho_ten,
+                                don_vi: item.don_vi,
+                              })
+                            }
+                            className="group/btn relative inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-3 py-2 rounded-xl font-medium text-sm shadow-lg shadow-blue-200 transition-all duration-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+                          >
+                            <span className="text-sm">📊</span>
+                            Chi tiết
+                            <div className="absolute inset-0 rounded-xl bg-white opacity-0 group-hover/btn:opacity-20 transition-opacity duration-200"></div>
+                          </button>
+
+                          {/* Nút Xuất Excel */}
+                          <button
+                            onClick={() => openExportModal(item)}
+                            className="group/btn relative inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-3 py-2 rounded-xl font-medium text-sm shadow-lg shadow-emerald-200 transition-all duration-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+                          >
+                            <span className="text-sm">📤</span>
+                            Excel
+                            <div className="absolute inset-0 rounded-xl bg-white opacity-0 group-hover/btn:opacity-20 transition-opacity duration-200"></div>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -563,6 +588,15 @@ const TableKeToan = () => {
             refreshList(); // Refresh toàn bộ sau khi chấm KPI
           }}
           selectedYear={selectedYear} // Truyền năm được chọn vào modal chấm KPI
+        />
+      )}
+
+      {/* Export Excel Modal */}
+      {exportOpen && selectedStaff && (
+        <ExportExcelModal
+          staff={selectedStaff}
+          selectedYear={selectedYear}
+          onClose={() => setExportOpen(false)}
         />
       )}
     </div>

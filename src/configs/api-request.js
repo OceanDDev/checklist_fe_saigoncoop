@@ -55,7 +55,8 @@ const URL = {
   },
   dieuvan:{ 
     rotkien : ENDPOINT_PREFIX + "/rotkien",
-    cuahang : ENDPOINT_PREFIX + "/cuahang"
+    cuahang : ENDPOINT_PREFIX + "/cuahang",
+    xuattra : ENDPOINT_PREFIX + "/xuattra"
   }
 };
 

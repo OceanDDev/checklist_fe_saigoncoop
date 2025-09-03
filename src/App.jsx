@@ -18,6 +18,7 @@ import ToolRotKien from "./modules/Dieuvan/Toolrotkien";
 import HomeKeToan from "./modules/KPI/KPINV/KETOAN";
 import TableKeToan from "./modules/KPI/KPINV/KETOAN/table";
 import { ToastContainer } from "react-toastify";
+import ToolXuatTra from "./modules/Dieuvan/ToolXuatTra";
 
 function App() {
   return (
@@ -136,6 +137,14 @@ function App() {
           element={
             <PrivateRoute allowRoles={[1]}>
               <MainLayout> <ToolRotKien/> </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/xuattra"
+          element={
+            <PrivateRoute allowRoles={[4]}>
+              <MainLayout> <ToolXuatTra/> </MainLayout>
             </PrivateRoute>
           }
         />
