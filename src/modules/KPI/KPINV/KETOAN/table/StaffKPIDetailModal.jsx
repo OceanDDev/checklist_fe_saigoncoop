@@ -558,199 +558,235 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear }) => {
   return (
     <>
       {/* Modal chính */}
-      <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-        <div className="w-full max-w-[95vw] rounded-2xl bg-white shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b shrink-0">
-            <div className="space-y-1">
-              <h3 className="text-base md:text-lg font-semibold text-slate-800">
-                Chi tiết KPI đã check
-              </h3>
-              <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm">
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-700 ring-1 ring-slate-200">
-                  Mã NV:{" "}
-                  <b className="ml-1 font-semibold">{staff?.ma_nhan_vien}</b>
-                </span>
-                <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-emerald-200">
-                  Họ tên: <b className="ml-1 font-semibold">{staff?.ho_ten}</b>
-                </span>
-                <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-indigo-700 ring-1 ring-indigo-200">
-                  Đơn vị: <b className="ml-1 font-semibold">{staff?.don_vi}</b>
-                </span>
-                <span
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                    yearStatus === "current"
-                      ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                      : yearStatus === "future"
-                      ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200"
-                      : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                  }`}
+      <div
+        className="fixed inset-0 z-50 overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kpi-checked-title"
+      >
+        {/* Overlay */}
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+
+        {/* Panel container */}
+        <div className="relative z-10 mx-auto my-8 w-full max-w-[95vw] px-4 sm:px-6">
+          <div className="w-full rounded-2xl bg-white shadow-xl ring-1 ring-slate-900/10 max-h-[85vh] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/80 shrink-0">
+              <div className="space-y-1">
+                <h3
+                  id="kpi-checked-title"
+                  className="text-lg md:text-xl font-semibold text-slate-800 tracking-tight"
                 >
-                  Năm: <b className="ml-1 font-semibold">{targetYear}</b>
-                  <span className="ml-1">
-                    {yearStatus === "current"
-                      ? "(Hiện tại)"
-                      : yearStatus === "future"
-                      ? "(Tương lai)"
-                      : "(Quá khứ)"}
+                  Chi tiết KPI đã check
+                </h3>
+                <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm">
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-700 ring-1 ring-inset ring-slate-200">
+                    Mã NV:{" "}
+                    <b className="ml-1 font-semibold">{staff?.ma_nhan_vien}</b>
                   </span>
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {!editMode ? (
-                <button
-                  onClick={enterEdit}
-                  disabled={!record}
-                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                  title="Cập nhật thông tin KPI"
-                >
-                  Cập nhật
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={cancelEdit}
-                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={saving || isNoteEmpty}
-                    title={
-                      saving
-                        ? "Đang xử lý..."
-                        : isNoteEmpty
-                        ? "Vui lòng nhập lý do cập nhật trước khi lưu"
-                        : "Lưu các thay đổi"
-                    }
-                    className={`
-                      relative rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition-all duration-200
-                      focus:outline-none focus:ring-2 focus:ring-offset-2
-                      ${
-                        saving || isNoteEmpty
-                          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                          : "bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500 transform hover:scale-105"
-                      }
-                    `}
-                  >
-                    {saving ? (
-                      <div className="flex items-center gap-2">
-                        <svg
-                          className="animate-spin h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          ></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          ></path>
-                        </svg>
-                        Đang lưu...
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M5 13l4 4L19 7"
-                          ></path>
-                        </svg>
-                        Lưu thay đổi
-                      </div>
-                    )}
-                  </button>
-                </>
-              )}
-
-              <button
-                onClick={handleClose}
-                className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-
-          {/* Success notification */}
-          {saveSuccess && (
-            <div className="mx-4 mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-emerald-700 text-sm flex items-center gap-2">
-              <svg
-                className="h-5 w-5 flex-shrink-0"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Cập nhật thành công! Dữ liệu đã được lưu.
-            </div>
-          )}
-
-          {/* Thông tin tính điểm */}
-          {record && (
-            <div className="mx-4 mt-4 rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 p-4 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex flex-wrap items-center gap-6 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-600">Tỷ trọng ban đầu:</span>
-                    <span className="font-semibold text-slate-800">100%</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-600 text-sm">
-                    Điểm cuối cùng tháng {activeMonth}/{targetYear}:
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                    Họ tên:{" "}
+                    <b className="ml-1 font-semibold">{staff?.ho_ten}</b>
                   </span>
-                  <div
-                    className={`inline-flex items-center rounded-full px-4 py-2 text-lg font-bold ring-2 ${
-                      storedScore < 100
-                        ? "bg-orange-50 text-orange-700 ring-orange-200"
-                        : "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                  <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-indigo-700 ring-1 ring-inset ring-indigo-200">
+                    Đơn vị:{" "}
+                    <b className="ml-1 font-semibold">{staff?.don_vi}</b>
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                      yearStatus === "current"
+                        ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"
+                        : yearStatus === "future"
+                        ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200"
+                        : "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200"
                     }`}
                   >
-                    {storedScore}%
+                    Năm: <b className="ml-1 font-semibold">{targetYear}</b>
+                    <span className="ml-1">
+                      {yearStatus === "current"
+                        ? "(Hiện tại)"
+                        : yearStatus === "future"
+                        ? "(Tương lai)"
+                        : "(Quá khứ)"}
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {!editMode ? (
+                  <button
+                    onClick={enterEdit}
+                    disabled={!record}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                    title="Cập nhật thông tin KPI"
+                  >
+                    Chỉnh sửa
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={cancelEdit}
+                      className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={saving || isNoteEmpty}
+                      title={
+                        saving
+                          ? "Đang xử lý..."
+                          : isNoteEmpty
+                          ? "Vui lòng nhập lý do cập nhật trước khi lưu"
+                          : "Lưu các thay đổi"
+                      }
+                      className={`relative rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                        saving || isNoteEmpty
+                          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-500 transform hover:scale-105"
+                      }`}
+                    >
+                      {saving ? (
+                        <div className="flex items-center gap-2">
+                          <svg
+                            className="animate-spin h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
+                          </svg>
+                          Đang lưu...
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                          Lưu thay đổi
+                        </div>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                <button
+                  onClick={handleClose}
+                  className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+
+            {/* Success notification */}
+            {saveSuccess && (
+              <div className="mx-6 mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-emerald-700 text-sm flex items-center gap-2">
+                <svg
+                  className="h-5 w-5 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                Cập nhật thành công! Dữ liệu đã được lưu.
+              </div>
+            )}
+
+            {/* Thông tin tính điểm */}
+            {record && (
+              <div className="mx-6 mt-4 rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 p-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center gap-6 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-600">Tỷ trọng ban đầu:</span>
+                      <span className="font-semibold text-slate-800">100%</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-600 text-sm">
+                      Điểm cuối cùng tháng {activeMonth}/{targetYear}:
+                    </span>
+                    {/* 100% xanh lá, còn lại đỏ */}
+                    <div
+                      className={`inline-flex items-center rounded-full px-4 py-2 text-lg font-bold ring-2 ${
+                        Number(storedScore) === 100
+                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                          : "bg-rose-50 text-rose-700 ring-rose-200"
+                      }`}
+                    >
+                      {storedScore}%
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Body */}
-          <div className="p-4 md:p-6 space-y-4 overflow-y-auto">
-            {/* Tháng selector */}
-            <div className="space-y-3">
-              {/* Mobile */}
-              <div className="-mx-2 px-2 md:hidden">
-                <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x snap-mandatory">
+            {/* Body */}
+            <div className="p-4 md:p-6 space-y-4 overflow-y-auto">
+              {/* Tháng selector */}
+              <div className="space-y-3">
+                {/* Mobile */}
+                <div className="-mx-2 px-2 md:hidden">
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x snap-mandatory">
+                    {MONTHS.map((m) => {
+                      const active = activeMonth === m;
+                      return (
+                        <button
+                          key={`m-sm-${m}`}
+                          onClick={() => setActiveMonth(m)}
+                          className={[
+                            "snap-start shrink-0 px-3 py-1.5 rounded-xl text-sm font-medium ring-1 transition-all duration-200",
+                            active
+                              ? "bg-indigo-600 text-white ring-indigo-500"
+                              : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300",
+                          ].join(" ")}
+                          aria-pressed={active}
+                        >
+                          Tháng {m}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Desktop */}
+                <div className="hidden md:grid grid-cols-6 lg:grid-cols-12 gap-2">
                   {MONTHS.map((m) => {
                     const active = activeMonth === m;
                     return (
                       <button
-                        key={`m-sm-${m}`}
+                        key={`m-lg-${m}`}
                         onClick={() => setActiveMonth(m)}
                         className={[
-                          "snap-start shrink-0 px-3 py-1.5 rounded-xl text-sm font-medium ring-1 transition-all duration-200",
+                          "w-full px-3 py-2 rounded-xl text-sm font-medium ring-1 transition-all duration-200",
                           active
                             ? "bg-indigo-600 text-white ring-indigo-500"
                             : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50",
@@ -765,579 +801,602 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear }) => {
                 </div>
               </div>
 
-              {/* Desktop */}
-              <div className="hidden md:grid grid-cols-6 lg:grid-cols-12 gap-2">
-                {MONTHS.map((m) => {
-                  const active = activeMonth === m;
-                  return (
-                    <button
-                      key={`m-lg-${m}`}
-                      onClick={() => setActiveMonth(m)}
-                      className={[
-                        "w-full px-3 py-2 rounded-xl text-sm font-medium ring-1 transition-all duration-200",
-                        active
-                          ? "bg-indigo-600 text-white ring-indigo-500"
-                          : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300",
-                      ].join(" ")}
-                      aria-pressed={active}
-                    >
-                      Tháng {m}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Ghi chú cập nhật khi ở edit mode */}
-            {editMode && (
-              <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 p-4 shadow-sm">
-                <label
-                  htmlFor="update-note-input"
-                  className="block text-sm font-semibold text-amber-800 mb-2"
-                >
-                  Lý do cập nhật: <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="update-note-input"
-                  ref={noteRef}
-                  value={updateNote}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setUpdateNote(v);
-                    // Clear error khi user bắt đầu nhập
-                    if (v.trim().length > 0) {
-                      setUpdateNoteError("");
+              {/* Ghi chú cập nhật khi ở edit mode */}
+              {editMode && (
+                <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 p-4 shadow-sm">
+                  <label
+                    htmlFor="update-note-input"
+                    className="block text-sm font-semibold text-amber-800 mb-2"
+                  >
+                    Lý do cập nhật: <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="update-note-input"
+                    ref={noteRef}
+                    value={updateNote}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setUpdateNote(v);
+                      if (v.trim().length > 0) setUpdateNoteError("");
+                    }}
+                    onBlur={() => {
+                      if (updateNote.trim().length === 0) {
+                        setUpdateNoteError(
+                          "Lý do cập nhật không được để trống."
+                        );
+                      }
+                    }}
+                    placeholder="Ví dụ: Điều chỉnh theo biên bản soát ngày 20/08"
+                    aria-invalid={!!updateNoteError}
+                    aria-describedby={
+                      updateNoteError ? "update-note-error" : undefined
                     }
-                  }}
-                  onBlur={() => {
-                    if (updateNote.trim().length === 0) {
-                      setUpdateNoteError("Lý do cập nhật không được để trống.");
-                    }
-                  }}
-                  placeholder="Ví dụ: Điều chỉnh theo biên bản soát ngày 20/08"
-                  aria-invalid={!!updateNoteError}
-                  aria-describedby={
-                    updateNoteError ? "update-note-error" : undefined
-                  }
-                  className={`
-                    w-full rounded-lg px-3 py-2.5 text-sm outline-none shadow-sm transition-all duration-200
-                    ${
+                    className={`w-full rounded-lg px-3 py-2.5 text-sm outline-none shadow-sm transition-all duration-200 ${
                       updateNoteError
                         ? "border-2 border-red-300 bg-red-50 focus:border-red-400 focus:ring-2 focus:ring-red-200 focus:bg-white"
                         : "border border-amber-200 bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
-                    }
-                  `}
-                />
-                {updateNoteError && (
-                  <div className="mt-2 flex items-start gap-2">
+                    }`}
+                  />
+                  {updateNoteError && (
+                    <div className="mt-2 flex items-start gap-2">
+                      <svg
+                        className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <p
+                        id="update-note-error"
+                        className="text-sm text-red-600 font-medium"
+                      >
+                        {updateNoteError}
+                      </p>
+                    </div>
+                  )}
+                  <div className="mt-3 flex items-center gap-2 text-xs text-amber-700">
                     <svg
-                      className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0"
+                      className="h-4 w-4"
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >
                       <path
                         fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                        d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
                         clipRule="evenodd"
                       />
                     </svg>
-                    <p
-                      id="update-note-error"
-                      className="text-sm text-red-600 font-medium"
-                    >
-                      {updateNoteError}
-                    </p>
+                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 font-medium ring-1 ring-amber-200">
+                      Người cập nhật:{" "}
+                      <span className="ml-1 font-semibold">
+                        {getUserFromStorage()}
+                      </span>
+                    </span>
                   </div>
-                )}
-                <div className="mt-3 flex items-center gap-2 text-xs text-amber-700">
+                </div>
+              )}
+
+              {/* Status/error */}
+              {loading && (
+                <div className="text-sm text-slate-500 flex items-center gap-2">
                   <svg
-                    className="h-4 w-4"
+                    className="animate-spin h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Đang tải dữ liệu năm {targetYear}...
+                </div>
+              )}
+              {!loading && error && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-700 text-sm flex items-start gap-2">
+                  <svg
+                    className="h-5 w-5 flex-shrink-0 mt-0.5"
                     fill="currentColor"
                     viewBox="0 0 20 20"
                   >
                     <path
                       fillRule="evenodd"
-                      d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
                       clipRule="evenodd"
                     />
                   </svg>
-                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 font-medium ring-1 ring-amber-200">
-                    Người cập nhật:{" "}
-                    <span className="ml-1 font-semibold">
-                      {getUserFromStorage()}
-                    </span>
-                  </span>
+                  {error}
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Status/error */}
-            {loading && (
-              <div className="text-sm text-slate-500 flex items-center gap-2">
-                <svg
-                  className="animate-spin h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                Đang tải dữ liệu năm {targetYear}...
-              </div>
-            )}
-            {!loading && error && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-700 text-sm flex items-start gap-2">
-                <svg
-                  className="h-5 w-5 flex-shrink-0 mt-0.5"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                {error}
-              </div>
-            )}
-
-            {/* Bảng KPI với các cột mới theo thứ tự yêu cầu */}
-            {!loading && !error && (
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-lg">
-                <table className="w-full text-sm bg-white min-w-[1800px]">
-                  <colgroup>
-                    <col className="w-[8%]" /> {/* Ký hiệu */}
-                    <col className="w-[20%]" /> {/* KPI */}
-                    <col className="w-[8%]" /> {/* Tỷ trọng */}
-                    <col className="w-[10%]" /> {/* Các đo lường */}
-                    <col className="w-[8%]" /> {/* Kế hoạch quý */}
-                    <col className="w-[8%]" /> {/* Đã thực hiện */}
-                    <col className="w-[8%]" /> {/* Đơn vị tính */}
-                    <col className="w-[8%]" /> {/* NV đánh giá */}
-                    <col className="w-[8%]" /> {/* BP theo dõi */}
-                    <col className="w-[6%]" /> {/* Chu kì */}
-                    <col className="w-[8%]" /> {/* Số lỗi */}
-                    <col className="w-[8%]" /> {/* Tỷ trọng cuối */}
-                    <col className="w-[20%]" /> {/* Nội dung lỗi */}
-                  </colgroup>
-                  <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
-                    <tr className="text-center">
-                      <th className="p-3 font-bold text-slate-700">Ký hiệu</th>
-                      <th className="p-3 font-bold text-slate-700">KPI</th>
-                      <th className="p-3 font-bold text-slate-700">Tỷ trọng</th>
-                      <th className="p-3 font-bold text-slate-700">
-                        Các đo lường
-                      </th>
-                      <th className="p-3 font-bold text-slate-700">
-                        Kế hoạch quý
-                      </th>
-                      <th className="p-3 font-bold text-slate-700">
-                        Đã thực hiện
-                      </th>
-                      <th className="p-3 font-bold text-slate-700">
-                        Đơn vị tính
-                      </th>
-                      <th className="p-3 font-bold text-slate-700">
-                        NV đánh giá
-                      </th>
-                      <th className="p-3 font-bold text-slate-700">
-                        BP theo dõi
-                      </th>
-                      <th className="p-3 font-bold text-slate-700">Chu kì</th>
-                      <th className="p-3 font-bold text-slate-700">
-                        CBQL Đánh giá
-                      </th>
-                      <th className="p-3 font-bold text-slate-700">
-                        Tỷ trọng cuối
-                      </th>
-                      <th className="p-3 font-bold text-slate-700">Ghi chú</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {!record && (
-                      <tr>
-                        <td
-                          colSpan="13"
-                          className="p-6 text-center text-slate-500"
-                        >
-                          <div className="text-4xl mb-2">📋</div>
-                          Chưa có dữ liệu check KPI cho tháng {activeMonth}/
-                          {targetYear}
-                        </td>
+              {/* Bảng KPI */}
+              {!loading && !error && (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-lg">
+                  <table className="w-full text-sm bg-white min-w-[1800px]">
+                    <colgroup>
+                      <col className="w-[8%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[6%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[20%]" />
+                    </colgroup>
+                    <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
+                      <tr className="text-center">
+                        <th className="p-3 font-bold text-slate-700">
+                          Ký hiệu
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">KPI</th>
+                        <th className="p-3 font-bold text-slate-700">
+                          Tỷ trọng
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">
+                          Các đo lường
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">
+                          Kế hoạch quý
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">
+                          Đã thực hiện
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">
+                          Đơn vị tính
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">
+                          NV đánh giá
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">
+                          BP theo dõi
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">Chu kì</th>
+                        <th className="p-3 font-bold text-slate-700">
+                          CBQL Đánh giá
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">
+                          Tỷ trọng cuối
+                        </th>
+                        <th className="p-3 font-bold text-slate-700">
+                          Ghi chú
+                        </th>
                       </tr>
-                    )}
-                    {record && items.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan="13"
-                          className="p-6 text-center text-slate-500"
-                        >
-                          <div className="text-4xl mb-2">📊</div>
-                          Không có danh sách KPI để check
-                        </td>
-                      </tr>
-                    )}
-                    {items.map((item, idx) => {
-                      const currentItem = editMode ? editableItems[idx] : item;
-                      const soLoi = Number(currentItem?.so_loi ?? 0);
-                      const tyTrong = Number(currentItem?.ty_trong ?? 0);
-                      const donViTinh = String(currentItem?.don_vi_tinh ?? "");
-                      const kyHieu = String(currentItem?.ky_hieu ?? "");
-                      const tyTrongCuoi = calculateTyTrongCuoi({
-                        cbqlDanhGia: soLoi,
-                        tyTrong,
-                        donViTinh,
-                        kyHieu,
-                      });
-                      const daThucHien = String(
-                        currentItem?.da_thuc_hien ?? ""
-                      );
-                      const keHoachQuy = String(
-                        currentItem?.ke_hoach_quy ?? ""
-                      );
-                      const chuKi = String(currentItem?.chu_ki ?? "");
-                      const nvDanhGia = String(currentItem?.nv_danh_gia ?? "");
-                      const cacDoLuong = String(
-                        currentItem?.cac_do_luong ?? ""
-                      );
-                      const bpTheoDoi = String(currentItem?.bp_theo_doi ?? "");
-                      const updateCount = perItemLog[idx]?.length || 0;
-                      const hasUpdateHistory = updateCount > 0;
-
-                      return (
-                        <tr
-                          key={idx}
-                          className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
-                        >
-                          {/* Ký hiệu */}
-                          <td className="p-3 text-center">
-                            {editMode ? (
-                              <input
-                                type="text"
-                                value={kyHieu}
-                                disabled
-                                readOnly
-                                placeholder="F1"
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
-                              />
-                            ) : (
-                              <span className="text-slate-600 text-sm">
-                                {kyHieu || "---"}
-                              </span>
-                            )}
+                    </thead>
+                    <tbody>
+                      {!record && (
+                        <tr>
+                          <td
+                            colSpan="13"
+                            className="p-6 text-center text-slate-500"
+                          >
+                            <div className="text-4xl mb-2">📋</div>
+                            Chưa có dữ liệu check KPI cho tháng {activeMonth}/
+                            {targetYear}
                           </td>
+                        </tr>
+                      )}
+                      {record && items.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan="13"
+                            className="p-6 text-center text-slate-500"
+                          >
+                            <div className="text-4xl mb-2">📊</div>
+                            Không có danh sách KPI để check
+                          </td>
+                        </tr>
+                      )}
 
-                          {/* KPI */}
-                          <td className="p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <span className="text-slate-800 font-medium break-words text-sm">
-                                {currentItem?.kpi || "---"}
-                              </span>
-                              {hasUpdateHistory && (
-                                <button
-                                  onClick={() => openLogFor(idx)}
-                                  className="shrink-0 flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 transition-colors ring-1 ring-blue-200"
-                                  title="Xem lịch sử cập nhật"
-                                >
-                                  📝 {updateCount}
-                                </button>
+                      {items.map((item, idx) => {
+                        const currentItem = editMode
+                          ? editableItems[idx]
+                          : item;
+                        const soLoi = Number(currentItem?.so_loi ?? 0);
+                        const tyTrong = Number(currentItem?.ty_trong ?? 0);
+                        const donViTinh = String(
+                          currentItem?.don_vi_tinh ?? ""
+                        );
+                        const kyHieu = String(currentItem?.ky_hieu ?? "");
+                        const tyTrongCuoi = calculateTyTrongCuoi({
+                          cbqlDanhGia: soLoi,
+                          tyTrong,
+                          donViTinh,
+                          kyHieu,
+                        });
+                        const daThucHien = String(
+                          currentItem?.da_thuc_hien ?? ""
+                        );
+                        const keHoachQuy = String(
+                          currentItem?.ke_hoach_quy ?? ""
+                        );
+                        const chuKi = String(currentItem?.chu_ki ?? "");
+                        const nvDanhGia = String(
+                          currentItem?.nv_danh_gia ?? ""
+                        );
+                        const cacDoLuong = String(
+                          currentItem?.cac_do_luong ?? ""
+                        );
+                        const bpTheoDoi = String(
+                          currentItem?.bp_theo_doi ?? ""
+                        );
+                        const updateCount = perItemLog[idx]?.length || 0;
+                        const hasUpdateHistory = updateCount > 0;
+
+                        return (
+                          <tr
+                            key={idx}
+                            className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
+                          >
+                            {/* Ký hiệu */}
+                            <td className="p-3 text-center">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={kyHieu}
+                                  disabled
+                                  readOnly
+                                  placeholder="F1"
+                                  className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
+                                />
+                              ) : (
+                                <span className="text-slate-600 text-sm">
+                                  {kyHieu || "---"}
+                                </span>
                               )}
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Tỷ trọng */}
-                          <td className="p-3 text-center">
-                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-slate-700 ring-1 ring-slate-200 text-sm">
-                              {tyTrong}%
-                            </span>
-                          </td>
+                            {/* KPI */}
+                            <td className="p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="text-slate-800 font-medium break-words text-sm">
+                                  {currentItem?.kpi || "---"}
+                                </span>
+                                {hasUpdateHistory && (
+                                  <button
+                                    onClick={() => openLogFor(idx)}
+                                    className="shrink-0 flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 transition-colors ring-1 ring-blue-200"
+                                    title="Xem lịch sử cập nhật"
+                                  >
+                                    📝 {updateCount}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
 
-                          {/* Các đo lường */}
-                          <td className="p-3">
-                            {editMode ? (
-                              <textarea
-                                rows="2"
-                                value={cacDoLuong}
-                                disabled
-                                readOnly
-                                placeholder="Các chỉ số đo lường"
-                                className="w-24 rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-sm cursor-not-allowed opacity-70 resize-none"
-                              />
-                            ) : (
-                              <span className="text-slate-600 text-sm break-words w-24">
-                                {cacDoLuong || "---"}
+                            {/* Tỷ trọng */}
+                            <td className="p-3 text-center">
+                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-slate-700 ring-1 ring-slate-200 text-sm">
+                                {tyTrong}%
                               </span>
-                            )}
-                          </td>
+                            </td>
 
-                          {/* Kế hoạch quý */}
-                          <td className="p-3 text-center">
-                            {editMode ? (
-                              <input
-                                type="text"
-                                value={keHoachQuy}
-                                disabled
-                                readOnly
-                                placeholder="KH quý"
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
-                              />
-                            ) : (
-                              <span className="text-slate-600 text-sm">
-                                {keHoachQuy || "---"}
-                              </span>
-                            )}
-                          </td>
+                            {/* Các đo lường */}
+                            <td className="p-3">
+                              {editMode ? (
+                                <textarea
+                                  rows="2"
+                                  value={cacDoLuong}
+                                  disabled
+                                  readOnly
+                                  placeholder="Các chỉ số đo lường"
+                                  className="w-24 rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-sm cursor-not-allowed opacity-70 resize-none"
+                                />
+                              ) : (
+                                <span className="text-slate-600 text-sm break-words w-24">
+                                  {cacDoLuong || "---"}
+                                </span>
+                              )}
+                            </td>
 
-                          {/* Đã thực hiện */}
-                          <td className="p-3 text-center">
-                            {editMode ? (
-                              <input
-                                type="number"
-                                min="0"
-                                step={
-                                  (donViTinh || "")
-                                    .toLowerCase()
-                                    .includes("%") ||
-                                  ["F1", "F2"].includes(kyHieu.toUpperCase())
-                                    ? "0.1"
-                                    : "1"
-                                }
-                                value={daThucHien}
-                                onChange={(e) =>
-                                  updateItemField(
-                                    idx,
-                                    "da_thuc_hien",
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Thực hiện"
-                                className="w-full rounded-lg border border-emerald-300 bg-white px-2 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-all duration-200"
-                              />
-                            ) : (
-                              <span
-                                className={`inline-flex items-center rounded-full px-2 py-1 text-sm font-medium ${
-                                  Number(daThucHien) > 0
-                                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                                    : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
-                                }`}
-                              >
-                                {daThucHien || "0"}
-                                {(donViTinh || "")
-                                  .toLowerCase()
-                                  .includes("%") ||
-                                ["F1", "F2"].includes(kyHieu.toUpperCase())
-                                  ? "%"
-                                  : ""}
-                              </span>
-                            )}
-                          </td>
+                            {/* Kế hoạch quý */}
+                            <td className="p-3 text-center">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={keHoachQuy}
+                                  disabled
+                                  readOnly
+                                  placeholder="KH quý"
+                                  className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
+                                />
+                              ) : (
+                                <span className="text-slate-600 text-sm">
+                                  {keHoachQuy || "---"}
+                                </span>
+                              )}
+                            </td>
 
-                          {/* Đơn vị tính */}
-                          <td className="p-3 text-center">
-                            {editMode ? (
-                              <input
-                                type="text"
-                                value={donViTinh}
-                                disabled
-                                readOnly
-                                placeholder="%, Lỗi"
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
-                              />
-                            ) : (
-                              <span
-                                className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                                  (donViTinh || "")
-                                    .toLowerCase()
-                                    .includes("%") || donViTinh === "%"
-                                    ? "bg-purple-50 text-purple-700 ring-1 ring-purple-200"
-                                    : "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
-                                }`}
-                              >
-                                {donViTinh || "---"}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* NV đánh giá (tự động tính từ da_thuc_hien) */}
-                          <td className="p-3 text-center">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2 py-1 text-sm font-medium ${
-                                Number(nvDanhGia) > 0
-                                  ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200"
-                                  : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
-                              }`}
-                              title={`Gốc: ${tyTrong}% • TH: ${daThucHien}${
-                                (donViTinh || "").toLowerCase().includes("%") ||
-                                ["F1", "F2"].includes(kyHieu.toUpperCase())
-                                  ? "%"
-                                  : " (số lỗi)"
-                              }`}
-                            >
-                              {nvDanhGia || "0"}%
-                            </span>
-                          </td>
-
-                          {/* BP theo dõi */}
-                          <td className="p-3 text-center">
-                            {editMode ? (
-                              <input
-                                type="text"
-                                value={bpTheoDoi}
-                                disabled
-                                readOnly
-                                placeholder="Bộ phận"
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
-                              />
-                            ) : (
-                              <span className="text-slate-600 text-sm">
-                                {bpTheoDoi || "---"}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Chu kì */}
-                          <td className="p-3 text-center">
-                            {editMode ? (
-                              <select
-                                value={chuKi}
-                                disabled
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
-                              >
-                                <option value="">---</option>
-                                <option value="Tuần">Tuần</option>
-                                <option value="Tháng">Tháng</option>
-                                <option value="Quý">Quý</option>
-                                <option value="Năm">Năm</option>
-                              </select>
-                            ) : (
-                              <span
-                                className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                                  chuKi
-                                    ? "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
-                                    : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
-                                }`}
-                              >
-                                {chuKi || "---"}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* CBQL Đánh giá (số lỗi) */}
-                          <td className="p-3 text-center">
-                            {editMode ? (
-                              <div className="flex items-center justify-center gap-1">
+                            {/* Đã thực hiện */}
+                            <td className="p-3 text-center">
+                              {editMode ? (
                                 <input
                                   type="number"
                                   min="0"
                                   step={
                                     (donViTinh || "")
                                       .toLowerCase()
-                                      .includes("%") || donViTinh === "%"
+                                      .includes("%") ||
+                                    ["F1", "F2"].includes(kyHieu.toUpperCase())
                                       ? "0.1"
                                       : "1"
                                   }
-                                  value={soLoi}
+                                  value={daThucHien}
                                   onChange={(e) =>
                                     updateItemField(
                                       idx,
-                                      "so_loi",
+                                      "da_thuc_hien",
                                       e.target.value
                                     )
                                   }
-                                  className="w-20 rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all duration-200"
+                                  placeholder="Thực hiện"
+                                  className="w-full rounded-lg border border-emerald-300 bg-white px-2 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-all duration-200"
                                 />
-                                {((donViTinh || "")
-                                  .toLowerCase()
-                                  .includes("%") ||
-                                  donViTinh === "%") && (
-                                  <span className="text-xs">
-                                    %{/* giữ hiển thị % nếu là đơn vị % */}
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span
-                                className={`inline-flex items-center rounded-full px-2 py-1 text-sm font-medium ${
-                                  soLoi > 0
-                                    ? "bg-red-50 text-red-700 ring-1 ring-red-200"
-                                    : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                                }`}
-                              >
-                                {soLoi}
-                                {(donViTinh || "")
-                                  .toLowerCase()
-                                  .includes("%") || donViTinh === "%"
-                                  ? "%"
-                                  : ""}
-                              </span>
-                            )}
-                          </td>
+                              ) : (
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2 py-1 text-sm font-medium ${
+                                    Number(daThucHien) > 0
+                                      ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                      : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
+                                  }`}
+                                >
+                                  {daThucHien || "0"}
+                                  {(donViTinh || "")
+                                    .toLowerCase()
+                                    .includes("%") ||
+                                  ["F1", "F2"].includes(kyHieu.toUpperCase())
+                                    ? "%"
+                                    : ""}
+                                </span>
+                              )}
+                            </td>
 
-                          {/* Tỷ trọng cuối */}
-                          <td className="p-3 text-center">
-                            <div className="flex flex-col items-center gap-1">
+                            {/* Đơn vị tính */}
+                            <td className="p-3 text-center">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={donViTinh}
+                                  disabled
+                                  readOnly
+                                  placeholder="%, Lỗi"
+                                  className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
+                                />
+                              ) : (
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                                    (donViTinh || "")
+                                      .toLowerCase()
+                                      .includes("%") || donViTinh === "%"
+                                      ? "bg-purple-50 text-purple-700 ring-1 ring-purple-200"
+                                      : "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
+                                  }`}
+                                >
+                                  {donViTinh || "---"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* NV đánh giá */}
+                            <td className="p-3 text-center">
                               <span
                                 className={`inline-flex items-center rounded-full px-2 py-1 text-sm font-medium ${
-                                  Number(tyTrongCuoi) > 0
-                                    ? "bg-green-50 text-green-700 ring-1 ring-green-200"
+                                  Number(nvDanhGia) > 0
+                                    ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200"
                                     : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
                                 }`}
-                                title={`Tỷ trọng gốc: ${tyTrong}% • CBQL: ${soLoi}${
+                                title={`Gốc: ${tyTrong}% • TH: ${daThucHien}${
                                   (donViTinh || "")
                                     .toLowerCase()
-                                    .includes("%") || donViTinh === "%"
+                                    .includes("%") ||
+                                  ["F1", "F2"].includes(kyHieu.toUpperCase())
                                     ? "%"
-                                    : " lỗi"
+                                    : " (số lỗi)"
                                 }`}
                               >
-                                {tyTrongCuoi}%
+                                {nvDanhGia || "0"}%
                               </span>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Nội dung lỗi */}
-                          <td className="p-3">
-                            {editMode ? (
-                              <textarea
-                                rows="2"
-                                value={String(currentItem?.noi_dung_loi ?? "")}
-                                onChange={(e) =>
-                                  updateItemField(
-                                    idx,
-                                    "noi_dung_loi",
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Mô tả chi tiết lỗi (nếu có)"
-                                className="w-24 rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-300 resize-none transition-all duration-200"
-                              />
-                            ) : (
-                              <span className="text-slate-600 text-sm break-words">
-                                {String(currentItem?.noi_dung_loi ?? "") ||
-                                  "---"}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                            {/* BP theo dõi */}
+                            <td className="p-3 text-center">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={bpTheoDoi}
+                                  disabled
+                                  readOnly
+                                  placeholder="Bộ phận"
+                                  className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
+                                />
+                              ) : (
+                                <span className="text-slate-600 text-sm">
+                                  {bpTheoDoi || "---"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Chu kì */}
+                            <td className="p-3 text-center">
+                              {editMode ? (
+                                <select
+                                  value={chuKi}
+                                  disabled
+                                  className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-400 px-2 py-1.5 text-center text-sm cursor-not-allowed opacity-70"
+                                >
+                                  <option value="">---</option>
+                                  <option value="Tuần">Tuần</option>
+                                  <option value="Tháng">Tháng</option>
+                                  <option value="Quý">Quý</option>
+                                  <option value="Năm">Năm</option>
+                                </select>
+                              ) : (
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                                    chuKi
+                                      ? "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
+                                      : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
+                                  }`}
+                                >
+                                  {chuKi || "---"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* CBQL Đánh giá (số lỗi) — 0 lỗi xanh lá, >=1 lỗi đỏ */}
+                            <td className="p-3 text-center">
+                              {editMode ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step={
+                                      (donViTinh || "")
+                                        .toLowerCase()
+                                        .includes("%") || donViTinh === "%"
+                                        ? "0.1"
+                                        : "1"
+                                    }
+                                    value={soLoi}
+                                    onChange={(e) =>
+                                      updateItemField(
+                                        idx,
+                                        "so_loi",
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-20 rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all duration-200"
+                                    placeholder={
+                                      (donViTinh || "")
+                                        .toLowerCase()
+                                        .includes("%") || donViTinh === "%"
+                                        ? "100"
+                                        : "0"
+                                    }
+                                  />
+                                  {((donViTinh || "")
+                                    .toLowerCase()
+                                    .includes("%") ||
+                                    donViTinh === "%") && (
+                                    <span className="text-xs">%</span>
+                                  )}
+                                </div>
+                              ) : (
+                                (() => {
+                                  const unitIsPercent =
+                                    (donViTinh || "")
+                                      .toLowerCase()
+                                      .includes("%") || donViTinh === "%";
+                                  const raw = currentItem?.so_loi;
+                                  const isEmpty =
+                                    raw === undefined ||
+                                    raw === null ||
+                                    raw === "";
+                                  const valueNum = Number(soLoi);
+                                  // Hiển thị: % => rỗng -> 100, ngược lại dùng số hiện có; lỗi => dùng số hiện có
+                                  const displayValue = unitIsPercent
+                                    ? isEmpty
+                                      ? 100
+                                      : valueNum
+                                    : valueNum;
+
+                                  // Màu: % => 100 xanh, <100 đỏ ; lỗi => 0 xanh, >=1 đỏ
+                                  const badgeClass = unitIsPercent
+                                    ? displayValue === 100
+                                      ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                      : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                                    : displayValue >= 1
+                                    ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                                    : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center rounded-full px-2 py-1 text-sm font-medium ${badgeClass}`}
+                                    >
+                                      {Number.isNaN(displayValue)
+                                        ? unitIsPercent
+                                          ? "100"
+                                          : "0"
+                                        : displayValue}
+                                      {unitIsPercent ? "%" : ""}
+                                    </span>
+                                  );
+                                })()
+                              )}
+                            </td>
+
+                            {/* Tỷ trọng cuối */}
+                            <td className="p-3 text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2 py-1 text-sm font-medium ${
+                                    Number(tyTrongCuoi) > 0
+                                      ? "bg-green-50 text-green-700 ring-1 ring-green-200"
+                                      : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
+                                  }`}
+                                  title={`Tỷ trọng gốc: ${tyTrong}% • CBQL: ${soLoi}${
+                                    (donViTinh || "")
+                                      .toLowerCase()
+                                      .includes("%") || donViTinh === "%"
+                                      ? "%"
+                                      : " lỗi"
+                                  }`}
+                                >
+                                  {tyTrongCuoi}%
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Nội dung lỗi */}
+                            <td className="p-3">
+                              {editMode ? (
+                                <textarea
+                                  rows="2"
+                                  value={String(
+                                    currentItem?.noi_dung_loi ?? ""
+                                  )}
+                                  onChange={(e) =>
+                                    updateItemField(
+                                      idx,
+                                      "noi_dung_loi",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Mô tả chi tiết lỗi (nếu có)"
+                                  className="w-24 rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-300 resize-none transition-all duration-200"
+                                />
+                              ) : (
+                                <span className="text-slate-600 text-sm break-words">
+                                  {String(currentItem?.noi_dung_loi ?? "") ||
+                                    "---"}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

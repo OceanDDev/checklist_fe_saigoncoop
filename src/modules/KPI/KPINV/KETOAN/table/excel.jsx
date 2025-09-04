@@ -114,18 +114,29 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
 
       // 2) Gom KPI theo key & tính trung bình
       const kpiMap = new Map();
+
+      // đếm để fallback recency nếu không có field 'thang'
+      let seq = 0;
+
       for (const monthRec of quarterData) {
+        seq += 1;
+        // tháng để xác định "gần nhất" trong quý
+        const monthNo =
+          Number(monthRec?.thang) || Number(monthRec?.thang_danh_gia) || null;
+        // fallback: suy ra theo thứ tự (xấp xỉ startMonth + seq - 1)
+        const recency = monthNo ?? startMonth + seq - 1;
+
         const items = Array.isArray(monthRec?.danh_sach_check)
           ? monthRec.danh_sach_check
           : [];
+
         for (const it of items) {
+          const kyHieu = String(it?.ky_hieu || "").trim();
           const key =
-            String(it?.ky_hieu || "").trim() ||
-            String(it?.kpi || "").trim() ||
-            `row_${Math.random()}`;
+            kyHieu || String(it?.kpi || "").trim() || `row_${Math.random()}`;
 
           const prev = kpiMap.get(key) || {
-            ky_hieu: String(it?.ky_hieu || ""),
+            ky_hieu: kyHieu,
             kpi: String(it?.kpi || ""),
             ty_trong_ref: null,
             cac_do_luong: String(it?.cac_do_luong || ""),
@@ -140,6 +151,10 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
             sum_cbql_danh_gia: 0, // % hoặc số lỗi
             sum_ty_trong_cuoi: 0, // điểm sau “điểm trừ”
             cnt: 0,
+
+            // dùng cho F2
+            isF2: kyHieu.toUpperCase() === "F2",
+            latest: null, // { it, recency }
           };
 
           if (prev.ty_trong_ref === null)
@@ -158,40 +173,97 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
             prev.ky_hieu
           );
 
+          // cập nhật tổng cho logic trung bình (áp dụng cho mọi KPI trừ khi F2 sẽ override khi build)
           prev.sum_da_thuc_hien += toNum(it?.da_thuc_hien);
           prev.sum_nv_danh_gia += nvCalc;
           prev.sum_cbql_danh_gia += toNum(it?.so_loi);
           prev.sum_ty_trong_cuoi += tyCuoiCalc;
           prev.cnt += 1;
 
+          // nếu là F2: lưu item có "tháng gần nhất"
+          if (prev.isF2) {
+            if (!prev.latest || recency > prev.latest.recency) {
+              prev.latest = { it, recency };
+            }
+          }
+
           kpiMap.set(key, prev);
         }
       }
 
-      // 3) Chuẩn hoá rows (TB 3 tháng)
+      // 3) Chuẩn hoá rows
       const excelRows = [];
       for (const [, v] of kpiMap) {
-        const cnt = v.cnt || 1;
-        excelRows.push({
-          ma_nv: staffInfo.ma_nhan_vien || "",
-          ho_ten: staffInfo.ho_ten || "",
-          ky_hieu: v.ky_hieu,
-          kpi: v.kpi,
-          ty_trong: v.ty_trong_ref ?? 0,
-          cac_do_luong: v.cac_do_luong,
-          ke_hoach_quy: v.ke_hoach_quy,
-          da_thuc_hien: round1(v.sum_da_thuc_hien / cnt),
-          don_vi_tinh: v.don_vi_tinh,
-          nv_danh_gia: round1(v.sum_nv_danh_gia / cnt),
-          bp_theo_doi: v.bp_theo_doi,
-          chu_ki: v.chu_ki,
-          cbql_danh_gia: round1(v.sum_cbql_danh_gia / cnt),
-          ty_trong_cuoi: round1(v.sum_ty_trong_cuoi / cnt),
-          ghi_chu: v.noi_dung_loi || "",
-        });
+        if (v.isF2 && v.latest?.it) {
+          // ====== SPECIAL CASE F2: dùng dữ liệu của THÁNG GẦN NHẤT ======
+          const it = v.latest.it;
+
+          // ưu tiên lấy các field từ item mới nhất; fallback sang v
+          const ky_hieu = String(it?.ky_hieu || v.ky_hieu || "");
+          const kpi = String(it?.kpi || v.kpi || "");
+          const don_vi_tinh = String(it?.don_vi_tinh || v.don_vi_tinh || "");
+          const cac_do_luong = String(it?.cac_do_luong || v.cac_do_luong || "");
+          const ke_hoach_quy = String(it?.ke_hoach_quy || v.ke_hoach_quy || "");
+          const bp_theo_doi = String(it?.bp_theo_doi || v.bp_theo_doi || "");
+          const chu_ki = String(it?.chu_ki || v.chu_ki || "");
+          const noi_dung_loi = String(it?.noi_dung_loi || v.noi_dung_loi || "");
+
+          const tyRef = toNum(it?.ty_trong ?? v.ty_trong_ref ?? 0);
+
+          const nvCalc = calcNvByDiemTru(
+            tyRef,
+            it?.da_thuc_hien,
+            don_vi_tinh,
+            ky_hieu
+          );
+          const tyCuoiCalc = calcTyCuoiByDiemTru(
+            tyRef,
+            it?.so_loi,
+            don_vi_tinh,
+            ky_hieu
+          );
+
+          excelRows.push({
+            ma_nv: staffInfo.ma_nhan_vien || "",
+            ho_ten: staffInfo.ho_ten || "",
+            ky_hieu,
+            kpi,
+            ty_trong: tyRef, // lấy đúng tháng gần nhất
+            cac_do_luong,
+            ke_hoach_quy,
+            da_thuc_hien: round1(toNum(it?.da_thuc_hien)),
+            don_vi_tinh,
+            nv_danh_gia: round1(nvCalc),
+            bp_theo_doi,
+            chu_ki,
+            cbql_danh_gia: round1(toNum(it?.so_loi)),
+            ty_trong_cuoi: round1(tyCuoiCalc),
+            ghi_chu: noi_dung_loi,
+          });
+        } else {
+          // ====== MẶC ĐỊNH: trung bình các tháng trong quý ======
+          const cnt = v.cnt || 1;
+          excelRows.push({
+            ma_nv: staffInfo.ma_nhan_vien || "",
+            ho_ten: staffInfo.ho_ten || "",
+            ky_hieu: v.ky_hieu,
+            kpi: v.kpi,
+            ty_trong: v.ty_trong_ref ?? 0,
+            cac_do_luong: v.cac_do_luong,
+            ke_hoach_quy: v.ke_hoach_quy,
+            da_thuc_hien: round1(v.sum_da_thuc_hien / cnt),
+            don_vi_tinh: v.don_vi_tinh,
+            nv_danh_gia: round1(v.sum_nv_danh_gia / cnt),
+            bp_theo_doi: v.bp_theo_doi,
+            chu_ki: v.chu_ki,
+            cbql_danh_gia: round1(v.sum_cbql_danh_gia / cnt),
+            ty_trong_cuoi: round1(v.sum_ty_trong_cuoi / cnt),
+            ghi_chu: v.noi_dung_loi || "",
+          });
+        }
       }
 
-      // 4) Workbook + sheet
+      // 4) Workbook + sheet (phần dưới giữ nguyên của bạn)
       const workbook = new ExcelJS.Workbook();
       const ws = workbook.addWorksheet(`KPI Q${quarter}-${year}`);
 
@@ -199,8 +271,9 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
       const safeMerge = (range) => {
         try {
           ws.unMergeCells(range);
-        // eslint-disable-next-line no-undef
-        } catch {e}
+        } catch (e) {
+          e;
+        }
         ws.mergeCells(range);
       };
 
@@ -239,7 +312,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
       const ALTROW = "FFF8F9FA"; // zebrastyle
       const TOTALY = "FFFFF3CD"; // dòng tổng nhạt
 
-      // === HEADER trên cùng (giả shape) ===
+      // === HEADER trên cùng (giữ nguyên) ===
       safeMerge("A1:L1");
       Object.assign(ws.getCell("A1"), {
         value: "LIÊN HIỆP HTX THƯƠNG MẠI",
@@ -271,7 +344,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
       ws.getRow(5).height = 6;
       drawBox("A1", "N5");
 
-      // Block thông tin nhân sự
+      // Block thông tin nhân sự (giữ nguyên)
       const gray = {
         type: "pattern",
         pattern: "solid",
@@ -313,18 +386,18 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         fill: { type: "pattern", pattern: "solid", fgColor: { argb: YELLOW } },
       });
 
-      // === Header bảng (10-11) nền trắng ===
+      // === Header bảng (10-11) ===
       const headers = [
         { range: "A10:A11", text: "Mã NV" },
         { range: "B10:B11", text: "Họ và tên" },
         { range: "C10:C11", text: "Mã chỉ tiêu" },
         { range: "D10:D11", text: "Tên chỉ tiêu" },
-        { range: "E10:E11", text: "Tỷ trọng chỉ tiêu (%)" }, // E
+        { range: "E10:E11", text: "Tỷ trọng chỉ tiêu (%)" },
         { range: "F10:F11", text: "Các chỉ số đo lường, tiêu chí đánh giá" },
         { range: "G10:G11", text: "Kế hoạch quý (nếu có)" },
         { range: "H10:H11", text: "Đã thực hiện" },
         { range: "I10:I11", text: "Đơn vị tính" },
-        { range: "J10:J11", text: "NV tự đánh giá" }, // J
+        { range: "J10:J11", text: "NV tự đánh giá" },
         { range: "K10:K11", text: "Bộ phận theo dõi" },
         { range: "L10:L11", text: "Chu kỳ đánh giá" },
         { range: "M10:M11", text: "CBQL đánh giá" },
@@ -344,7 +417,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FFFFFFFF" },
-        }; // trắng
+        };
         c.border = {
           top: { style: "thin" },
           left: { style: "thin" },
@@ -377,10 +450,10 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
 
         // Format số
         ws.getCell(r, 5).numFmt = "0.0"; // tỷ trọng chỉ tiêu (số)
-        ws.getCell(r, 10).numFmt = '0.0"%"'; // NV tự đánh giá hiển thị như mẫu 1 (màu xanh, %)
+        ws.getCell(r, 10).numFmt = '0.0"%"'; // NV tự đánh giá hiển thị %
         ws.getCell(r, 14).numFmt = "0.0"; // tỷ trọng cuối (điểm)
 
-        // Tô màu cột E (cam) + J (xanh) cho toàn cột
+        // Tô màu cột E (cam) + J (xanh)
         ws.getCell(r, 5).fill = {
           type: "pattern",
           pattern: "solid",
@@ -392,7 +465,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
           fgColor: { argb: GREEN },
         };
 
-        // Căn lề + border + zebra (trừ cột E/J đã tô màu riêng)
+        // Căn lề + border + zebra
         for (let c = 1; c <= 14; c++) {
           const cell = ws.getCell(r, c);
           cell.font = { name: "Times New Roman", size: 10 };
@@ -419,7 +492,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         }
       });
 
-      // Merge dọc A & B (chỉ block dữ liệu)
+      // Merge dọc A & B
       const lastDataRow = startDataRow + excelRows.length - 1;
       if (excelRows.length > 0) {
         safeMerge(`A${startDataRow}:A${lastDataRow}`);
@@ -435,10 +508,8 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         };
       }
 
-      // === DÒNG TỔNG CỘNG (%) ngay dưới dữ liệu ===
+      // === DÒNG TỔNG CỘNG (%) ===
       const totalRow = lastDataRow + 1;
-
-      // Nhãn "TỔNG CỘNG (%)" nằm dưới vùng đầu (A..D)
       safeMerge(`A${totalRow}:D${totalRow}`);
       ws.getCell(`A${totalRow}`).value = "TỔNG CỘNG (%)";
       ws.getCell(`A${totalRow}`).font = {
@@ -451,7 +522,6 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         vertical: "middle",
       };
 
-      // Tổng E, J, N
       ws.getCell(`E${totalRow}`).value = {
         formula: `SUM(E${startDataRow}:E${lastDataRow})`,
       };
@@ -462,12 +532,10 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         formula: `SUM(N${startDataRow}:N${lastDataRow})`,
       };
 
-      // Định dạng tổng hiển thị %
       ws.getCell(`E${totalRow}`).numFmt = '0.0"%"';
       ws.getCell(`J${totalRow}`).numFmt = '0.0"%"';
       ws.getCell(`N${totalRow}`).numFmt = '0.0"%"';
 
-      // Tô màu dòng tổng + giữ màu riêng cho E (cam) & J (xanh)
       for (let c = 1; c <= 14; c++) {
         const cell = ws.getCell(totalRow, c);
         cell.border = {
@@ -480,14 +548,13 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
           vertical: "middle",
           horizontal: [5, 10, 14].includes(c) ? "center" : "right",
         };
-        // nền vàng nhạt tổng
         cell.fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: TOTALY },
         };
       }
-      // ghi đè màu cột E & J cho ô tổng để match vertical strip
+      // giữ strip màu E & J cho ô tổng
       ws.getCell(`E${totalRow}`).fill = {
         type: "pattern",
         pattern: "solid",
@@ -499,22 +566,22 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         fgColor: { argb: GREEN },
       };
 
-      // === WIDTHS gần giống mẫu ===
+      // === WIDTHS ===
       ws.columns = [
-        { width: 12 }, // A  Mã NV
-        { width: 22 }, // B  Họ và tên
-        { width: 8 }, // C  Mã chỉ tiêu
-        { width: 34 }, // D  Tên chỉ tiêu
-        { width: 10 }, // E  Tỷ trọng chỉ tiêu
-        { width: 28 }, // F  Chỉ số đo lường
-        { width: 16 }, // G  Kế hoạch quý
-        { width: 12 }, // H  Đã thực hiện
-        { width: 10 }, // I  Đơn vị tính
-        { width: 12 }, // J  NV tự đánh giá
-        { width: 16 }, // K  BP theo dõi
-        { width: 12 }, // L  Chu kỳ
-        { width: 12 }, // M  CBQL đánh giá
-        { width: 12 }, // N  Tỷ trọng cuối
+        { width: 12 }, // A
+        { width: 22 }, // B
+        { width: 8 }, // C
+        { width: 34 }, // D
+        { width: 10 }, // E
+        { width: 28 }, // F
+        { width: 16 }, // G
+        { width: 12 }, // H
+        { width: 10 }, // I
+        { width: 12 }, // J
+        { width: 16 }, // K
+        { width: 12 }, // L
+        { width: 12 }, // M
+        { width: 12 }, // N
       ];
 
       // 5) Xuất file
