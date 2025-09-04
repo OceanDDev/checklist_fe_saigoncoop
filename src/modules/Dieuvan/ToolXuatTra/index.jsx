@@ -360,22 +360,7 @@ const ToolXuatTra = () => {
 
       {/* Bộ lọc & thêm */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-        <div className="flex items-center gap-2">
-          <label htmlFor="filterBoPhan" className="text-sm font-medium text-gray-700">
-            Bộ phận:
-          </label>
-          <select
-            id="filterBoPhan"
-            value={filterBoPhan}
-            onChange={(e) => setFilterBoPhan(e.target.value)}
-            className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Tất cả</option>
-            <option value="XLĐH">XLĐH</option>
-            <option value="Điều Vận">Điều Vận</option>
-          </select>
-        </div>
-
+      
         <Input
           type="text"
           placeholder="🔍 Mã cửa hàng..."
