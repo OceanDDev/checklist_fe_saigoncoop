@@ -1,6 +1,5 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import XuatTraRow from "./XuatTraRow";
 
 import { rotKienService } from "@/services/dieuvan/xuattra.service"; // service xuất trả
 import { cuaHangService } from "@/services/dieuvan/cuahang.service";
@@ -12,6 +11,8 @@ import ExcelJS from "exceljs";
 
 import AddXuatTraDialog from "./addXuatTra";
 import CustomPagination from "@/components/ui/customPagination";
+import XuatTraRow from "./xuatTrarow";
+import XuatTraHT from "./xuatTrarow/xuatTraHT";
 
 // ===== Helpers =====
 
@@ -55,17 +56,19 @@ const useDebouncedValue = (value, delay = 200) => {
 };
 
 const ToolXuatTra = () => {
+  const [viewMode, setViewMode] = useState("chua"); // ⟵ giống ToolRotKien
   const [data, setData] = useState([]);
   const [cuahangs, setCuahangs] = useState([]);
 
   const [searchMaCH, setSearchMaCH] = useState("");
   const debouncedSearch = useDebouncedValue(searchMaCH, 200);
   const [filterNgayXuatTra, setFilterNgayXuatTra] = useState("");
-  const [filterBoPhan, setFilterBoPhan] = useState("");
+  const [filterBoPhan, setFilterBoPhan] = useState(""); // ⟵ filter Bộ phận
 
-  // PHÂN TRANG (cố định 10 dòng/trang)
+  // PHÂN TRANG (cố định 10 dòng/trang) — tách đôi cho 2 view
   const pageSize = 10;
-  const [page, setPage] = useState(0);
+  const [pageChua, setPageChua] = useState(0);
+  const [pageDa, setPageDa] = useState(0);
 
   // Fetch (chặn double-fetch ở Strict Mode)
   const loadedRef = useRef(false);
@@ -90,16 +93,15 @@ const ToolXuatTra = () => {
   }, []);
 
   // Safe guard nếu vì lý do gì đó data không phải mảng
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const safeData = Array.isArray(data) ? data : [];
 
   const getLocalYMD = (d) => (d ? toDateInputValue(new Date(d)) : "");
 
-  // Lọc dữ liệu - chỉ lấy chưa hoàn thành
-  const filteredData = useMemo(() => {
+  // Lọc dữ liệu (tách CHƯA/ĐÃ)
+  const filteredDataChuaHT = useMemo(() => {
     const q = (debouncedSearch || "").toLowerCase();
     return safeData
-      .filter((item) => !item?.trangThai) // Chỉ lấy chưa hoàn thành
+      .filter((item) => !item?.trangThai)
       .filter((item) => {
         const passMaCH = (item?.maCH || "").toLowerCase().includes(q);
         const anyDate =
@@ -114,23 +116,47 @@ const ToolXuatTra = () => {
       });
   }, [safeData, debouncedSearch, filterNgayXuatTra, filterBoPhan]);
 
-  // Reset trang khi đổi filter
+  const filteredDataDaHT = useMemo(() => {
+    const q = (debouncedSearch || "").toLowerCase();
+    return safeData
+      .filter((item) => !!item?.trangThai)
+      .filter((item) => {
+        const passMaCH = (item?.maCH || "").toLowerCase().includes(q);
+        const anyDate =
+          item?.ngayXuatTra ??
+          item?.ngayCapNhap ??
+          item?.updatedAt ??
+          item?.createdAt;
+        const passNgay =
+          !filterNgayXuatTra || getLocalYMD(anyDate) === filterNgayXuatTra;
+        const passBoPhan = !filterBoPhan || item?.boPhan === filterBoPhan;
+        return passMaCH && passNgay && passBoPhan;
+      });
+  }, [safeData, debouncedSearch, filterNgayXuatTra, filterBoPhan]);
+
+  // Reset trang khi đổi filter / view hoặc đổi dữ liệu
   useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch, filterNgayXuatTra, filterBoPhan, safeData.length]);
+    setPageChua(0);
+    setPageDa(0);
+  }, [debouncedSearch, filterNgayXuatTra, filterBoPhan, viewMode, safeData.length]);
 
   // Tính toán phân trang
-  const pageCount = Math.max(0, Math.ceil(filteredData.length / pageSize));
+  const pageCountChua = Math.max(0, Math.ceil(filteredDataChuaHT.length / pageSize));
+  const pageCountDa = Math.max(0, Math.ceil(filteredDataDaHT.length / pageSize));
 
-  const currentSlice = useMemo(() => {
-    const start = page * pageSize;
+  const currentSliceChua = useMemo(() => {
+    const start = pageChua * pageSize;
     const end = start + pageSize;
-    return filteredData.slice(start, end);
-  }, [filteredData, page]);
+    return filteredDataChuaHT.slice(start, end);
+  }, [filteredDataChuaHT, pageChua]);
+
+  const currentSliceDa = useMemo(() => {
+    const start = pageDa * pageSize;
+    const end = start + pageSize;
+    return filteredDataDaHT.slice(start, end);
+  }, [filteredDataDaHT, pageDa]);
 
   // ===== CRUD Handlers =====
-
-  // Nếu XuatTraRow có nút hoàn tất, truyền prop này xuống
   const handleComplete = useCallback(async (id) => {
     try {
       await rotKienService.updateXuatTra(id, { trangThai: true });
@@ -143,7 +169,19 @@ const ToolXuatTra = () => {
     }
   }, []);
 
-  // Tạo mới (được truyền xuống AddXuatTraDialog)
+  const handleUncomplete = useCallback(async (id) => {
+    try {
+      await rotKienService.updateXuatTra(id, { trangThai: false });
+      const list = await rotKienService.getAllXuatTra();
+      setData(unwrapArray(list));
+      toast.success("↩ Đã đưa về trạng thái chưa hoàn thành!");
+    } catch (err) {
+      console.error("Lỗi hoàn tác:", err);
+      toast.error("❌ Lỗi hoàn tác");
+    }
+  }, []);
+
+  // Handler tạo mới (được truyền xuống AddXuatTraDialog)
   const handleCreate = useCallback(async (payload) => {
     try {
       await rotKienService.createXuatTra(payload);
@@ -179,7 +217,7 @@ const ToolXuatTra = () => {
         item?.ngayCapNhap ??
         item?.updatedAt ??
         item?.createdAt;
-      const soKien = item?.soKien ?? item?.soKien ?? item?.soKienRot ?? "";
+      const soKien = item?.soKien ?? item?.soKienRot ?? "";
       const sku = item?.SKU ?? item?.sku ?? "";
       return {
         STT: i + 1,
@@ -200,6 +238,7 @@ const ToolXuatTra = () => {
           : "",
         "Ghi chú": item?.ghiChu || "",
         "Bộ phận": item?.boPhan || "",
+        "Trạng thái": item?.trangThai ? "Đã hoàn thành" : "Chưa hoàn thành",
       };
     });
 
@@ -233,6 +272,7 @@ const ToolXuatTra = () => {
       { header: "Ngày cập nhật", key: "Ngày cập nhật" },
       { header: "Ghi chú", key: "Ghi chú" },
       { header: "Bộ phận", key: "Bộ phận" },
+      { header: "Trạng thái", key: "Trạng thái" },
     ];
 
     const rowsMapped = mapRowsForExcel(rows);
@@ -263,7 +303,8 @@ const ToolXuatTra = () => {
         const headerText = ws.getColumn(colNumber).header;
         if (
           headerText === "Số kiện xuất trả" ||
-          headerText === "Số soda - hóa đơn"
+          headerText === "Số soda - hóa đơn" ||
+          headerText === "SKU"
         ) {
           cell.alignment = { horizontal: "right" };
         } else if (headerText === "Ngày cập nhật") {
@@ -287,10 +328,9 @@ const ToolXuatTra = () => {
   };
 
   const handleExportVisible = async () => {
-    await exportToExcel(
-      filteredData,
-      `xuat-tra_chua-hoan-thanh_${stamp()}.xlsx`
-    );
+    const visible = viewMode === "chua" ? filteredDataChuaHT : filteredDataDaHT;
+    const suffix = viewMode === "chua" ? "chuaHT" : "daHT";
+    await exportToExcel(visible, `xuat-tra_${suffix}_${stamp()}.xlsx`);
   };
 
   // ===== Render =====
@@ -300,8 +340,41 @@ const ToolXuatTra = () => {
         TOOL XUẤT TRẢ
       </h2>
 
+      {/* Trạng thái + Bộ phận (giống ToolRotKien) */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <label htmlFor="viewMode" className="text-sm font-medium text-gray-700">
+            Trạng thái:
+          </label>
+          <select
+            id="viewMode"
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="chua">Chưa hoàn thành</option>
+            <option value="hoan">Đã hoàn thành</option>
+          </select>
+        </div>
+      </div>
+
       {/* Bộ lọc & thêm */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+        <div className="flex items-center gap-2">
+          <label htmlFor="filterBoPhan" className="text-sm font-medium text-gray-700">
+            Bộ phận:
+          </label>
+          <select
+            id="filterBoPhan"
+            value={filterBoPhan}
+            onChange={(e) => setFilterBoPhan(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Tất cả</option>
+            <option value="XLĐH">XLĐH</option>
+            <option value="Điều Vận">Điều Vận</option>
+          </select>
+        </div>
 
         <Input
           type="text"
@@ -335,54 +408,78 @@ const ToolXuatTra = () => {
         <AddXuatTraDialog cuahangs={cuahangs} onSubmit={handleCreate} />
       </div>
 
-      {/* Bảng dữ liệu */}
-      <div className="overflow-x-auto shadow border rounded">
-        <table className="w-full text-sm text-left bg-white">
-          <thead className="text-xs bg-gray-50 border-b text-center">
-            <tr>
-              <th className="px-4 py-3 font-semibold">STT</th>
-              <th className="px-4 py-3 font-semibold">MÃ CH</th>
-              <th className="px-4 py-3 font-semibold">TÊN CH</th>
-              <th className="px-4 py-3 font-semibold">SKU</th>
-              <th className="px-4 py-3 font-semibold">SỐ KIỆN XUẤT TRẢ</th>
-              <th className="px-4 py-3 font-semibold">SỐ SODA - HÓA ĐƠN</th>
-              <th className="px-4 py-3 font-semibold">NGÀY GIỜ CẬP NHẬT</th>
-              <th className="px-4 py-3 font-semibold">GHI CHÚ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {currentSlice.length === 0 ? (
-              <tr>
-                <td colSpan="10" className="text-center py-5 text-gray-500">
-                  Không có dữ liệu
-                </td>
-              </tr>
-            ) : (
-              currentSlice.map((item, index) => (
-                <XuatTraRow
-                  key={item._id}
-                  data={item}
-                  index={page * pageSize + index}
-                  formatDateTimeVN={formatDateTimeVN}
-                  onComplete={handleComplete} // nếu Row không dùng, cũng không sao
-                />
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Bảng dữ liệu + phân trang theo view */}
+      {viewMode === "chua" ? (
+        <>
+          <div className="overflow-x-auto shadow border rounded">
+            <table className="w-full text-sm text-left bg-white">
+              <thead className="text-xs bg-gray-50 border-b text-center">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">STT</th>
+                  <th className="px-4 py-3 font-semibold">MÃ CH</th>
+                  <th className="px-4 py-3 font-semibold">TÊN CH</th>
+                  <th className="px-4 py-3 font-semibold">SKU</th>
+                  <th className="px-4 py-3 font-semibold">SỐ KIỆN XUẤT TRẢ</th>
+                  <th className="px-4 py-3 font-semibold">SỐ SODA - HÓA ĐƠN</th>
+                  <th className="px-4 py-3 font-semibold">NGÀY GIỜ CẬP NHẬT</th>
+                  <th className="px-4 py-3 font-semibold">GHI CHÚ</th>
+                  <th className="px-4 py-3 font-semibold">TRẠNG THÁI</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentSliceChua.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" className="text-center py-5 text-gray-500">
+                      Không có dữ liệu
+                    </td>
+                  </tr>
+                ) : (
+                  currentSliceChua.map((item, index) => (
+                    <XuatTraRow
+                      key={item._id}
+                      data={item}
+                      index={pageChua * pageSize + index}
+                      formatDateTimeVN={formatDateTimeVN}
+                      onComplete={handleComplete}
+                    />
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-      {/* Footer phân trang */}
-      <div className="mt-4 flex justify-center">
-        <CustomPagination
-          pageCount={pageCount}
-          forcePage={page}
-          onPageChange={({ selected }) => setPage(selected)}
-          marginPagesDisplayed={2}
-          pageRangeDisplayed={3}
-          additionalClassname="gap-2 justify-center"
-        />
-      </div>
+          {/* Footer phân trang */}
+          <div className="mt-4 flex justify-center">
+            <CustomPagination
+              pageCount={pageCountChua}
+              forcePage={pageChua}
+              onPageChange={({ selected }) => setPageChua(selected)}
+              marginPagesDisplayed={2}
+              pageRangeDisplayed={3}
+              additionalClassname="gap-2 justify-center"
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <XuatTraHT
+            data={currentSliceDa}
+            onUncomplete={handleUncomplete}
+          />
+
+          {/* Footer phân trang */}
+          <div className="mt-4 flex justify-center">
+            <CustomPagination
+              pageCount={pageCountDa}
+              forcePage={pageDa}
+              onPageChange={({ selected }) => setPageDa(selected)}
+              marginPagesDisplayed={2}
+              pageRangeDisplayed={3}
+              additionalClassname="gap-2 justify-center"
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -5,11 +5,12 @@ import "tippy.js/dist/tippy.css"; // style mặc định của tooltip
 const XuatTraRow = ({
   data,
   index,
+  onComplete,        // ⟵ optional: đánh dấu hoàn thành
 }) => {
   // Format ngày giờ VN (24h), KHÔNG tự trừ/ cộng 7h
   const formatDateVN = (value) => {
     if (!value) return "—";
-    const d = new Date(value); // hỗ trợ cả string lẫn Date
+    const d = new Date(value);
     if (isNaN(d.getTime())) return "—";
     return d
       .toLocaleString("vi-VN", {
@@ -23,10 +24,12 @@ const XuatTraRow = ({
       .replace(",", "");
   };
 
-  const fmtNum = (v) => (v ?? v === 0 ? v : "—"); // giữ được số 0
+  // Hiển thị được số 0; null/undefined/"" -> "—"
+  const fmtNum = (v) => (v === 0 || v ? v : "—");
 
-  // Fallback tên field cho chắc ăn
-  const sku = data?.SKU ?? data?.sku ?? "—";
+  // Fallback tên field cho chắc chắn
+  const sku = data?.SKU ?? data?.sku ?? "";
+  const soKien = data?.soKien ?? data?.soKienRot ?? "";
   const ngayAny =
     data?.ngayXuatTra ?? data?.ngayCapNhap ?? data?.updatedAt ?? data?.createdAt;
 
@@ -52,14 +55,16 @@ const XuatTraRow = ({
             rounded-md border bg-slate-100
             border-slate-200 px-2 py-0.5 text-slate-700
           "
-          title={data?.maCH}
+          title={data?.maCH || ""}
         >
           {data?.maCH || "—"}
         </span>
       </td>
 
       {/* Tên CH */}
-      <td className="px-3 py-3 text-left text-slate-800">{data?.tenCH || "—"}</td>
+      <td className="px-3 py-3 text-left text-slate-800">
+        {data?.tenCH || "—"}
+      </td>
 
       {/* SKU */}
       <td className="px-3 py-3 text-center whitespace-nowrap">
@@ -69,15 +74,15 @@ const XuatTraRow = ({
             rounded-md border bg-blue-50
             border-blue-200 px-2 py-0.5 text-blue-700
           "
-          title={sku}
+          title={sku || "—"}
         >
-          {sku}
+          {sku || "—"}
         </span>
       </td>
 
       {/* Số kiện xuất trả */}
       <td className="px-3 py-3 tabular-nums text-slate-800">
-        {fmtNum(data?.soKien ?? data?.soKien ?? data?.soKienRot)}
+        {fmtNum(soKien)}
       </td>
 
       {/* Số soda (truncate + tooltip) */}
@@ -103,7 +108,31 @@ const XuatTraRow = ({
             {data?.ghiChu || "—"}
           </span>
         </Tippy>
-      </td>      
+      </td>
+
+      {/* TRẠNG THÁI + hành động (nút hoàn thành nằm trong cùng 1 cột để khớp header) */}
+      <td className="px-3 py-3">
+        <div className="flex flex-col items-center justify-center gap-2">
+          {/* Badge trạng thái */}
+          
+
+          {/* Nút hoàn thành (optional) */}
+          {onComplete && (
+            <button
+              onClick={() => onComplete(data._id)}
+              className="
+                inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium
+                border border-emerald-200 bg-emerald-50 text-emerald-700
+                hover:bg-emerald-100 shadow-sm transition
+                focus:outline-none focus:ring-2 focus:ring-emerald-500
+              "
+              title="Đánh dấu hoàn thành"
+            >
+              ✅ Hoàn thành
+            </button>
+          )}
+        </div>
+      </td>
     </tr>
   );
 };

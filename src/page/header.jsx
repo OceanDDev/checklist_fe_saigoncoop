@@ -24,6 +24,8 @@ const Header = () => {
         return "TOOL ĐIỀU VẬN";
       case 2:
         return "KPIs";
+      case 4:
+        return "XUẤT TRẢ";
       default:
         return "CHECKLIST";
     }
@@ -45,7 +47,7 @@ const Header = () => {
     >
       <div className="mx-auto max-w-7xl flex items-center justify-between gap-3">
         {/* Logo */}
-         <Link
+        <Link
           to="/"
           className="flex items-center rounded-xl bg-white/40 backdrop-blur-sm
                      border border-white/50 shadow-md px-2 py-1"

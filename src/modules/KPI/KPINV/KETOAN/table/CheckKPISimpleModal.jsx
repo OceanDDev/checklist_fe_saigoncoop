@@ -425,410 +425,432 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="kpi-review-title"
+    >
+      {/* Overlay */}
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm"></div>
+
+      {/* Panel wrapper (đổi max-width theo formRecord) */}
       <div
-        className={`w-full rounded-2xl bg-white shadow-2xl max-h-[85vh] flex flex-col overflow-hidden transition-all duration-300 ${
-          formRecord ? "max-w-[95vw]" : "max-w-md"
-        }`}
+        className={[
+          "relative z-10 mx-auto my-8 w-full px-4 sm:px-6",
+          formRecord ? "max-w-[95vw]" : "max-w-md",
+        ].join(" ")}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b shrink-0">
-          <h3 className="text-base md:text-lg font-semibold text-slate-800">
-            Đánh giá KPI
-          </h3>
-          <button
-            onClick={onClose}
-            className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200"
-          >
-            Đóng
-          </button>
-        </div>
+        {/* Panel */}
+        <div className="w-full rounded-2xl bg-white shadow-xl ring-1 ring-slate-900/10 max-h-[85vh] flex flex-col overflow-hidden transition-all duration-300">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/80 shrink-0">
+            <h3
+              id="kpi-review-title"
+              className="text-lg sm:text-xl font-semibold text-slate-800 tracking-tight"
+            >
+              Đánh giá KPI
+            </h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            >
+              Đóng
+            </button>
+          </div>
 
-        {/* Body - Di chuyển thanh cuộn lên đây */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-4 md:p-6 space-y-4">
-            {/* Tìm mã NV */}
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
-              <input
-                value={codeInput}
-                onChange={(e) => setCodeInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleFind()}
-                placeholder="Nhập mã nhân viên (vd: 23475)"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-              />
-              <button
-                onClick={handleFind}
-                disabled={finding}
-                className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60"
-              >
-                {finding ? "Đang tải..." : "Lấy Form KPI"}
-              </button>
-            </div>
-            {findError && <p className="text-sm text-rose-600">{findError}</p>}
+          {/* Body (scroll ở body) */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-6 py-6 space-y-6">
+              {/* Tìm mã NV */}
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+                <input
+                  value={codeInput}
+                  onChange={(e) => setCodeInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleFind()}
+                  placeholder="Nhập mã nhân viên (vd: 23475)"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                />
+                <button
+                  onClick={handleFind}
+                  disabled={finding}
+                  className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                >
+                  {finding ? "Đang tải..." : "Lấy Form KPI"}
+                </button>
+              </div>
+              {findError && (
+                <p className="text-sm text-rose-600">{findError}</p>
+              )}
 
-            {/* Thông tin nhân viên + tháng/năm + bảng KPI */}
-            {formRecord && (
-              <div className="space-y-3">
-                {/* Info nhân viên */}
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-700 ring-1 ring-slate-200">
-                    Mã NV:{" "}
-                    <b className="ml-1 font-semibold">
-                      {formRecord.ma_nhan_vien}
-                    </b>
-                  </span>
-                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-emerald-200">
-                    Họ tên:{" "}
-                    <b className="ml-1 font-semibold">{formRecord.ho_ten}</b>
-                  </span>
-                  <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-indigo-700 ring-1 ring-indigo-200">
-                    Đơn vị:{" "}
-                    <b className="ml-1 font-semibold">{formRecord.don_vi}</b>
-                  </span>
-                </div>
+              {/* Thông tin nhân viên + tháng/năm + bảng KPI */}
+              {formRecord && (
+                <div className="space-y-4">
+                  {/* Info nhân viên */}
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-700 ring-1 ring-inset ring-slate-200">
+                      Mã NV:{" "}
+                      <b className="ml-1 font-semibold">
+                        {formRecord.ma_nhan_vien}
+                      </b>
+                    </span>
+                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                      Họ tên:{" "}
+                      <b className="ml-1 font-semibold">{formRecord.ho_ten}</b>
+                    </span>
+                    <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-indigo-700 ring-1 ring-inset ring-indigo-200">
+                      Đơn vị:{" "}
+                      <b className="ml-1 font-semibold">{formRecord.don_vi}</b>
+                    </span>
+                  </div>
 
-                {/* Tháng / Năm */}
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="text-sm text-slate-700">Tháng chấm:</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={12}
-                    value={monthInput}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      if (!Number.isNaN(v)) {
-                        const clamped = Math.min(
-                          12,
-                          Math.max(1, Math.trunc(v))
-                        );
-                        setMonthInput(clamped);
-                      }
-                    }}
-                    className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                  <span className="text-sm text-slate-600">
-                    Năm: <b className="font-semibold">{currentYear}</b>
-                  </span>
-                </div>
+                  {/* Tháng / Năm */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="text-sm text-slate-700">
+                      Tháng chấm:
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={monthInput}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (!Number.isNaN(v)) {
+                          const clamped = Math.min(
+                            12,
+                            Math.max(1, Math.trunc(v))
+                          );
+                          setMonthInput(clamped);
+                        }
+                      }}
+                      className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                    />
+                    <span className="text-sm text-slate-600">
+                      Năm:{" "}
+                      <b className="font-semibold text-slate-800">
+                        {currentYear}
+                      </b>
+                    </span>
+                  </div>
 
-                {/* Thông tin tính điểm - CẬP NHẬT MỚI: chỉ hiển thị điểm cuối */}
-                <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 p-4 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-6 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-600">
-                          Tổng tỷ trọng KPI:
-                        </span>
-                        <span className="font-semibold text-slate-800">
-                          {finalScore}%
-                        </span>
+                  {/* Thông tin tính điểm (chỉ hiển thị điểm cuối) */}
+                  <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 p-4 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex flex-wrap items-center gap-6 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-600">
+                            Tổng tỷ trọng KPI:
+                          </span>
+                          <span className="font-semibold text-slate-800">
+                            {finalScore}%
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-600 text-sm">
-                        Điểm cuối cùng:
-                      </span>
-                      <div
-                        className={`inline-flex items-center rounded-full px-4 py-2 text-lg font-bold ring-2 ${
-                          finalScore < 100
-                            ? "bg-orange-50 text-orange-700 ring-orange-200"
-                            : "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                        }`}
-                      >
-                        {finalScore}%
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-600 text-sm">
+                          Điểm cuối cùng:
+                        </span>
+                        <div
+                          className={[
+                            "inline-flex items-center rounded-full px-4 py-2 text-lg font-bold ring-2",
+                            finalScore < 100
+                              ? "bg-orange-50 text-orange-700 ring-orange-200"
+                              : "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                          ].join(" ")}
+                        >
+                          {finalScore}%
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Bảng KPI - CẬP NHẬT MỚI: thêm cột nội dung lỗi */}
-                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-lg">
-                  <table className="w-full text-sm bg-white min-w-[2200px]">
-                    <colgroup>
-                      <col className="w-[6%]" /> {/* Ký hiệu */}
-                      <col className="w-[16%]" /> {/* KPI */}
-                      <col className="w-[5%]" /> {/* Tỷ trọng */}
-                      <col className="w-[10%]" /> {/* Các đo lường */}
-                      <col className="w-[7%]" /> {/* Kế hoạch quý */}
-                      <col className="w-[7%]" /> {/* Đã thực hiện */}
-                      <col className="w-[5%]" /> {/* Đơn vị tính */}
-                      <col className="w-[7%]" /> {/* NV đánh giá */}
-                      <col className="w-[7%]" /> {/* BP theo dõi */}
-                      <col className="w-[5%]" /> {/* Chu kì */}
-                      <col className="w-[7%]" /> {/* CBQL Đánh giá */}
-                      <col className="w-[7%]" /> {/* Tỷ trọng cuối */}
-                      <col className="w-[18%]" /> {/* Nội dung lỗi */}
-                    </colgroup>
-                    <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
-                      <tr className="text-center">
-                        <th className="p-3 font-bold text-slate-700">
-                          Ký hiệu
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">KPI</th>
-                        <th className="p-3 font-bold text-slate-700">
-                          Tỷ trọng
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">
-                          Các đo lường
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">
-                          Kế hoạch quý
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">
-                          Đã thực hiện
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">
-                          Đơn vị tính
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">
-                          NV đánh giá
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">
-                          BP theo dõi
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">Chu kì</th>
-                        <th className="p-3 font-bold text-slate-700">
-                          CBQL Đánh giá
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">
-                          Tỷ trọng cuối
-                        </th>
-                        <th className="p-3 font-bold text-slate-700">
-                          Ghi chú
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {formKpis.map((row, i) => {
-                        const cbqlDanhGia = Number(row.so_loi || 0);
-                        const tyTrongCuoi = Number(row.ty_trong_cuoi || 0);
-                        const donViTinh = String(row.don_vi_tinh ?? "");
-                        const nvDanhGia = Number(row.nv_danh_gia || 0);
-                        const daThucHien = Number(row.da_thuc_hien || 0);
+                  {/* Bảng KPI */}
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-lg">
+                    <table className="w-full text-sm bg-white min-w-[2200px]">
+                      <colgroup>
+                        <col className="w-[6%]" />
+                        <col className="w-[16%]" />
+                        <col className="w-[5%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[5%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[5%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[18%]" />
+                      </colgroup>
+                      <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
+                        <tr className="text-center">
+                          <th className="p-3 font-bold text-slate-700">
+                            Ký hiệu
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">KPI</th>
+                          <th className="p-3 font-bold text-slate-700">
+                            Tỷ trọng
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            Các đo lường
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            Kế hoạch quý
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            Đã thực hiện
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            Đơn vị tính
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            NV đánh giá
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            BP theo dõi
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            Chu kì
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            CBQL Đánh giá
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            Tỷ trọng cuối
+                          </th>
+                          <th className="p-3 font-bold text-slate-700">
+                            Ghi chú
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {formKpis.map((row, i) => {
+                          const cbqlDanhGia = Number(row.so_loi || 0);
+                          const tyTrongCuoi = Number(row.ty_trong_cuoi || 0);
+                          const donViTinh = String(row.don_vi_tinh ?? "");
+                          const nvDanhGia = Number(row.nv_danh_gia || 0);
+                          const daThucHien = Number(row.da_thuc_hien || 0);
 
-                        return (
-                          <tr
-                            key={row._id || i}
-                            className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
-                          >
-                            {/* Ký hiệu */}
-                            <td className="p-3 text-center">
-                              <span className="text-slate-600 text-sm">
-                                {row.ky_hieu || "---"}
-                              </span>
-                            </td>
-
-                            {/* KPI */}
-                            <td className="p-3">
-                              <span className="text-slate-800 font-medium break-words text-sm">
-                                {row.kpi || "---"}
-                              </span>
-                            </td>
-
-                            {/* Tỷ trọng */}
-                            <td className="p-3 text-center">
-                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-slate-700 ring-1 ring-slate-200 text-sm">
-                                {row.ty_trong}%
-                              </span>
-                            </td>
-
-                            {/* Các đo lường - CHỈ ĐỌC */}
-                            <td className="p-3">
-                              <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-600 min-h-[2.5rem] flex items-center">
-                                {row.cac_do_luong || "---"}
-                              </div>
-                            </td>
-
-                            {/* Kế hoạch quý - CHỈ ĐỌC */}
-                            <td className="p-3 text-center">
-                              <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm text-slate-600">
-                                {row.ke_hoach_quy || "---"}
-                              </div>
-                            </td>
-
-                            {/* Đã thực hiện - CÓ THỂ SỬA */}
-                            <td className="p-3 text-center">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.1"
-                                value={row.da_thuc_hien}
-                                onChange={(e) =>
-                                  updateKpiField(
-                                    i,
-                                    "da_thuc_hien",
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Thực hiện"
-                                className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all duration-200"
-                              />
-                            </td>
-
-                            {/* Đơn vị tính */}
-                            <td className="p-3 text-center">
-                              <span
-                                className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                                  donViTinh.toLowerCase().includes("%") ||
-                                  donViTinh === "%"
-                                    ? "bg-purple-50 text-purple-700 ring-1 ring-purple-200"
-                                    : "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
-                                }`}
-                              >
-                                {donViTinh || "---"}
-                              </span>
-                            </td>
-
-                            {/* NV đánh giá - HIỂN THỊ LOGIC MỚI */}
-                            <td className="p-3 text-center">
-                              <div className="flex flex-col items-center gap-1">
-                                <span
-                                  className={`inline-flex items-center rounded-full px-2 py-1 text-sm font-medium ${
-                                    nvDanhGia > 0
-                                      ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200"
-                                      : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
-                                  }`}
-                                  title={`Gốc: ${row.nv_danh_gia_goc}% ${
-                                    daThucHien > 0
-                                      ? `- Thực hiện: ${daThucHien}%`
-                                      : ""
-                                  }`}
-                                >
-                                  {nvDanhGia}%
+                          return (
+                            <tr
+                              key={row._id || i}
+                              className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
+                            >
+                              <td className="p-3 text-center">
+                                <span className="text-slate-600 text-sm">
+                                  {row.ky_hieu || "---"}
                                 </span>
-                              </div>
-                            </td>
+                              </td>
 
-                            {/* BP theo dõi - CHỈ ĐỌC */}
-                            <td className="p-3 text-center">
-                              <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm text-slate-600">
-                                {row.bp_theo_doi || "---"}
-                              </div>
-                            </td>
+                              <td className="p-3">
+                                <span className="text-slate-800 font-medium break-words text-sm">
+                                  {row.kpi || "---"}
+                                </span>
+                              </td>
 
-                            {/* Chu kì - CHỈ ĐỌC */}
-                            <td className="p-3 text-center">
-                              <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm text-slate-600">
-                                {row.chu_ki || "---"}
-                              </div>
-                            </td>
+                              <td className="p-3 text-center">
+                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-slate-700 ring-1 ring-inset ring-slate-200 text-sm">
+                                  {row.ty_trong}%
+                                </span>
+                              </td>
 
-                            {/* CBQL Đánh giá - CÓ THỂ SỬA */}
-                            <td className="p-3 text-center">
-                              <div className="flex items-center justify-center gap-1">
+                              <td className="p-3">
+                                <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-600 min-h-[2.5rem] flex items-center">
+                                  {row.cac_do_luong || "---"}
+                                </div>
+                              </td>
+
+                              <td className="p-3 text-center">
+                                <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm text-slate-600">
+                                  {row.ke_hoach_quy || "---"}
+                                </div>
+                              </td>
+
+                              <td className="p-3 text-center">
                                 <input
                                   type="number"
                                   min="0"
-                                  step={
-                                    donViTinh.toLowerCase().includes("%") ||
-                                    donViTinh === "%"
-                                      ? "0.1"
-                                      : "1"
-                                  }
-                                  value={cbqlDanhGia}
+                                  step="0.1"
+                                  value={row.da_thuc_hien}
                                   onChange={(e) =>
                                     updateKpiField(
                                       i,
-                                      "cbql_danh_gia",
+                                      "da_thuc_hien",
                                       e.target.value
                                     )
                                   }
-                                  className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all duration-200"
+                                  placeholder="Thực hiện"
+                                  className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-center text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
                                 />
-                                {(donViTinh.toLowerCase().includes("%") ||
-                                  donViTinh === "%") && (
-                                  <span className="text-xs">%</span>
-                                )}
-                              </div>
-                            </td>
+                              </td>
 
-                            {/* Tỷ trọng cuối - HIỂN THỊ KẾT QUẢ */}
-                            <td className="p-3 text-center">
-                              <div className="flex flex-col items-center gap-1">
+                              <td className="p-3 text-center">
                                 <span
-                                  className={`inline-flex items-center rounded-full px-2 py-1 text-sm font-medium ${
-                                    tyTrongCuoi > 0
-                                      ? "bg-green-50 text-green-700 ring-1 ring-green-200"
-                                      : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
-                                  }`}
-                                  title={`Gốc: ${row.ty_trong_cuoi_goc}% - CBQL: ${cbqlDanhGia}%`}
+                                  className={[
+                                    "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium",
+                                    donViTinh.toLowerCase().includes("%") ||
+                                    donViTinh === "%"
+                                      ? "bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-200"
+                                      : "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
+                                  ].join(" ")}
                                 >
-                                  {tyTrongCuoi}%
+                                  {donViTinh || "---"}
                                 </span>
-                              </div>
-                            </td>
+                              </td>
 
-                            {/* Nội dung lỗi - CÓ THỂ SỬA */}
-                            <td className="p-3">
-                              <textarea
-                                value={row.noi_dung_loi}
-                                onChange={(e) =>
-                                  updateKpiField(
-                                    i,
-                                    "noi_dung_loi",
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Mô tả  (nếu có)..."
-                                rows="2"
-                                className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all duration-200 resize-none"
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              <td className="p-3 text-center">
+                                <div className="flex flex-col items-center gap-1">
+                                  <span
+                                    className={[
+                                      "inline-flex items-center rounded-full px-2 py-1 text-sm font-medium",
+                                      nvDanhGia > 0
+                                        ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200"
+                                        : "bg-slate-50 text-slate-700 ring-1 ring-inset ring-slate-200",
+                                    ].join(" ")}
+                                    title={`Gốc: ${row.nv_danh_gia_goc}% ${
+                                      daThucHien > 0
+                                        ? `- Thực hiện: ${daThucHien}%`
+                                        : ""
+                                    }`}
+                                  >
+                                    {nvDanhGia}%
+                                  </span>
+                                </div>
+                              </td>
+
+                              <td className="p-3 text-center">
+                                <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm text-slate-600">
+                                  {row.bp_theo_doi || "---"}
+                                </div>
+                              </td>
+
+                              <td className="p-3 text-center">
+                                <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm text-slate-600">
+                                  {row.chu_ki || "---"}
+                                </div>
+                              </td>
+
+                              <td className="p-3 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step={
+                                      donViTinh.toLowerCase().includes("%") ||
+                                      donViTinh === "%"
+                                        ? "0.1"
+                                        : "1"
+                                    }
+                                    value={cbqlDanhGia}
+                                    onChange={(e) =>
+                                      updateKpiField(
+                                        i,
+                                        "cbql_danh_gia",
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-center text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                                  />
+                                  {(donViTinh.toLowerCase().includes("%") ||
+                                    donViTinh === "%") && (
+                                    <span className="text-xs">%</span>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="p-3 text-center">
+                                <div className="flex flex-col items-center gap-1">
+                                  <span
+                                    className={[
+                                      "inline-flex items-center rounded-full px-2 py-1 text-sm font-medium",
+                                      tyTrongCuoi > 0
+                                        ? "bg-green-50 text-green-700 ring-1 ring-inset ring-green-200"
+                                        : "bg-slate-50 text-slate-700 ring-1 ring-inset ring-slate-200",
+                                    ].join(" ")}
+                                    title={`Gốc: ${row.ty_trong_cuoi_goc}% - CBQL: ${cbqlDanhGia}%`}
+                                  >
+                                    {tyTrongCuoi}%
+                                  </span>
+                                </div>
+                              </td>
+
+                              <td className="p-3">
+                                <textarea
+                                  value={row.noi_dung_loi}
+                                  onChange={(e) =>
+                                    updateKpiField(
+                                      i,
+                                      "noi_dung_loi",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Mô tả (nếu có)..."
+                                  rows="2"
+                                  className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 resize-none"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Footer với nút lưu */}
-        {formRecord && (
-          <div className="flex items-center justify-between gap-3 p-4 border-t bg-slate-50/50 shrink-0">
-            <div className="flex items-center gap-4 text-sm text-slate-600">
-              <span>
-                Đánh giá cho:{" "}
-                <strong className="text-slate-800">{formRecord.ho_ten}</strong>
-              </span>
-              <span className="hidden md:inline">•</span>
-              <span className="hidden md:inline">
-                Tháng <strong className="text-slate-800">{monthInput}</strong> /{" "}
-                {currentYear}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onClose}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                onClick={handleSave}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-2 text-sm font-medium text-white shadow-lg hover:from-indigo-500 hover:to-indigo-400 focus:ring-2 focus:ring-indigo-300 focus:ring-offset-2 transition-all duration-200"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+          {/* Footer */}
+          {formRecord && (
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-200/80 bg-slate-50 rounded-b-2xl shrink-0">
+              <div className="flex items-center gap-4 text-sm text-slate-600">
+                <span>
+                  Đánh giá cho:{" "}
+                  <strong className="text-slate-800">
+                    {formRecord.ho_ten}
+                  </strong>
+                </span>
+                <span className="hidden md:inline">•</span>
+                <span className="hidden md:inline">
+                  Tháng <strong className="text-slate-800">{monthInput}</strong>{" "}
+                  / {currentYear}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Lưu đánh giá
-              </button>
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-2 text-sm font-semibold text-white shadow-lg hover:from-indigo-500 hover:to-indigo-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  Lưu đánh giá
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
