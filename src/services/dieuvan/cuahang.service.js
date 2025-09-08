@@ -15,6 +15,21 @@ const getAllCuaHang = async () => {
   }
 };
 
+const addCuaHang = async (data) => {
+  try {
+    const results = await requestService.post(
+      URL.dieuvan.cuahang, // ✅ path
+      data,                // ✅ body (dữ liệu cửa hàng)
+      undefined,           // headers (nếu có)
+      ApiServer            // axiosInstance
+    );
+    return results;
+  } catch (error) {
+    console.error("Lỗi khi gọi addCuaHang:", error);
+  }
+};
+
 export const cuaHangService = {
- getAllCuaHang
+  getAllCuaHang,
+  addCuaHang,
 };

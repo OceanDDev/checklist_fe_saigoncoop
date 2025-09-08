@@ -48,7 +48,7 @@ const getUserFromStorage = () => {
 
 // Function tính NV đánh giá dựa trên da_thuc_hien và ty_trong
 // NEW: NV đánh giá giống CheckKPISimpleModal
-const calculateNVDanhGia = ({ daThucHien, tyTrong, donViTinh, kyHieu }) => {
+const calculateNVDanhGia = ({ daThucHien, tyTrong, donViTinh, kyHieu}) => {
   const w = Number(tyTrong || 0);
   const th = Number(daThucHien || 0);
 
@@ -76,7 +76,7 @@ const calculateNVDanhGia = ({ daThucHien, tyTrong, donViTinh, kyHieu }) => {
   return Math.round(((w * pct) / 100) * 100) / 100;
 };
 
-const StaffKPIDetailModal = ({ staff, onClose, selectedYear }) => {
+const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = false }) => {
   // Sử dụng selectedYear từ props, fallback về năm hiện tại
   const targetYear = useMemo(
     () => Number(selectedYear || new Date().getFullYear()),
@@ -612,7 +612,8 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear }) => {
                   </span>
                 </div>
               </div>
-
+                          {canManageKPI  && (
+                            
               <div className="flex items-center gap-2">
                 {!editMode ? (
                   <button
@@ -699,6 +700,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear }) => {
                   Đóng
                 </button>
               </div>
+                          )}
             </div>
 
             {/* Success notification */}

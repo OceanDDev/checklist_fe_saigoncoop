@@ -151,7 +151,7 @@ function App() {
         <Route
           path="/kpi"
           element={
-            <PrivateRoute allowRoles={[2]}>
+            <PrivateRoute allowRoles={[2,10,11,12,13,14,15,16,17]}>
               <MainLayout><HomeKPI/></MainLayout>
             </PrivateRoute>
           }
@@ -159,7 +159,7 @@ function App() {
          <Route
           path="/kpi/homestaff"
           element={
-            <PrivateRoute allowRoles={[2]}>
+            <PrivateRoute allowRoles={[2,10,11,12,13,14,15,16,17]}>
               <MainLayout><HomeStaffKPI/></MainLayout>
             </PrivateRoute>
           }
@@ -167,7 +167,7 @@ function App() {
          <Route
           path="/kpi/homestaff/homeKeToan"
           element={
-            <PrivateRoute allowRoles={[2]}>
+            <PrivateRoute allowRoles={[2,10,11,12,13,14,15,16,17]}>
               <MainLayout><HomeKeToan/></MainLayout>
             </PrivateRoute>
           }
@@ -175,7 +175,7 @@ function App() {
         <Route
           path="/kpi/homestaff/homeKeToan/table/:year"
           element={
-            <PrivateRoute allowRoles={[2]}>
+            <PrivateRoute allowRoles={[2,10,11,12,13,14,15,16,17]}>
               <MainLayout><TableKeToan/></MainLayout>
             </PrivateRoute>
           }

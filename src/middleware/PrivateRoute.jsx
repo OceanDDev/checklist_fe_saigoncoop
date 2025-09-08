@@ -23,7 +23,17 @@ const PrivateRoute = ({ children, allowRoles = [] }) => {
   if (allowRoles.length > 0 && !allowRoles.includes(user.role)) {
     if (user.role === 0) return <Navigate to="/" replace />;
     if (user.role === 1) return <Navigate to="/dieuvan" replace />;
+
     if (user.role === 2) return <Navigate to="/kpi" replace />;
+    if (user.role === 10) return <Navigate to="/kpi" replace />;
+    if (user.role === 11) return <Navigate to="/kpi" replace />;
+    if (user.role === 12) return <Navigate to="/kpi" replace />;
+    if (user.role === 13) return <Navigate to="/kpi" replace />;
+    if (user.role === 14) return <Navigate to="/kpi" replace />;
+    if (user.role === 15) return <Navigate to="/kpi" replace />;
+    if (user.role === 16) return <Navigate to="/kpi" replace />;
+    if (user.role === 17) return <Navigate to="/kpi" replace />;
+
     if (user.role === 4) return <Navigate to="/xuattra" replace />;
 
     return <Navigate to="/login" replace />;

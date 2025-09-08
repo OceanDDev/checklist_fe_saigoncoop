@@ -13,6 +13,7 @@ import ExcelJS from "exceljs";
 
 import AddKienDialog from "./addKien";
 import CustomPagination from "@/components/ui/customPagination";
+import AddCuaHangDialog from "./addCuaHang/AddCuaHangDialog";
 
 // Helper: YYYY-MM-DD (local timezone)
 const toDateInputValue = (d = new Date()) => {
@@ -85,10 +86,12 @@ const ToolRotKien = () => {
     const q = (debouncedSearch || "").toLowerCase();
     return data
       .filter((item) => !item.trangThai)
-      .filter((item) =>
-        (item.maCH || "").toLowerCase().includes(q) &&
-        (!filterNgayRotKien || item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
-        (!filterBoPhan || item.boPhan === filterBoPhan) // <— NEW
+      .filter(
+        (item) =>
+          (item.maCH || "").toLowerCase().includes(q) &&
+          (!filterNgayRotKien ||
+            item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
+          (!filterBoPhan || item.boPhan === filterBoPhan) // <— NEW
       );
   }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan]);
 
@@ -96,10 +99,12 @@ const ToolRotKien = () => {
     const q = (debouncedSearch || "").toLowerCase();
     return data
       .filter((item) => item.trangThai)
-      .filter((item) =>
-        (item.maCH || "").toLowerCase().includes(q) &&
-        (!filterNgayRotKien || item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
-        (!filterBoPhan || item.boPhan === filterBoPhan) // <— NEW
+      .filter(
+        (item) =>
+          (item.maCH || "").toLowerCase().includes(q) &&
+          (!filterNgayRotKien ||
+            item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
+          (!filterBoPhan || item.boPhan === filterBoPhan) // <— NEW
       );
   }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan]);
 
@@ -110,8 +115,14 @@ const ToolRotKien = () => {
   }, [debouncedSearch, filterNgayRotKien, filterBoPhan, viewMode, data.length]);
 
   // Tính toán phân trang
-  const pageCountChua = Math.max(0, Math.ceil(filteredDataChuaHT.length / pageSize));
-  const pageCountDa = Math.max(0, Math.ceil(filteredDataDaHT.length / pageSize));
+  const pageCountChua = Math.max(
+    0,
+    Math.ceil(filteredDataChuaHT.length / pageSize)
+  );
+  const pageCountDa = Math.max(
+    0,
+    Math.ceil(filteredDataDaHT.length / pageSize)
+  );
 
   const currentSliceChua = useMemo(() => {
     const start = pageChua * pageSize;
@@ -135,6 +146,50 @@ const ToolRotKien = () => {
       console.error("Cập nhật trạng thái thất bại:", error);
     }
   }, []);
+  const handleCreateCuaHang = useCallback(
+    async (payload) => {
+      try {
+        // Kiểm tra trùng mã CH trước khi gọi service (client-side validation)
+        const existingCH = cuahangs.find(
+          (ch) => ch.maCH?.toLowerCase() === payload.maCH?.toLowerCase()
+        );
+        if (existingCH) {
+          toast.error(`❌ Mã cửa hàng "${payload.maCH}" đã tồn tại!`);
+          throw new Error(`Mã cửa hàng "${payload.maCH}" đã tồn tại`);
+        }
+
+        await cuaHangService.addCuaHang(payload);
+        const list = await cuaHangService.getAllCuaHang();
+        setCuahangs(list || []);
+        toast.success("✅ Thêm cửa hàng thành công!");
+      } catch (err) {
+        console.error("Lỗi tạo cửa hàng:", err);
+
+        // Xử lý các loại lỗi khác nhau
+        const errorMessage = err.response?.data?.message || err.message || "";
+
+        if (
+          err.response?.status === 409 ||
+          errorMessage.includes("duplicate") ||
+          errorMessage.includes("exists") ||
+          errorMessage.includes("tồn tại") ||
+          errorMessage.includes("E11000")
+        ) {
+          // MongoDB duplicate key error
+          toast.error(`❌ Mã cửa hàng "${payload.maCH}" đã tồn tại!`);
+        } else if (err.response?.status === 400) {
+          toast.error(`❌ ${errorMessage || "Dữ liệu không hợp lệ!"}`);
+        } else if (err.response?.status === 500) {
+          toast.error("❌ Lỗi server, vui lòng thử lại!");
+        } else if (!errorMessage.includes("tồn tại")) {
+          toast.error("❌ Lỗi tạo cửa hàng");
+        }
+
+        throw err; // Ném lại error để component con xử lý
+      }
+    },
+    [cuahangs]
+  );
 
   const handleUncomplete = useCallback(async (id) => {
     try {
@@ -169,9 +224,9 @@ const ToolRotKien = () => {
   const stamp = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(
-      d.getHours()
-    )}${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+      d.getDate()
+    )}_${pad(d.getHours())}${pad(d.getMinutes())}`;
   };
 
   const mapRowsForExcel = (rows) =>
@@ -238,7 +293,11 @@ const ToolRotKien = () => {
     header.alignment = { vertical: "middle", horizontal: "center" };
     header.height = 22;
     header.eachCell((cell) => {
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F2937" } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1F2937" },
+      };
       cell.border = {
         top: { style: "thin", color: { argb: "FFCBD5E1" } },
         left: { style: "thin", color: { argb: "FFCBD5E1" } },
@@ -289,7 +348,10 @@ const ToolRotKien = () => {
       {/* Trạng thái + Bộ phận */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
         <div className="flex items-center gap-2">
-          <label htmlFor="viewMode" className="text-sm font-medium text-gray-700">
+          <label
+            htmlFor="viewMode"
+            className="text-sm font-medium text-gray-700"
+          >
             Trạng thái:
           </label>
           <select
@@ -302,14 +364,15 @@ const ToolRotKien = () => {
             <option value="hoan">Đã hoàn thành</option>
           </select>
         </div>
-
-        
       </div>
 
       {/* Bộ lọc & thêm */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-      <div className="flex items-center gap-2">
-          <label htmlFor="filterBoPhan" className="text-sm font-medium text-gray-700">
+        <div className="flex items-center gap-2">
+          <label
+            htmlFor="filterBoPhan"
+            className="text-sm font-medium text-gray-700"
+          >
             Bộ phận:
           </label>
           <select
@@ -350,7 +413,8 @@ const ToolRotKien = () => {
         >
           ⬇️ Xuất Excel
         </Button>
-
+        {/* Dialog thêm cửa hàng MỚI */}
+        <AddCuaHangDialog onSubmit={handleCreateCuaHang} />
         {/* Dialog thêm kiện */}
         <AddKienDialog cuahangs={cuahangs} onSubmit={handleCreate} />
       </div>
