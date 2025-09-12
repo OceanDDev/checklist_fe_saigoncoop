@@ -148,6 +148,11 @@ function App() {
             </PrivateRoute>
           }
         />
+
+        {/*    KPI   */}
+                {/*    KPI KETOAN  */}
+
+
         <Route
           path="/kpi"
           element={
@@ -180,6 +185,15 @@ function App() {
             </PrivateRoute>
           }
         />
+
+
+
+
+
+
+
+
+
 
         <Route path="/thank-you" element={<ThankYouScreen />} />
 

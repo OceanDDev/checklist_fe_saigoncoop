@@ -2,17 +2,18 @@
 import { useMemo, useState, useEffect } from "react";
 import { formkpistaffService } from "@/services/formkpistaff.service";
 
-
 const emptyKPI = () => ({
   ky_hieu: "",
   kpi: "",
   ty_trong: 0,
+  so_loi: 100, // Thêm trường mới
+  noi_dung_loi: "", // Thêm trường mới
   don_vi_tinh: "",
-  cac_do_luong: "",
-  ke_hoach_quy: "",
   da_thuc_hien: "",
+  ke_hoach_quy: "",
   chu_ki: "",
-  nv_danh_gia: ""
+  cac_do_luong: "",
+  bp_theo_doi: "" // Thêm trường mới
 });
 
 const AddStaffWithKPIModal = ({ selectedYear, onClose, onCreated }) => {
@@ -67,6 +68,7 @@ const AddStaffWithKPIModal = ({ selectedYear, onClose, onCreated }) => {
     for (const [i, r] of form.kpis.entries()) {
       if (!r.kpi.trim()) return `Dòng KPI #${i + 1}: thiếu tên KPI`;
       if (Number(r.ty_trong) < 0) return `Dòng KPI #${i + 1}: tỷ trọng không hợp lệ`;
+      if (Number(r.so_loi) < 0 || Number(r.so_loi) > 100) return `Dòng KPI #${i + 1}: số lỗi phải từ 0-100`;
     }
     return null;
   };
@@ -90,12 +92,16 @@ const AddStaffWithKPIModal = ({ selectedYear, onClose, onCreated }) => {
           ky_hieu: (r.ky_hieu || "").trim(),
           kpi: (r.kpi || "").trim(),
           ty_trong: Number(r.ty_trong) || 0,
+          so_loi: Number(r.so_loi) || 100,
+          noi_dung_loi: (r.noi_dung_loi || "").trim(),
+          ty_trong_cuoi: Number(r.ty_trong_cuoi) || 0,
           don_vi_tinh: (r.don_vi_tinh || "").trim(),
-          cac_do_luong: (r.cac_do_luong || "").trim(),
-          ke_hoach_quy: (r.ke_hoach_quy || "").trim(),
           da_thuc_hien: (r.da_thuc_hien || "").trim(),
+          ke_hoach_quy: (r.ke_hoach_quy || "").trim(),
           chu_ki: (r.chu_ki || "").trim(),
           nv_danh_gia: (r.nv_danh_gia || "").trim(),
+          cac_do_luong: (r.cac_do_luong || "").trim(),
+          bp_theo_doi: (r.bp_theo_doi || "").trim(),
         })),
       };
 
@@ -113,7 +119,7 @@ const AddStaffWithKPIModal = ({ selectedYear, onClose, onCreated }) => {
 
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center bg-black/60 p-4">
-      <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
+      <div className="w-full max-w-7xl rounded-2xl bg-white shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <div>
@@ -161,8 +167,6 @@ const AddStaffWithKPIModal = ({ selectedYear, onClose, onCreated }) => {
             </div>
           </div>
 
-         
-
           {/* KPI rows */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -175,60 +179,136 @@ const AddStaffWithKPIModal = ({ selectedYear, onClose, onCreated }) => {
               </button>
             </div>
 
+            {/* Column Headers */}
+            <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-600 px-3 py-2 bg-slate-100 rounded-lg">
+              <div className="col-span-1">Ký hiệu</div>
+              <div className="col-span-2">Tên KPI</div>
+              <div className="col-span-1">Tỷ trọng</div>
+              <div className="col-span-1">Số lỗi</div>
+              <div className="col-span-1">TT cuối</div>
+              <div className="col-span-1">ĐVT</div>
+              <div className="col-span-1">Đã TH</div>
+              <div className="col-span-1">KH quý</div>
+              <div className="col-span-1">Chu kỳ</div>
+              <div className="col-span-1">NV ĐG</div>
+              <div className="col-span-1">Actions</div>
+            </div>
+
             <div className="space-y-2">
               {form.kpis.map((row, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-1 md:grid-cols-8 gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50/50"
-                >
-                  <input
-                    className="md:col-span-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                    placeholder="Ký hiệu"
-                    value={row.ky_hieu}
-                    onChange={(e) => updateKPI(idx, "ky_hieu", e.target.value)}
-                  />
-                  <input
-                    className="md:col-span-2 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                    placeholder="Tên KPI"
-                    value={row.kpi}
-                    onChange={(e) => updateKPI(idx, "kpi", e.target.value)}
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    className="md:col-span-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                    placeholder="Tỷ trọng"
-                    value={row.ty_trong}
-                    onChange={(e) => updateKPI(idx, "ty_trong", e.target.value)}
-                  />
-                  <input
-                    className="md:col-span-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                    placeholder="ĐVT"
-                    value={row.don_vi_tinh}
-                    onChange={(e) => updateKPI(idx, "don_vi_tinh", e.target.value)}
-                  />
-                  <input
-                    className="md:col-span-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                    placeholder="Đo lường"
-                    value={row.cac_do_luong}
-                    onChange={(e) => updateKPI(idx, "cac_do_luong", e.target.value)}
-                  />
-                  <input
-                    className="md:col-span-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                    placeholder="Chu kỳ"
-                    value={row.chu_ki}
-                    onChange={(e) => updateKPI(idx, "chu_ki", e.target.value)}
-                  />
-                  <div className="md:col-span-1 flex items-center justify-end">
-                    <button
-                      onClick={() => removeRow(idx)}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
-                      disabled={form.kpis.length === 1}
-                      title={form.kpis.length === 1 ? "Cần ít nhất 1 dòng KPI" : "Xóa dòng"}
-                    >
-                      🗑️ Xóa
-                    </button>
+                <div key={idx} className="space-y-3 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+                  {/* First row of inputs */}
+                  <div className="grid grid-cols-12 gap-2">
+                    <input
+                      className="col-span-1 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="F1"
+                      value={row.ky_hieu}
+                      onChange={(e) => updateKPI(idx, "ky_hieu", e.target.value)}
+                    />
+                    <input
+                      className="col-span-2 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="Tên KPI"
+                      value={row.kpi}
+                      onChange={(e) => updateKPI(idx, "kpi", e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      className="col-span-1 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="5"
+                      value={row.ty_trong}
+                      onChange={(e) => updateKPI(idx, "ty_trong", e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="col-span-1 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="100"
+                      value={row.so_loi}
+                      onChange={(e) => updateKPI(idx, "so_loi", e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      className="col-span-1 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="5"
+                      value={row.ty_trong_cuoi}
+                      onChange={(e) => updateKPI(idx, "ty_trong_cuoi", e.target.value)}
+                    />
+                    <input
+                      className="col-span-1 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="%"
+                      value={row.don_vi_tinh}
+                      onChange={(e) => updateKPI(idx, "don_vi_tinh", e.target.value)}
+                    />
+                    <input
+                      className="col-span-1 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="100"
+                      value={row.da_thuc_hien}
+                      onChange={(e) => updateKPI(idx, "da_thuc_hien", e.target.value)}
+                    />
+                    <input
+                      className="col-span-1 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="Kế hoạch"
+                      value={row.ke_hoach_quy}
+                      onChange={(e) => updateKPI(idx, "ke_hoach_quy", e.target.value)}
+                    />
+                    <input
+                      className="col-span-1 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="Tháng"
+                      value={row.chu_ki}
+                      onChange={(e) => updateKPI(idx, "chu_ki", e.target.value)}
+                    />
+                    <input
+                      className="col-span-1 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="5"
+                      value={row.nv_danh_gia}
+                      onChange={(e) => updateKPI(idx, "nv_danh_gia", e.target.value)}
+                    />
+                    <div className="col-span-1 flex items-center justify-center">
+                      <button
+                        onClick={() => removeRow(idx)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                        disabled={form.kpis.length === 1}
+                        title={form.kpis.length === 1 ? "Cần ít nhất 1 dòng KPI" : "Xóa dòng"}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Second row - longer fields */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Các đo lường</label>
+                      <input
+                        className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                        placeholder="Tỷ lệ thực hiện Doanh số toàn Liên hiệp"
+                        value={row.cac_do_luong}
+                        onChange={(e) => updateKPI(idx, "cac_do_luong", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Bộ phận theo dõi</label>
+                      <input
+                        className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                        placeholder="Liên hiệp"
+                        value={row.bp_theo_doi}
+                        onChange={(e) => updateKPI(idx, "bp_theo_doi", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Nội dung lỗi</label>
+                      <input
+                        className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                        placeholder="Mô tả lỗi (nếu có)"
+                        value={row.noi_dung_loi}
+                        onChange={(e) => updateKPI(idx, "noi_dung_loi", e.target.value)}
+                      />
+                    </div>
                   </div>
                 </div>
               ))}

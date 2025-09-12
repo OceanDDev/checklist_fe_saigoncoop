@@ -63,7 +63,7 @@ const TableKeToan = () => {
       setUserRoles([...roles]);
     } catch (e) {
       setUserRoles([]);
-      e
+      e;
     }
   }, []);
 
@@ -78,7 +78,13 @@ const TableKeToan = () => {
     try {
       setLoading(true);
       const list = await formkpistaffService.getAllFormKPI();
-      const staffList = Array.isArray(list) ? list : [];
+      let staffList = Array.isArray(list) ? list : [];
+
+      // chỉ giữ nhân viên có đơn vị là "Kế Toán"
+      staffList = staffList.filter(
+        (staff) => (staff.don_vi || "").trim().toLowerCase() === "kế toán"
+      );
+
       setData(staffList);
 
       // Sau khi có danh sách nhân viên, check trạng thái KPI cho từng người theo năm được chọn
