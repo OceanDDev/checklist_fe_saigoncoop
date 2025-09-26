@@ -44,12 +44,15 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
   const [formData, setFormData] = useState({
     maCH: "",
     tenCH: "",
-    sku: "",
-    soKien: "",
-    soSoda: "",
     ngayXuatTraDate: toVNDate(),
     ghiChu: "",
+    soSoda: "", // Số soda chung cho tất cả
   });
+
+  // State cho các dòng SKU
+  const [skuRows, setSkuRows] = useState([
+    { id: Date.now(), sku: "", soKien: "" }
+  ]);
 
   const [errors, setErrors] = useState({});
   const [showSuggest, setShowSuggest] = useState(false);
@@ -92,6 +95,39 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
     [cuahangByCode, suggestions.length]
   );
 
+  // Handle thay đổi SKU row
+  const handleSkuRowChange = useCallback((id, field, value) => {
+    setSkuRows(prev => prev.map(row => 
+      row.id === id ? { ...row, [field]: value } : row
+    ));
+    // Clear errors cho field này
+    setErrors(prev => ({ ...prev, [`${field}_${id}`]: undefined }));
+  }, []);
+
+  // Thêm dòng SKU mới
+  const addSkuRow = useCallback(() => {
+    setSkuRows(prev => [...prev, { 
+      id: Date.now() + Math.random(), 
+      sku: "", 
+      soKien: ""
+    }]);
+  }, []);
+
+  // Xóa dòng SKU
+  const removeSkuRow = useCallback((id) => {
+    if (skuRows.length > 1) {
+      setSkuRows(prev => prev.filter(row => row.id !== id));
+      // Clear errors cho dòng này
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        ['sku', 'soKien'].forEach(field => {
+          delete newErrors[`${field}_${id}`];
+        });
+        return newErrors;
+      });
+    }
+  }, [skuRows.length]);
+
   const selectSuggest = useCallback((ch) => {
     setFormData((prev) => ({ ...prev, maCH: ch.maCH, tenCH: ch.tenCH }));
     setShowSuggest(false);
@@ -104,9 +140,20 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
     const matched = cuahangByCode.get(formData.maCH.trim());
     if (!matched) errs.maCH = "Mã cửa hàng không tồn tại";
     if (!formData.ngayXuatTraDate) errs.ngayXuatTraDate = "Chọn ngày";
+
+    // Validate SKU rows
+    skuRows.forEach(row => {
+      if (!row.sku.trim()) {
+        errs[`sku_${row.id}`] = "SKU không được để trống";
+      }
+      if (!row.soKien.trim()) {
+        errs[`soKien_${row.id}`] = "Số kiện không được để trống";
+      }
+    });
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
-  }, [cuahangByCode, formData.maCH, formData.ngayXuatTraDate]);
+  }, [cuahangByCode, formData.maCH, formData.ngayXuatTraDate, skuRows]);
 
   const handleSave = async () => {
     if (!validate()) return;
@@ -132,22 +179,31 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
       return;
     }
 
-    await onSubmit?.({
+    // Tạo danh sách các record từ các SKU rows
+    const records = skuRows.map(row => ({
       ...formData,
+      sku: row.sku,
+      soKien: row.soKien,
+      soSoda: formData.soSoda, // Sử dụng soSoda chung
       boPhan,
       ngayXuatTra,
       trangThai: false,
-    });
+    }));
 
+    // Submit từng record một hoặc submit array - tùy thuộc vào API của bạn
+    for (const record of records) {
+      await onSubmit?.(record);
+    }
+
+    // Reset form
     setFormData({
       maCH: "",
       tenCH: "",
-      soKien: "",
-      sku: "",
-      soSoda: "",
       ngayXuatTraDate: toVNDate(),
       ghiChu: "",
+      soSoda: "",
     });
+    setSkuRows([{ id: Date.now(), sku: "", soKien: "" }]);
     setShowSuggest(false);
     setActiveIndex(-1);
     setErrors({});
@@ -172,7 +228,7 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
         <Button variant="default">➕ Thêm xuất trả</Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[640px] text-[15px] md:text-base">
+      <DialogContent className="sm:max-w-[800px] text-[15px] md:text-base max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
             Thêm thông tin xuất trả
@@ -274,57 +330,8 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
             />
           </div>
 
-          {/* Số & Ngày */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800">
-                Số kiện xuất trả
-              </label>
-              <Input
-                name="soKien"
-                placeholder="0"
-                type="number"
-                value={formData.soKien}
-                onChange={handleChange}
-                className="h-11 text-[15px] text-right tabular-nums text-slate-900 placeholder:text-slate-400"
-                inputMode="numeric"
-              />
-            </div>
-
-            {/* SKU - đã sửa name từ "SKU" thành "sku" */}
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800">
-                SKU <span className="text-rose-600">*</span>
-              </label>
-              <Input
-                name="sku"
-                placeholder="Nhập SKU"
-                value={formData.sku}
-                onChange={handleChange}
-                className={[
-                  "h-11 text-[15px] text-slate-900 placeholder:text-slate-400",
-                  errors.sku ? "border-rose-500 ring-2 ring-rose-500" : "",
-                ].join(" ")}
-              />
-              {errors.sku && (
-                <p className="text-sm text-rose-600">{errors.sku}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800">
-                Số soda - hóa đơn
-              </label>
-              <Input
-                name="soSoda"
-                placeholder="0"
-                value={formData.soSoda}
-                onChange={handleChange}
-                className="h-11 text-[15px] text-right tabular-nums text-slate-900 placeholder:text-slate-400"
-                inputMode="numeric"
-              />
-            </div>
-
+          {/* Ngày và Số soda */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-800">
                 Ngày cập nhật <span className="text-rose-600">*</span>
@@ -347,6 +354,101 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
                   {errors.ngayXuatTraDate}
                 </p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-800">
+                Số soda - hóa đơn 
+              </label>
+              <Input
+                name="soSoda"
+                placeholder="0"
+                value={formData.soSoda}
+                onChange={handleChange}
+                className="h-11 text-[15px] text-right tabular-nums text-slate-900 placeholder:text-slate-400"
+                inputMode="numeric"
+              />
+            </div>
+          </div>
+
+          {/* SKU Rows */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold text-slate-800">
+                Chi tiết SKU <span className="text-rose-600">*</span>
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addSkuRow}
+                className="h-8 px-3 text-xs font-semibold"
+              >
+                ➕ Thêm dòng
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {skuRows.map((row, index) => (
+                <div key={row.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-slate-700">
+                      Dòng {index + 1}
+                    </span>
+                    {skuRows.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeSkuRow(row.id)}
+                        className="h-6 w-6 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                      >
+                        ✕
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-600">
+                        SKU <span className="text-rose-600">*</span>
+                      </label>
+                      <Input
+                        placeholder="Nhập SKU"
+                        value={row.sku}
+                        onChange={(e) => handleSkuRowChange(row.id, 'sku', e.target.value)}
+                        className={[
+                          "h-10 text-sm text-slate-900 placeholder:text-slate-400",
+                          errors[`sku_${row.id}`] ? "border-rose-500 ring-1 ring-rose-500" : "",
+                        ].join(" ")}
+                      />
+                      {errors[`sku_${row.id}`] && (
+                        <p className="text-xs text-rose-600">{errors[`sku_${row.id}`]}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-600">
+                        Số kiện <span className="text-rose-600">*</span>
+                      </label>
+                      <Input
+                        placeholder="0"
+                        type="number"
+                        value={row.soKien}
+                        onChange={(e) => handleSkuRowChange(row.id, 'soKien', e.target.value)}
+                        className={[
+                          "h-10 text-sm text-right tabular-nums text-slate-900 placeholder:text-slate-400",
+                          errors[`soKien_${row.id}`] ? "border-rose-500 ring-1 ring-rose-500" : "",
+                        ].join(" ")}
+                        inputMode="numeric"
+                      />
+                      {errors[`soKien_${row.id}`] && (
+                        <p className="text-xs text-rose-600">{errors[`soKien_${row.id}`]}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -377,7 +479,7 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
             onClick={handleSave}
             className="h-11 px-6 text-[15px] font-semibold"
           >
-            Lưu
+            Lưu ({skuRows.length} dòng)
           </Button>
         </DialogFooter>
       </DialogContent>
