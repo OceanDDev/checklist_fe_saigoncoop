@@ -53,7 +53,7 @@ const UserRowCheckList = ({ user, index, fetchChecklists }) => {
 
   return (
     <tr className="bg-white hover:bg-gray-50 transition text-sm text-center">
-      <td className="border px-3 py-2 min-w-[60px]">{index + 1}</td>
+      <td className="border px-3 py-2 min-w-[60px]">{index}</td>
       <td className="border px-3 py-2 min-w-[100px]">{user.ma_nhan_vien}</td>
       <td className="border px-3 py-2 min-w-[140px]">{user.ho_ten}</td>
       <td className="border px-3 py-2 min-w-[140px]">{user.don_vi}</td>
