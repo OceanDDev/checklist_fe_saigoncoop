@@ -3,14 +3,13 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { checkListService } from "@/services/checklist.service";
 import { checkListFormService } from "@/services/checklistform.service";
-import { saveAs } from "file-saver";
 import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import UserRowCheckList from "./userRow";
-import ExcelJS from "exceljs";
 import ApiPagination from "@/components/ui/apiPagination";
+import ExcelExporter from "./Excel/ExcelExporter";
 
 const LoadingSpinner = () => (
   <tr>
@@ -42,21 +41,19 @@ const LoadingSpinner = () => (
   </tr>
 );
 
-// Helper: format YYYY-MM-DD (hoặc undefined nếu null)
-
 const UserTableCheckList = () => {
   const { formId } = useParams();
 
   // ===== STATES =====
   const [checkList, setCheckList] = useState([]);
-  const [allCheckList, setAllCheckList] = useState([]); // để build allCheckTitles + baseOptions
+  const [allCheckList, setAllCheckList] = useState([]);
   const [title, setTitle] = useState([]);
 
   const [searchMaNV, setSearchMaNV] = useState("");
 
   // Dropdown "Tùy chọn"
-  const [baseOptions, setBaseOptions] = useState([]); // tất cả option xuất hiện trong dữ liệu
-  const [availableOptions, setAvailableOptions] = useState([]); // option có data theo khoảng ngày
+  const [baseOptions, setBaseOptions] = useState([]);
+  const [availableOptions, setAvailableOptions] = useState([]);
   const [selectedOption, setSelectedOption] = useState("");
 
   // Khoảng ngày
@@ -70,7 +67,8 @@ const UserTableCheckList = () => {
   const endStr = dateRange[0].endDate
     ? dayjs(dateRange[0].endDate).format("YYYY-MM-DD")
     : undefined;
-  // trạng thái tải
+
+  // Trạng thái tải
   const [isLoading, setIsLoading] = useState(true);
   const [isTitleLoading, setIsTitleLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -87,8 +85,8 @@ const UserTableCheckList = () => {
           page: currentPage,
           limit: itemsPerPage,
           searchMaNV,
-          selectedOption, // "label: value"
-          startDate: startStr, // YYYY-MM-DD
+          selectedOption,
+          startDate: startStr,
           endDate: endStr,
         });
         setCheckList(response?.data || []);
@@ -104,12 +102,12 @@ const UserTableCheckList = () => {
     if (formId) fetchPaginatedData();
   }, [formId, currentPage, searchMaNV, selectedOption, startStr, endStr]);
 
-  // Khi filter thay đổi → về trang 1 tránh trang rỗng
+  // Khi filter thay đổi → về trang 1
   useEffect(() => {
     setCurrentPage(1);
   }, [searchMaNV, selectedOption, startStr, endStr]);
 
-  // ===== FETCH: ALL data 1 lần để build baseOptions + allCheckTitles =====
+  // ===== FETCH: ALL data để build baseOptions + allCheckTitles =====
   useEffect(() => {
     const fetchAllData = async () => {
       try {
@@ -120,7 +118,6 @@ const UserTableCheckList = () => {
         const all = response?.data || [];
         setAllCheckList(all);
 
-        // Build danh sách option mặc định (giống list bạn đang thấy)
         const allOpts = Array.from(
           new Set(
             all.flatMap((doc) =>
@@ -143,7 +140,7 @@ const UserTableCheckList = () => {
     if (formId) fetchAllData();
   }, [formId]);
 
-  // ===== FETCH: Tiêu đề form (hiển thị header) =====
+  // ===== FETCH: Tiêu đề form =====
   useEffect(() => {
     const fetchTitle = async () => {
       try {
@@ -163,7 +160,7 @@ const UserTableCheckList = () => {
     }
   }, [formId]);
 
-  // ===== FETCH: Option có data trong khoảng ngày (BE) =====
+  // ===== FETCH: Option có data trong khoảng ngày =====
   useEffect(() => {
     const fetchAvailable = async () => {
       if (!formId || !startStr || !endStr) {
@@ -193,22 +190,19 @@ const UserTableCheckList = () => {
     fetchAvailable();
   }, [formId, startStr, endStr]);
 
-  // ===== COMPUTED: danh sách option hiển thị cho dropdown =====
+  // ===== COMPUTED: danh sách option hiển thị =====
   const displayOptions = useMemo(() => {
-    // Có chọn ngày → chỉ show option có data trong khoảng
     if (startStr && endStr) return availableOptions;
-    // Chưa chọn ngày → show toàn bộ option đã từng xuất hiện
     return baseOptions;
   }, [startStr, endStr, availableOptions, baseOptions]);
 
-  // Nếu option đang chọn không còn hợp lệ sau khi thay filter → clear
   useEffect(() => {
     if (selectedOption && !displayOptions.includes(selectedOption)) {
       setSelectedOption("");
     }
   }, [displayOptions, selectedOption]);
 
-  // ===== COMPUTED: allCheckTitles (để render & Excel) =====
+  // ===== COMPUTED: allCheckTitles =====
   const allCheckTitles = useMemo(() => {
     return Array.from(
       new Set(
@@ -244,170 +238,19 @@ const UserTableCheckList = () => {
 
   const exportToExcel = useCallback(async () => {
     try {
-      const response = await checkListService.getCheckListsByFormId(formId, {
-        page: 1,
-        limit: 9999,
-        searchMaNV,
-        selectedOption,
-        startDate: startStr,
-        endDate: endStr,
-      });
-
-      const sortedFilteredUsers = (response?.data || []).sort(
-        (a, b) => new Date(a.ngay_tao) - new Date(b.ngay_tao)
+      const exporter = new ExcelExporter(formId, title?.[0]?.tieu_de);
+      await exporter.export(
+        {
+          searchMaNV,
+          selectedOption,
+          startDate: startStr,
+          endDate: endStr,
+        },
+        allCheckTitles
       );
-
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("CheckList");
-
-      const firstUser = sortedFilteredUsers[0];
-      const user_donvi =
-        firstUser?.don_vi || "................................";
-      const so_hieu_xe =
-        firstUser?.option_da_chon
-          ?.map((opt) => `${opt.label}: ${opt.value}`)
-          .join(", ") || "................................";
-
-      worksheet.addRow([`BẢNG KIỂM TRA ${title?.[0]?.tieu_de || ""}`]);
-      const row1 = worksheet.addRow([
-        `Bộ phận: ${user_donvi}  -  Loại xe:................................`,
-      ]);
-      const row2 = worksheet.addRow([
-        `Nhân viên vận hành:................................   -  ${so_hieu_xe}`,
-      ]);
-      row1.alignment = {
-        horizontal: "left",
-        vertical: "middle",
-        wrapText: true,
-      };
-      row2.alignment = {
-        horizontal: "left",
-        vertical: "middle",
-        wrapText: true,
-      };
-
-      const maNVRow = worksheet.addRow(["STT", "Mã NV"]);
-      sortedFilteredUsers.forEach((user) => {
-        maNVRow.getCell(maNVRow.cellCount + 1).value = user.ma_nhan_vien || "";
-      });
-
-      const headerMainRow = worksheet.addRow([
-        "STT",
-        "Ngày Kiểm tra\n        ╱\nMục Kiểm tra",
-      ]);
-      sortedFilteredUsers.forEach((user) => {
-        headerMainRow.getCell(headerMainRow.cellCount + 1).value = user.ngay_tao
-          ? new Date(user.ngay_tao).toLocaleDateString("vi-VN")
-          : "";
-      });
-
-      allCheckTitles.forEach((fieldContent, index) => {
-        const row = [index + 1, fieldContent];
-        sortedFilteredUsers.forEach((user) => {
-          let foundAnswer = "";
-          if (user.checklist_groups && Array.isArray(user.checklist_groups)) {
-            user.checklist_groups.forEach((group) => {
-              if (group.items && Array.isArray(group.items)) {
-                const foundItem = group.items.find(
-                  (item) => item.noidung === fieldContent
-                );
-                if (foundItem && foundItem.dap_an)
-                  foundAnswer = foundItem.dap_an;
-              }
-            });
-          }
-          row.push(foundAnswer);
-        });
-        worksheet.addRow(row);
-      });
-
-      worksheet.addRow([]);
-
-      const totalCols = sortedFilteredUsers.length + 2;
-      worksheet.addRow([
-        "",
-        "Nội dung không đạt (nếu có)",
-        ...Array(sortedFilteredUsers.length).fill(""),
-      ]);
-
-      const noteRow = ["", "Ghi chú"];
-      sortedFilteredUsers.forEach((user) => noteRow.push(user.ghi_chu || ""));
-      worksheet.addRow(noteRow);
-
-      worksheet.addRow([
-        "",
-        "Nhân viên kiểm tra ký xác nhận hoàn thành",
-        ...Array(sortedFilteredUsers.length).fill(""),
-      ]);
-      worksheet.addRow([]);
-
-      worksheet.addRow([
-        `Ghi chú:\n- Khi có bất kì dấu hiệu bất thường/không đúng tiêu chuẩn vận hành của mục nào bên trên phải lập tức báo cáo ngay cho giám sát kho và ngưng vận hành hoàn toàn cho đến khi sự cố được khắc phục đảm bảo an toàn vận hành\n- Nhân viên kiểm tra là nhân viên đầu tiên vận hành trong ngày và chịu trách nhiệm kết quả kiểm tra\n- Nếu ở tình trạng bình thường đánh dấu (Đ) Đạt, nếu dấu hiệu bất thường/ không đúng tiêu chuẩn vận hành đánh dấu (KĐ) không đạt và miêu tả tình trạng ở cột ghi chú`,
-      ]);
-
-      [1, 2, 3].forEach((i) => {
-        worksheet.mergeCells(
-          `A${i}:` + String.fromCharCode(65 + totalCols - 1) + `${i}`
-        );
-      });
-      worksheet.mergeCells("A4:A5");
-
-      const lastRow = worksheet.lastRow.number;
-      worksheet.mergeCells(
-        `A${lastRow}:` + String.fromCharCode(65 + totalCols - 1) + `${lastRow}`
-      );
-
-      worksheet.eachRow((row) => {
-        for (let i = 1; i <= totalCols; i++) {
-          if (!row.getCell(i).value) row.getCell(i).value = "";
-        }
-      });
-
-      worksheet.eachRow((row, rowNumber) => {
-        row.eachCell((cell) => {
-          const isFirstRow = rowNumber === 1;
-          const isLastRow = rowNumber >= lastRow;
-          const cellText = (cell.value || "").toString().trim().toUpperCase();
-          const isBold = isFirstRow || (cellText !== "Đ" && cellText !== "KĐ");
-
-          cell.alignment = {
-            vertical: "middle",
-            horizontal: rowNumber >= 6 ? "left" : "center",
-            wrapText: true,
-          };
-          cell.font = {
-            name: "Arial",
-            size: isFirstRow ? 14 : isLastRow ? 8 : 12,
-            bold: isBold,
-          };
-          cell.border = {
-            top: { style: "thin" },
-            left: { style: "thin" },
-            bottom: { style: "thin" },
-            right: { style: "thin" },
-          };
-        });
-
-        if (rowNumber === lastRow) row.height = 100;
-        if (rowNumber === 4 || rowNumber === 5) row.height = 30;
-      });
-
-      worksheet.pageSetup = {
-        orientation: "landscape",
-        paperSize: 9,
-        horizontalCentered: true,
-      };
-      worksheet.headerFooter = {
-        oddFooter: "&L&8 BM-478.KTTTB &C&8 Ban hành lần 1 &R&8 Trang &P/&N",
-      };
-
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      saveAs(blob, `CheckList_${new Date().toISOString()}.xlsx`);
     } catch (error) {
       console.error("Lỗi export Excel:", error);
+      alert("Có lỗi xảy ra khi xuất file Excel");
     }
   }, [
     formId,
@@ -442,11 +285,19 @@ const UserTableCheckList = () => {
       <div className="mb-6 flex flex-wrap gap-4 items-center">
         <button
           onClick={exportToExcel}
-          disabled={isLoading}
+          disabled={isLoading || !selectedOption}
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          title={
+            !selectedOption ? "Vui lòng chọn loại xe trước khi xuất Excel" : ""
+          }
         >
           ⬇️ Xuất Excel
         </button>
+        {!selectedOption && (
+          <div className="absolute left-0 top-full mt-1 bg-yellow-50 border border-yellow-300 text-yellow-800 text-xs px-3 py-2 rounded shadow-lg whitespace-nowrap z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            ⚠️ Vui lòng chọn loại xe trước khi xuất Excel
+          </div>
+        )}
 
         <input
           type="text"
@@ -456,7 +307,6 @@ const UserTableCheckList = () => {
           className="border px-3 py-2 rounded shadow-sm w-60"
         />
 
-        {/* Dropdown Tùy chọn — luôn hiển thị */}
         <select
           value={selectedOption}
           onChange={(e) => setSelectedOption(e.target.value)}
@@ -480,7 +330,6 @@ const UserTableCheckList = () => {
           ))}
         </select>
 
-        {/* Khoảng ngày */}
         <div className="relative">
           <input
             readOnly
@@ -558,7 +407,7 @@ const UserTableCheckList = () => {
                     (pagination?.currentPage - 1) * itemsPerPage + index + 1
                   }
                   allCheckTitles={allCheckTitles}
-                  fetchChecklists={() => setCurrentPage(1)} // trigger refetch về trang 1
+                  fetchChecklists={() => setCurrentPage(1)}
                 />
               ))
             )}
