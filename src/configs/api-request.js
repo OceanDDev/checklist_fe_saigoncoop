@@ -57,6 +57,13 @@ const URL = {
     rotkien : ENDPOINT_PREFIX + "/rotkien",
     cuahang : ENDPOINT_PREFIX + "/cuahang",
     xuattra : ENDPOINT_PREFIX + "/xuattra"
+  },
+   phieusoan:{ 
+    dinhvi : ENDPOINT_PREFIX + "/dinhvi",
+    hoadon : ENDPOINT_PREFIX + "/hoadon",
+    donhang : ENDPOINT_PREFIX + "/donhang",
+    phieusoan: ENDPOINT_PREFIX + "/phieusoan"
+
   }
 };
 

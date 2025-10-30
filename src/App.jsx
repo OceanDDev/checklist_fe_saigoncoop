@@ -19,11 +19,12 @@ import HomeKeToan from "./modules/KPI/KPINV/KETOAN";
 import TableKeToan from "./modules/KPI/KPINV/KETOAN/table";
 import { ToastContainer } from "react-toastify";
 import ToolXuatTra from "./modules/Dieuvan/ToolXuatTra";
+import PhieuSoanHome from "./modules/PhieuSoan";
 
 function App() {
   return (
     <BrowserRouter>
-    <ToastContainer
+      <ToastContainer
         position="top-right"
         autoClose={2500}
         newestOnTop
@@ -136,7 +137,10 @@ function App() {
           path="/dieuvan"
           element={
             <PrivateRoute allowRoles={[1]}>
-              <MainLayout> <ToolRotKien/> </MainLayout>
+              <MainLayout>
+                {" "}
+                <ToolRotKien />{" "}
+              </MainLayout>
             </PrivateRoute>
           }
         />
@@ -144,56 +148,70 @@ function App() {
           path="/xuattra"
           element={
             <PrivateRoute allowRoles={[4]}>
-              <MainLayout> <ToolXuatTra/> </MainLayout>
+              <MainLayout>
+                {" "}
+                <ToolXuatTra />{" "}
+              </MainLayout>
             </PrivateRoute>
           }
         />
 
         {/*    KPI   */}
-                {/*    KPI KETOAN  */}
-
+        
+        {/*    KPI KETOAN  */}
 
         <Route
           path="/kpi"
           element={
-            <PrivateRoute allowRoles={[2,10,11,12,13,14,15,16,17]}>
-              <MainLayout><HomeKPI/></MainLayout>
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <HomeKPI />
+              </MainLayout>
             </PrivateRoute>
           }
         />
-         <Route
+        <Route
           path="/kpi/homestaff"
           element={
-            <PrivateRoute allowRoles={[2,10,11,12,13,14,15,16,17]}>
-              <MainLayout><HomeStaffKPI/></MainLayout>
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <HomeStaffKPI />
+              </MainLayout>
             </PrivateRoute>
           }
         />
-         <Route
+        <Route
           path="/kpi/homestaff/homeKeToan"
           element={
-            <PrivateRoute allowRoles={[2,10,11,12,13,14,15,16,17]}>
-              <MainLayout><HomeKeToan/></MainLayout>
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <HomeKeToan />
+              </MainLayout>
             </PrivateRoute>
           }
         />
         <Route
           path="/kpi/homestaff/homeKeToan/table/:year"
           element={
-            <PrivateRoute allowRoles={[2,10,11,12,13,14,15,16,17]}>
-              <MainLayout><TableKeToan/></MainLayout>
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <TableKeToan />
+              </MainLayout>
             </PrivateRoute>
           }
         />
+        {/* PHIEU SOAN */}
 
-
-
-
-
-
-
-
-
+        <Route
+          path="/phieusoan"
+          element={
+            <PrivateRoute allowRoles={[20]}>
+              <MainLayout>
+                <PhieuSoanHome />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
         <Route path="/thank-you" element={<ThankYouScreen />} />
 

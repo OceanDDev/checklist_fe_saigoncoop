@@ -28,8 +28,22 @@ const addCuaHang = async (data) => {
     console.error("Lỗi khi gọi addCuaHang:", error);
   }
 };
-
+const getCuaHangByMaCH = async (maCH) => {
+  try {
+    const results = await requestService.get(
+      `${URL.dieuvan.cuahang}/ma/${maCH}`, // ✅ /cuahang/ma/CH001
+      {},
+      undefined,
+      ApiServer
+    );
+    return results;
+  } catch (error) {
+    console.error("Lỗi khi gọi getCuaHangByMaCH:", error);
+    return null;
+  }
+};
 export const cuaHangService = {
   getAllCuaHang,
   addCuaHang,
+  getCuaHangByMaCH
 };
