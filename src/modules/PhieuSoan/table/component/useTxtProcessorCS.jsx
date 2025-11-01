@@ -20,6 +20,7 @@ const RX = {
   soda8: /\b(\d{8})\b/,
   sku7: /\b(\d{7})\b/,
   numFlex: /\d{1,3}(?:,\d{3})*\.\d{2,4}|\d+\.\d{2,4}/g,
+  convLine: /Convenience store tran\. line/i,
 };
 
 export const useTxtProcessor = () => {
@@ -31,54 +32,105 @@ export const useTxtProcessor = () => {
   const parseItemsAllocated = (lines) => {
     const rows = [];
     let currentOrder = null;
+    let pending = null;
 
-    for (let raw of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
       const line = String(raw || "").replace(/\u0000/g, "");
-      if (line.includes("Convenience store tran. line")) continue;
 
+      // Header order
       const mOrder = line.match(RX.orderHeader);
       if (mOrder) {
         currentOrder = mOrder[1];
+        pending = null;
+        continue;
+      }
+      if (!currentOrder) continue;
+
+      // Dòng item có SKU (Allocated ...)
+      const mItem = line.match(RX.itemLine);
+      if (mItem) {
+        const line_no = Number(mItem[1]);
+        const sku = mItem[2];
+        const tail = mItem[3];
+
+        // Lấy mô tả (desc): phần trước cụm số đầu tiên
+        const numsInTail = [...tail.matchAll(RX.numFlex)];
+        const firstNum = numsInTail[0];
+        const desc = (
+          firstNum ? tail.slice(0, firstNum.index).trim() : tail.trim()
+        ).replace(/\s{2,}/g, " ");
+
+        pending = {
+          order_number: currentOrder,
+          soda_id: currentOrder,
+          line_no,
+          sku,
+          description: desc,
+        };
         continue;
       }
 
-      if (!currentOrder) continue;
-      const mItem = line.match(RX.itemLine);
-      if (!mItem) continue;
+      // Dòng "Convenience store tran. line" -> lấy số lượng từ cột Ord/Alloc
+      if (pending && RX.convLine.test(line)) {
+        let quantity = 0;
+        
+        // Phương pháp 1: Tách theo nhiều khoảng trắng (cấu trúc cột)
+        // Dòng có dạng: "                   Convenience store tran. line     12     44,307.65"
+        const trimmed = line.trim();
+        const parts = trimmed.split(/\s+/);
+        
+        // Tìm index của "line"
+        const lineIdx = parts.findIndex(p => /^line$/i.test(p));
+        
+        if (lineIdx >= 0 && lineIdx + 1 < parts.length) {
+          const nextPart = parts[lineIdx + 1];
+          // Kiểm tra nếu là số (có thể có dấu thập phân hoặc phẩy)
+          if (/^\d+(\.\d+)?$/.test(nextPart)) {
+            quantity = parseFloat(nextPart);
+          }
+        }
+        
+        // Phương pháp 2 (fallback): Quét toàn bộ để tìm số đầu tiên
+        if (quantity === 0) {
+          for (const part of parts) {
+            // Bỏ qua các từ khóa
+            if (/convenience|store|tran|line/i.test(part)) continue;
+            // Lấy số đầu tiên (có thể có dấu thập phân, bỏ qua số có dấu phẩy)
+            if (/^\d+(\.\d+)?$/.test(part)) {
+              const num = parseFloat(part);
+              if (num > 0) {
+                quantity = num;
+                break;
+              }
+            }
+          }
+        }
 
-      const line_no = Number(mItem[1]);
-      const sku = mItem[2];
-      const tail = mItem[3];
+        // Chỉ thêm vào rows nếu có quantity > 0
+        if (quantity > 0) {
+          rows.push({
+            ...pending,
+            quantity,
+            unit_price: 0,
+            extended_price: 0,
+          });
+        } else {
+        }
 
-      const nums = [...tail.matchAll(RX.money3)];
-      if (nums.length < 3) continue;
-
-      const qtyMatch = nums[nums.length - 3];
-      const unitMatch = nums[nums.length - 2];
-      const extMatch = nums[nums.length - 1];
-
-      const desc = tail.slice(0, qtyMatch.index).trim();
-      const quantity = Number(qtyMatch[0].replace(/,/g, ""));
-      const unit_price = Number(unitMatch[0].replace(/,/g, ""));
-      const extended_price = Number(extMatch[0].replace(/,/g, ""));
-
-      rows.push({
-        order_number: currentOrder,
-        soda_id: currentOrder,
-        line_no,
-        sku,
-        description: desc,
-        quantity,
-        unit_price,
-        extended_price,
-      });
+        pending = null;
+        continue;
+      }
     }
 
+
+    // Sort
     rows.sort((a, b) =>
       a.order_number === b.order_number
         ? a.line_no - b.line_no
         : String(a.order_number).localeCompare(String(b.order_number))
     );
+
     return rows;
   };
 
@@ -101,7 +153,10 @@ export const useTxtProcessor = () => {
       if (numsInTail.length < 2) continue;
 
       const firstNum = numsInTail[0];
-      const desc = tail.slice(0, firstNum.index).trim().replace(/\s{2,}/g, " ");
+      const desc = tail
+        .slice(0, firstNum.index)
+        .trim()
+        .replace(/\s{2,}/g, " ");
 
       const qtyStr = numsInTail[0][0];
       const unitStr = (numsInTail[1] && numsInTail[1][0]) || "0.00";
@@ -262,9 +317,13 @@ export const useTxtProcessor = () => {
         const lines = raw.split(/\r?\n/);
         rowsB = parseStoresPerRow(lines);
         if (!rowsB.length)
-          throw new Error("Không trích xuất được dữ liệu SODA/CH/Address từ file 2.");
+          throw new Error(
+            "Không trích xuất được dữ liệu SODA/CH/Address từ file 2."
+          );
 
-        const base = `${rowsB[0]?.soda_id || "SODA"}_${rowsB[0]?.location_id || "CHxxxxx"}`;
+        const base = `${rowsB[0]?.soda_id || "SODA"}_${
+          rowsB[0]?.location_id || "CHxxxxx"
+        }`;
         await buildAndDownloadExcelStores(rowsB, base);
 
         onProcessTxt?.(
@@ -279,7 +338,7 @@ export const useTxtProcessor = () => {
       }
 
       if (rowsA && rowsB) {
-        await buildAndDownloadExcel_DONHANG(rowsA, rowsB); // CS vẫn xuất DONHANG
+        await buildAndDownloadExcel_DONHANG(rowsA, rowsB);
       }
 
       return { success: true };
