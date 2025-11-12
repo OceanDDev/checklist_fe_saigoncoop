@@ -51,6 +51,7 @@ const buildQueryString = (params = {}) => {
 
   return qs.toString();
 };
+
 /** GET: lấy toàn bộ đơn hàng (có phân trang + filter) */
 const getAllDonHang = async (params = {}) => {
   try {
@@ -101,31 +102,32 @@ const createDonHang = async (payload) => {
   }
 };
 
-/** POST: tạo nhiều đơn hàng */
+/** POST: tạo nhiều đơn hàng - GỬI RAW DATA */
 const createManyDonHang = async (payload) => {
   try {
+    console.log("📤 Service nhận được:", payload);
+    
+    // Xác định raw data
     const rawData = Array.isArray(payload) ? payload : payload.donHangs;
     
-    // Normalize inline
-    const donHangs = rawData
-      .map(item => ({
-        store: item.store || item.STORE || item.maCH,
-        type: item.type || item.TYPE,
-        soda_transfer: item.soda_transfer || item.SODA_TRANSFER,
-        sku: Number(item.sku || item.SKU),
-        name: item.name || item.NAME,
-        luong: Number(item.luong || item.LUONG || 0),
-      }))
-      .filter(item => item.store && item.type && item.sku && item.name);
+    if (!rawData || rawData.length === 0) {
+      throw new Error("Không có dữ liệu để import");
+    }
 
-    if (donHangs.length === 0) throw new Error("Không có dữ liệu hợp lệ");
+    console.log("📦 Gửi", rawData.length, "dòng lên backend (RAW - không filter)");
 
-    return await requestService.post(
+    // ✅ GỬI NGUYÊN BẢN - KHÔNG NORMALIZE, KHÔNG FILTER
+    // Backend sẽ xử lý tất cả logic validation
+    const response = await requestService.post(
       `${URL.phieusoan.donhang}/many`,
-      { donHangs }
+      { donHangs: rawData }
     );
+
+    console.log("✅ Response từ backend:", response);
+    return response;
+    
   } catch (error) {
-    console.error("Lỗi:", error);
+    console.error("❌ Lỗi createManyDonHang:", error);
     throw error;
   }
 };
@@ -141,16 +143,19 @@ const updateDonHang = async (id, payload) => {
     throw error;
   }
 };
- const checkDuplicateDonHang =  async (donHangs) => {
-    try {
-      const path = `${URL.phieusoan.donhang}/check-duplicate`;
-      const response = await requestService.post(path, { donHangs });
-      return response;
-    } catch (error) {
-      console.error('Error checking duplicate:', error);
-      throw error;
-    }
+
+/** POST: check duplicate đơn hàng */
+const checkDuplicateDonHang = async (donHangs) => {
+  try {
+    const path = `${URL.phieusoan.donhang}/check-duplicate`;
+    const response = await requestService.post(path, { donHangs });
+    return response;
+  } catch (error) {
+    console.error('Error checking duplicate:', error);
+    throw error;
   }
+};
+
 /** PUT: cập nhật trạng thái đơn hàng */
 const updateTrangThai = async (id, payload) => {
   try {

@@ -6,7 +6,11 @@ import { donHangService } from "@/services/phieusoan/donhang.service";
 
 /* ===================== Helpers chuẩn hoá ===================== */
 const normalizeKey = (k = "") =>
-  String(k).replace(/^\uFEFF/, "").trim().replace(/\s+/g, "_").toUpperCase();
+  String(k)
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .toUpperCase();
 
 const HEADER_MAP = {
   STORE: "STORE",
@@ -140,9 +144,22 @@ const buildStyledWorkbook = (rows = []) => {
   const headerRow = ws.getRow(1);
   headerRow.height = 24;
   headerRow.eachCell((cell) => {
-    cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
-    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F2937" } };
+    cell.font = {
+      name: "Calibri",
+      size: 11,
+      bold: true,
+      color: { argb: "FFFFFFFF" },
+    };
+    cell.alignment = {
+      vertical: "middle",
+      horizontal: "center",
+      wrapText: true,
+    };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF1F2937" },
+    };
     cell.border = {
       top: { style: "thin", color: { argb: "FFCBD5E1" } },
       left: { style: "thin", color: { argb: "FFCBD5E1" } },
@@ -154,7 +171,15 @@ const buildStyledWorkbook = (rows = []) => {
   if (rows.length) {
     rows.forEach((r) => ws.addRow(r));
   } else {
-    ws.addRow({ STORE: "", TYPE: "", SODA_TRANSFER: "", SKU: "", NAME: "", LUONG: "", NGAY_IMPORT: "" });
+    ws.addRow({
+      STORE: "",
+      TYPE: "",
+      SODA_TRANSFER: "",
+      SKU: "",
+      NAME: "",
+      LUONG: "",
+      NGAY_IMPORT: "",
+    });
   }
 
   ws.getColumn("NGAY_IMPORT").numFmt = "dd/mm/yyyy";
@@ -187,8 +212,12 @@ const DonHangImport = ({ onImportSuccess }) => {
   const [showResultModal, setShowResultModal] = useState(false);
   const [importResult, setImportResult] = useState({
     success: 0,
+    totalInput: 0,
     errors: [],
-    duplicates: []
+    duplicates: [],
+    invalidData: [],
+    invalidStores: [],
+    insertErrors: [],
   });
 
   const resetState = () => {
@@ -237,77 +266,90 @@ const DonHangImport = ({ onImportSuccess }) => {
     }
   };
 
-  // Hàm validate kiểm tra trùng lặp - SỬ DỤNG API
-  const validateDonHang = async (rows) => {
-    try {
-      // ✨ Gọi API check duplicate
-      const response = await donHangService.checkDuplicateDonHang(rows);
-      
-      if (response.success) {
-        return {    
-          validRows: response.validRows || [],
-          duplicates: response.duplicates.map(dup => ({
-            row: dup.rowIndex,
-            store: dup.inputData.store,
-            type: dup.inputData.type,
-            sodaTransfer: dup.inputData.soda_transfer,
-            sku: dup.inputData.sku,
-            name: dup.inputData.name,
-            date: dup.inputData.ngay_import
-          }))
-        };
-      }
-      
-      // Nếu API trả về không success, throw error
-      throw new Error(response.message || "API validation failed");
-    } catch (err) {
-      console.error("Validation error:", err);
-      // Throw lại error để handleImport bắt được
-      throw new Error(`Lỗi kiểm tra trùng lặp: ${err?.message || "Không thể kết nối đến server"}`);
-    }
-  };
+  // ✅ FIXED: Thêm bước check duplicate trước khi import
   const handleImport = async () => {
     if (!parsedRows.length) return;
 
     setImporting(true);
     try {
-      // Validate dữ liệu trước khi import
-      const validationResult = await validateDonHang(parsedRows);
+      console.log("📤 BƯỚC 1: Check duplicate cho", parsedRows.length, "dòng");
+
+      // ✅ BƯỚC 1: Gọi checkDuplicate API
+      const checkResponse = await donHangService.checkDuplicateDonHang(parsedRows);
       
-      if (validationResult.duplicates.length > 0) {
-        // Có dữ liệu trùng - hiển thị modal
+      const {
+        validRows = [],
+        duplicates = [],
+        invalidRows = [],
+      } = checkResponse;
+
+      // Nếu KHÔNG có dòng nào hợp lệ
+      if (!validRows || validRows.length === 0) {
         setImportResult({
-          success: validationResult.validRows.length,
-          errors: [],
-          duplicates: validationResult.duplicates
+          success: 0,
+          totalInput: parsedRows.length,
+          errors: ["❌ Không có dòng nào hợp lệ để import"],
+          duplicates: duplicates,
+          invalidData: invalidRows,
+          invalidStores: [],
+          insertErrors: [],
         });
         setShowResultModal(true);
-        
-        // Import chỉ những dòng hợp lệ
-        if (validationResult.validRows.length > 0) {
-          await donHangService.createManyDonHang(validationResult.validRows);
-          onImportSuccess?.();
-        }
-      } else {
-        // Không có trùng - import tất cả
-        await donHangService.createManyDonHang(parsedRows);
-        setImportResult({
-          success: parsedRows.length,
-          errors: [],
-          duplicates: []
-        });
-        setShowResultModal(true);
-        onImportSuccess?.();
+        setShowModal(false);
+        resetState();
+        setImporting(false);
+        return;
       }
-      
+
+      // ✅ BƯỚC 3: Import CHỈ validRows
+      const importResponse = await donHangService.createManyDonHang(validRows);
+
+      // ✅ BƯỚC 4: Tổng hợp kết quả CUỐI CÙNG
+      const finalResult = {
+        success: importResponse.summary?.created || importResponse.count || 0,
+        totalInput: parsedRows.length, // Tổng input ban đầu
+        duplicates: duplicates, // Từ check duplicate
+        invalidData: [
+          ...(invalidRows || []), // Từ check duplicate
+          ...(importResponse.errors?.invalidData || []) // Từ import (nếu có thêm)
+        ],
+        invalidStores: importResponse.errors?.invalidStores || [],
+        insertErrors: importResponse.errors?.insertErrors || [],
+        errors: [],
+      };
+
+      // Thêm message tổng hợp
+      if (!importResponse.success && importResponse.message) {
+        finalResult.errors.push(importResponse.message);
+      }
+      if (importResponse.warning) {
+        finalResult.errors.push(importResponse.warning);
+      }
+
+      // Thêm thông báo về duplicate
+      if (duplicates.length > 0) {
+        finalResult.errors.push(`⚠️ Đã bỏ qua ${duplicates.length} dòng trùng lặp với dữ liệu hiện có`);
+      }
+
+      setImportResult(finalResult);
+      setShowResultModal(true);
       setShowModal(false);
       resetState();
+
+      // Callback nếu có ít nhất 1 record thành công
+      if (finalResult.success > 0) {
+        onImportSuccess?.();
+      }
     } catch (err) {
-      console.error("Import error:", err);
+      console.error("❌ Import error:", err);
       setImportResult({
         success: 0,
-        errors: [err?.message || "Lỗi không xác định khi import"],
-        duplicates: []
+        totalInput: parsedRows.length,
+        errors: [err?.response?.data?.message || err?.message || "Lỗi không xác định"],
+        duplicates: [],
+        invalidData: [],
+        invalidStores: [],
+        insertErrors: [],
       });
       setShowResultModal(true);
     } finally {
@@ -320,6 +362,13 @@ const DonHangImport = ({ onImportSuccess }) => {
     const buf = await wb.xlsx.writeBuffer();
     saveAs(new Blob([buf]), "template_donhang.xlsx");
   };
+
+  // Tính tổng số lỗi
+  const totalErrors =
+    importResult.invalidData.length +
+    importResult.invalidStores.length +
+    importResult.insertErrors.length +
+    importResult.duplicates.length;
 
   return (
     <>
@@ -337,7 +386,9 @@ const DonHangImport = ({ onImportSuccess }) => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
             <div className="bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-white">📥 Import Đơn Hàng</h3>
+              <h3 className="text-lg font-semibold text-white">
+                📥 Import Đơn Hàng
+              </h3>
               <button
                 onClick={() => {
                   setShowModal(false);
@@ -352,7 +403,8 @@ const DonHangImport = ({ onImportSuccess }) => {
 
             <div className="p-6 space-y-5">
               <div className="text-sm text-slate-600">
-                Hỗ trợ: <span className="font-medium">.csv, .xlsx, .xls, .json</span>
+                Hỗ trợ:{" "}
+                <span className="font-medium">.csv, .xlsx, .xls, .json</span>
               </div>
 
               <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-slate-400 transition">
@@ -364,7 +416,7 @@ const DonHangImport = ({ onImportSuccess }) => {
                   onChange={handleFileSelect}
                   disabled={importing}
                 />
-                
+
                 {!fileName ? (
                   <div className="space-y-3">
                     <div className="text-4xl">📄</div>
@@ -381,7 +433,11 @@ const DonHangImport = ({ onImportSuccess }) => {
                     <div className="text-4xl">✅</div>
                     <div className="text-slate-900 font-medium">{fileName}</div>
                     <div className="text-sm text-slate-600">
-                      Sẵn sàng import <span className="font-semibold text-slate-900">{rowCount}</span> dòng
+                      Sẵn sàng kiểm tra{" "}
+                      <span className="font-semibold text-slate-900">
+                        {rowCount}
+                      </span>{" "}
+                      dòng
                     </div>
                     <button
                       onClick={() => {
@@ -424,28 +480,32 @@ const DonHangImport = ({ onImportSuccess }) => {
                 disabled={importing || !parsedRows.length}
                 className="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-black transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {importing ? "Đang import..." : `Import ${rowCount} dòng`}
+                {importing ? "⏳ Đang xử lý..." : `🔍 Kiểm tra & Import`}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal kết quả import */}
+      {/* ✅ Modal kết quả - ĐÃ CẬP NHẬT hiển thị duplicates */}
       {showResultModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden max-h-[90vh] flex flex-col">
-            <div className={`px-6 py-4 flex items-center justify-between ${
-              importResult.duplicates.length > 0 
-                ? 'bg-gradient-to-r from-amber-600 to-amber-500' 
-                : importResult.errors.length > 0
-                ? 'bg-gradient-to-r from-red-600 to-red-500'
-                : 'bg-gradient-to-r from-green-600 to-green-500'
-            }`}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden max-h-[90vh] flex flex-col">
+            <div
+              className={`px-6 py-4 flex items-center justify-between ${
+                totalErrors > 0
+                  ? "bg-gradient-to-r from-amber-600 to-amber-500"
+                  : importResult.errors.length > 0
+                  ? "bg-gradient-to-r from-red-600 to-red-500"
+                  : "bg-gradient-to-r from-green-600 to-green-500"
+              }`}
+            >
               <h3 className="text-lg font-semibold text-white">
-                {importResult.duplicates.length > 0 ? '⚠️ Kết quả Import (Có trùng lặp)' : 
-                 importResult.errors.length > 0 ? '❌ Import thất bại' : 
-                 '✅ Import thành công'}
+                {totalErrors > 0
+                  ? "⚠️ Import một phần"
+                  : importResult.errors.length > 0
+                  ? "❌ Import thất bại"
+                  : "✅ Import thành công"}
               </h3>
               <button
                 onClick={() => setShowResultModal(false)}
@@ -459,82 +519,44 @@ const DonHangImport = ({ onImportSuccess }) => {
               {/* Tổng kết */}
               <div className="bg-slate-50 rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Tổng số dòng:</span>
-                  <span className="font-semibold text-slate-900">{rowCount}</span>
+                  <span className="text-slate-600">Tổng số dòng input:</span>
+                  <span className="font-semibold text-slate-900">
+                    {importResult.totalInput}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-green-600">Import thành công:</span>
-                  <span className="font-semibold text-green-600">{importResult.success}</span>
+                  <span className="text-green-600">✅ Import thành công:</span>
+                  <span className="font-semibold text-green-600">
+                    {importResult.success}
+                  </span>
                 </div>
                 {importResult.duplicates.length > 0 && (
                   <div className="flex items-center justify-between">
-                    <span className="text-amber-600">Dòng trùng lặp:</span>
-                    <span className="font-semibold text-amber-600">{importResult.duplicates.length}</span>
+                    <span className="text-yellow-600">⚠️ Trùng lặp (bỏ qua):</span>
+                    <span className="font-semibold text-yellow-600">
+                      {importResult.duplicates.length}
+                    </span>
                   </div>
                 )}
-                {importResult.errors.length > 0 && (
+                {(importResult.invalidData.length + importResult.invalidStores.length + importResult.insertErrors.length) > 0 && (
                   <div className="flex items-center justify-between">
-                    <span className="text-red-600">Lỗi:</span>
-                    <span className="font-semibold text-red-600">{importResult.errors.length}</span>
+                    <span className="text-red-600">❌ Lỗi khác:</span>
+                    <span className="font-semibold text-red-600">
+                      {importResult.invalidData.length + importResult.invalidStores.length + importResult.insertErrors.length}
+                    </span>
                   </div>
                 )}
               </div>
 
-              {/* Danh sách trùng lặp */}
-              {importResult.duplicates.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-semibold text-amber-900">Danh sách dòng trùng lặp:</h4>
-                    <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
-                      {importResult.duplicates.length} dòng
-                    </span>
-                  </div>
-                  <div className="border border-amber-200 rounded-xl overflow-hidden">
-                    <div className="max-h-96 overflow-y-auto">
-                      <table className="min-w-full text-xs">
-                        <thead className="bg-amber-50 sticky top-0">
-                          <tr className="border-b border-amber-200">
-                            <th className="px-3 py-2 text-left font-semibold text-amber-900">Dòng</th>
-                            <th className="px-3 py-2 text-left font-semibold text-amber-900">Mã CH</th>
-                            <th className="px-3 py-2 text-left font-semibold text-amber-900">Loại</th>
-                            <th className="px-3 py-2 text-left font-semibold text-amber-900">Số SD/TF</th>
-                            <th className="px-3 py-2 text-left font-semibold text-amber-900">SKU</th>
-                            <th className="px-3 py-2 text-left font-semibold text-amber-900">Tên hàng</th>
-                            <th className="px-3 py-2 text-left font-semibold text-amber-900">Ngày</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                          {importResult.duplicates.map((dup, idx) => (
-                            <tr key={idx} className="border-b border-amber-100 hover:bg-amber-50/50">
-                              <td className="px-3 py-2 font-medium text-amber-900">{dup.row}</td>
-                              <td className="px-3 py-2 text-slate-700">{dup.store}</td>
-                              <td className="px-3 py-2 text-slate-700">{dup.type}</td>
-                              <td className="px-3 py-2 text-slate-700">{dup.sodaTransfer}</td>
-                              <td className="px-3 py-2 text-slate-700">{dup.sku}</td>
-                              <td className="px-3 py-2 text-slate-700 max-w-xs truncate" title={dup.name}>
-                                {dup.name}
-                              </td>
-                              <td className="px-3 py-2 text-slate-700">{dup.date}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <p className="text-xs text-amber-700 bg-amber-50 p-3 rounded-lg">
-                    ⚠️ Các dòng trên đã tồn tại trong hệ thống với cùng Mã cửa hàng, Loại, Số SD/TF, SKU và Ngày. 
-                    Chỉ những dòng không trùng mới được import.
-                  </p>
-                </div>
-              )}
-
-              {/* Danh sách lỗi */}
+              {/* Lỗi tổng quát */}
               {importResult.errors.length > 0 && (
                 <div className="space-y-3">
-                  <h4 className="font-semibold text-red-900">Lỗi:</h4>
-                  <div className="border border-red-200 rounded-xl bg-red-50 p-4 space-y-2">
+                  <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                    📢 Thông báo
+                  </h4>
+                  <div className="border border-blue-200 rounded-xl bg-blue-50 p-4 space-y-2">
                     {importResult.errors.map((err, idx) => (
-                      <div key={idx} className="text-sm text-red-700">
+                      <div key={idx} className="text-sm text-blue-900">
                         • {err}
                       </div>
                     ))}
@@ -542,12 +564,178 @@ const DonHangImport = ({ onImportSuccess }) => {
                 </div>
               )}
 
-              {/* Thông báo thành công */}
-              {importResult.success > 0 && importResult.errors.length === 0 && importResult.duplicates.length === 0 && (
+              {/* ✅ THÊM: Danh sách trùng lặp */}
+              {importResult.duplicates.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-yellow-900">
+                      ⚠️ Dòng trùng lặp (đã bỏ qua)
+                    </h4>
+                    <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full font-medium">
+                      {importResult.duplicates.length} dòng
+                    </span>
+                  </div>
+                  <div className="border border-yellow-200 rounded-xl overflow-hidden">
+                    <div className="max-h-64 overflow-y-auto">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-yellow-50 sticky top-0">
+                          <tr className="border-b border-yellow-200">
+                            <th className="px-3 py-2 text-left font-semibold text-yellow-900">Dòng</th>
+                            <th className="px-3 py-2 text-left font-semibold text-yellow-900">STORE</th>
+                            <th className="px-3 py-2 text-left font-semibold text-yellow-900">TYPE</th>
+                            <th className="px-3 py-2 text-left font-semibold text-yellow-900">SODA_TF</th>
+                            <th className="px-3 py-2 text-left font-semibold text-yellow-900">SKU</th>
+                            <th className="px-3 py-2 text-left font-semibold text-yellow-900">NAME</th>
+                            <th className="px-3 py-2 text-left font-semibold text-yellow-900">Ngày</th>
+                            <th className="px-3 py-2 text-left font-semibold text-yellow-900">ID trùng</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white">
+                          {importResult.duplicates.map((item, idx) => (
+                            <tr key={idx} className="border-b border-yellow-100 hover:bg-yellow-50/50">
+                              <td className="px-3 py-2 font-medium text-yellow-900">{item.rowIndex}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.inputData?.store}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.inputData?.type}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.inputData?.soda_transfer}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.inputData?.sku}</td>
+                              <td className="px-3 py-2 text-slate-700 max-w-xs truncate">{item.inputData?.name}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.inputData?.ngay_import}</td>
+                              <td className="px-3 py-2 text-blue-600 text-xs font-mono">
+                                {String(item.existingData?.id).slice(-8)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Dữ liệu không hợp lệ */}
+              {importResult.invalidData.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-red-900">
+                      ❌ Dữ liệu không hợp lệ
+                    </h4>
+                    <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-full font-medium">
+                      {importResult.invalidData.length} dòng
+                    </span>
+                  </div>
+                  <div className="border border-red-200 rounded-xl overflow-hidden">
+                    <div className="max-h-64 overflow-y-auto">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-red-50 sticky top-0">
+                          <tr className="border-b border-red-200">
+                            <th className="px-3 py-2 text-left font-semibold text-red-900">Dòng</th>
+                            <th className="px-3 py-2 text-left font-semibold text-red-900">Lỗi</th>
+                            <th className="px-3 py-2 text-left font-semibold text-red-900">STORE</th>
+                            <th className="px-3 py-2 text-left font-semibold text-red-900">TYPE</th>
+                            <th className="px-3 py-2 text-left font-semibold text-red-900">SODA_TF</th>
+                            <th className="px-3 py-2 text-left font-semibold text-red-900">SKU</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white">
+                          {importResult.invalidData.map((item, idx) => (
+                            <tr key={idx} className="border-b border-red-100 hover:bg-red-50/50">
+                              <td className="px-3 py-2 font-medium text-red-900">{item.rowIndex}</td>
+                              <td className="px-3 py-2 text-red-700">{item.errors?.join(", ")}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.data?.store || "-"}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.data?.type || "-"}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.data?.soda_transfer || "-"}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.data?.sku || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Mã cửa hàng không tồn tại */}
+              {importResult.invalidStores.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-orange-900">
+                      🏪 Mã cửa hàng không tồn tại
+                    </h4>
+                    <span className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full font-medium">
+                      {importResult.invalidStores.length} dòng
+                    </span>
+                  </div>
+                  <div className="border border-orange-200 rounded-xl overflow-hidden">
+                    <div className="max-h-64 overflow-y-auto">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-orange-50 sticky top-0">
+                          <tr className="border-b border-orange-200">
+                            <th className="px-3 py-2 text-left font-semibold text-orange-900">Dòng</th>
+                            <th className="px-3 py-2 text-left font-semibold text-orange-900">Mã CH</th>
+                            <th className="px-3 py-2 text-left font-semibold text-orange-900">SKU</th>
+                            <th className="px-3 py-2 text-left font-semibold text-orange-900">Tên hàng</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white">
+                          {importResult.invalidStores.map((item, idx) => (
+                            <tr key={idx} className="border-b border-orange-100 hover:bg-orange-50/50">
+                              <td className="px-3 py-2 font-medium text-orange-900">{item.index}</td>
+                              <td className="px-3 py-2 text-orange-700 font-medium">{item.store}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.sku}</td>
+                              <td className="px-3 py-2 text-slate-700 max-w-xs truncate">{item.name}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Lỗi khi insert vào database */}
+              {importResult.insertErrors.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-purple-900">
+                      💾 Lỗi khi insert vào database
+                    </h4>
+                    <span className="text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded-full font-medium">
+                      {importResult.insertErrors.length} dòng
+                    </span>
+                  </div>
+                  <div className="border border-purple-200 rounded-xl overflow-hidden">
+                    <div className="max-h-64 overflow-y-auto">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-purple-50 sticky top-0">
+                          <tr className="border-b border-purple-200">
+                            <th className="px-3 py-2 text-left font-semibold text-purple-900">Index</th>
+                            <th className="px-3 py-2 text-left font-semibold text-purple-900">Lỗi</th>
+                            <th className="px-3 py-2 text-left font-semibold text-purple-900">STORE</th>
+                            <th className="px-3 py-2 text-left font-semibold text-purple-900">SKU</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white">
+                          {importResult.insertErrors.map((item, idx) => (
+                            <tr key={idx} className="border-b border-purple-100 hover:bg-purple-50/50">
+                              <td className="px-3 py-2 font-medium text-purple-900">{item.index}</td>
+                              <td className="px-3 py-2 text-purple-700 text-xs">{item.message}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.data?.store}</td>
+                              <td className="px-3 py-2 text-slate-700">{item.data?.sku}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Thông báo thành công 100% */}
+              {importResult.success > 0 && totalErrors === 0 && importResult.errors.length === 0 && (
                 <div className="text-center py-4">
                   <div className="text-6xl mb-3">🎉</div>
                   <p className="text-lg font-semibold text-green-900">
-                    Import thành công {importResult.success} đơn hàng!
+                    Import thành công {importResult.success}/{importResult.totalInput} đơn hàng!
                   </p>
                 </div>
               )}
