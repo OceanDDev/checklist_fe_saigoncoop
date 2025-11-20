@@ -41,6 +41,7 @@ const buildQueryString = (params = {}) => {
   if (search) qs.set("search", String(search).trim());
   if (phieu_soan_id) qs.set("phieu_soan_id", String(phieu_soan_id).trim());
 
+
   // ⏱ Date filters
   if (ngay) {
     qs.set("ngay", ngay);

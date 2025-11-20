@@ -16,13 +16,13 @@ const ENDPOINT_PREFIX = "/api/saigoncoop";
 const URL = {
   checklist: {
     list: ENDPOINT_PREFIX + "/checklist",
-    create:  ENDPOINT_PREFIX + "/checklist",
-    delete:  ENDPOINT_PREFIX + "/checklist",
+    create: ENDPOINT_PREFIX + "/checklist",
+    delete: ENDPOINT_PREFIX + "/checklist",
   },
-  checklistform:{
+  checklistform: {
     form: ENDPOINT_PREFIX + "/checklistform",
-    delete : ENDPOINT_PREFIX + "/checklistform",
-    update : ENDPOINT_PREFIX + "/checklistform"
+    delete: ENDPOINT_PREFIX + "/checklistform",
+    update: ENDPOINT_PREFIX + "/checklistform",
   },
   users: {
     users: ENDPOINT_PREFIX + "/users",
@@ -31,40 +31,41 @@ const URL = {
     login: ENDPOINT_PREFIX + "/login",
   },
   staff: {
-    staff : ENDPOINT_PREFIX + "/staff"
+    staff: ENDPOINT_PREFIX + "/staff",
   },
-  checklistbdh : { 
-     list: ENDPOINT_PREFIX + "/checklistbdh",
-    create:  ENDPOINT_PREFIX + "/checklistbdh",
-    delete:  ENDPOINT_PREFIX + "/checklistbdh",
+  checklistbdh: {
+    list: ENDPOINT_PREFIX + "/checklistbdh",
+    create: ENDPOINT_PREFIX + "/checklistbdh",
+    delete: ENDPOINT_PREFIX + "/checklistbdh",
   },
-  checklistbdhform : { 
-     list: ENDPOINT_PREFIX + "/checklistbdhform",
-    create:  ENDPOINT_PREFIX + "/checklistbdhform",
-    delete:  ENDPOINT_PREFIX + "/checklistbdhform",
+  checklistbdhform: {
+    list: ENDPOINT_PREFIX + "/checklistbdhform",
+    create: ENDPOINT_PREFIX + "/checklistbdhform",
+    delete: ENDPOINT_PREFIX + "/checklistbdhform",
   },
-   formkpistaff :{ 
-     list: ENDPOINT_PREFIX + "/formkpistaff",
-    create:  ENDPOINT_PREFIX + "/formkpistaff",
-    delete:  ENDPOINT_PREFIX + "/formkpistaff",
+  formkpistaff: {
+    list: ENDPOINT_PREFIX + "/formkpistaff",
+    create: ENDPOINT_PREFIX + "/formkpistaff",
+    delete: ENDPOINT_PREFIX + "/formkpistaff",
   },
-  checkkpistaff :{ 
-     list: ENDPOINT_PREFIX + "/checkkpistaff",
-    create:  ENDPOINT_PREFIX + "/checkkpistaff",
-    delete:  ENDPOINT_PREFIX + "/checkkpistaff",
+  checkkpistaff: {
+    list: ENDPOINT_PREFIX + "/checkkpistaff",
+    create: ENDPOINT_PREFIX + "/checkkpistaff",
+    delete: ENDPOINT_PREFIX + "/checkkpistaff",
   },
-  dieuvan:{ 
-    rotkien : ENDPOINT_PREFIX + "/rotkien",
-    cuahang : ENDPOINT_PREFIX + "/cuahang",
-    xuattra : ENDPOINT_PREFIX + "/xuattra"
+  dieuvan: {
+    rotkien: ENDPOINT_PREFIX + "/rotkien",
+    cuahang: ENDPOINT_PREFIX + "/cuahang",
+    xuattra: ENDPOINT_PREFIX + "/xuattra",
+    phuxe: ENDPOINT_PREFIX + "/phuxe",
+    tenphuxe: ENDPOINT_PREFIX + "/tenphuxe"
   },
-   phieusoan:{ 
-    dinhvi : ENDPOINT_PREFIX + "/dinhvi",
-    hoadon : ENDPOINT_PREFIX + "/hoadon",
-    donhang : ENDPOINT_PREFIX + "/donhang",
-    phieusoan: ENDPOINT_PREFIX + "/phieusoan"
-
-  }
+  phieusoan: {
+    dinhvi: ENDPOINT_PREFIX + "/dinhvi",
+    hoadon: ENDPOINT_PREFIX + "/hoadon",
+    donhang: ENDPOINT_PREFIX + "/donhang",
+    phieusoan: ENDPOINT_PREFIX + "/phieusoan",
+  },
 };
 
 export { URL, ApiServer, DEF_HEADERS };

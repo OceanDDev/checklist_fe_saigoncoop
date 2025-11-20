@@ -20,6 +20,7 @@ import TableKeToan from "./modules/KPI/KPINV/KETOAN/table";
 import { ToastContainer } from "react-toastify";
 import ToolXuatTra from "./modules/Dieuvan/ToolXuatTra";
 import PhieuSoanHome from "./modules/PhieuSoan";
+import HomePhuXe from "./modules/Dieuvan/ToolPhuXe";
 
 function App() {
   return (
@@ -140,6 +141,18 @@ function App() {
               <MainLayout>
                 {" "}
                 <ToolRotKien />{" "}
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+         <Route
+          path="/phuxe"
+          element={
+            <PrivateRoute allowRoles={[21,22]}>
+              <MainLayout>
+                {" "}
+                <HomePhuXe/>
+                {" "}
               </MainLayout>
             </PrivateRoute>
           }

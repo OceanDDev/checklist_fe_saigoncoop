@@ -88,8 +88,8 @@ const PhieuSoanFilter = ({
   setChanLe,
   store,
   setStore,
-  phieuSoanId,
-  setPhieuSoanId,
+  sodaTransfer,
+  setSodaTransfer,
   search,
   setSearch,
 
@@ -234,11 +234,11 @@ const PhieuSoanFilter = ({
         </div>
 
         <div className="col-span-2 md:col-span-3">
-          <Label>Mã phiếu soạn</Label>
+          <Label>Số Soda/Transfer</Label>
           <BaseInput
-            value={phieuSoanId}
-            placeholder="STORE-C/L-DDMMYYYY"
-            onChange={(e) => { setPhieuSoanId(e.target.value); setPage(1); }}
+            value={sodaTransfer}
+            placeholder=""
+            onChange={(e) => { setSodaTransfer(e.target.value); setPage(1); }}
           />
         </div>
 

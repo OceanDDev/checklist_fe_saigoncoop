@@ -8,6 +8,7 @@ import { cuaHangService } from "@/services/dieuvan/cuahang.service";
 const PhieuSoanProcessor = ({
   selectedRows,
   rows,
+  allRowsBeforeFilter = [], // ✅ THÊM PROP MỚI
   onSuccess,
   chanLe,
   sortConfig,
@@ -41,30 +42,36 @@ const PhieuSoanProcessor = ({
   };
 
   /**
-   * ✅ Validation mới:
-   * - Chưa chọn / không tìm thấy data / khác cửa hàng -> invalid (vẫn disable nút)
-   * - Nếu có phiếu đã xử lý -> vẫn valid để bấm, nhưng gắn cờ hasProcessed để handleProcess show toast và thoát sớm
+   * ✅ VALIDATION MỚI: 
+   * Sử dụng allRowsBeforeFilter thay vì rows để lấy TẤT CẢ items đã chọn
    */
   const canProcess = () => {
     if (selectedRows.length === 0)
       return { valid: false, message: "Chưa chọn phiếu nào!" };
 
-    const selectedData = rows.filter((row) => selectedRows.includes(row._id));
+    // ✅ SỬ DỤNG allRowsBeforeFilter nếu có, fallback về rows
+    const dataSource = allRowsBeforeFilter.length > 0 ? allRowsBeforeFilter : rows;
+    
+    const selectedData = dataSource.filter((row) => 
+      selectedRows.includes(row._id)
+    );
 
     if (selectedData.length === 0)
       return { valid: false, message: "Không tìm thấy dữ liệu!" };
 
+    // ✅ Kiểm tra cùng cửa hàng
     const firstStore = selectedData[0].store;
     const allSameStore = selectedData.every((row) => row.store === firstStore);
     if (!allSameStore) {
+      // Lấy danh sách các stores khác nhau
+      const uniqueStores = [...new Set(selectedData.map(r => r.store))];
       return {
         valid: false,
-        message:
-          "Chỉ được chọn các phiếu cùng cửa hàng! Đang có nhiều mã CH khác nhau.",
+        message: `Chỉ được chọn các phiếu cùng cửa hàng! Đang có ${uniqueStores.length} cửa hàng: ${uniqueStores.join(", ")}`,
       };
     }
 
-    // ✅ Không chặn nữa, chỉ gắn cờ hasProcessed để xử lý ở handleProcess
+    // ✅ Kiểm tra phiếu đã xử lý
     const processedPhieus = selectedData.filter(
       (row) => row.trang_thai === true
     );
@@ -230,7 +237,7 @@ const PhieuSoanProcessor = ({
   const handleProcess = async () => {
     const validation = canProcess();
 
-    // ❌ Nếu có phiếu đã xử lý -> vẫn cho bấm nhưng show toast rồi return
+    // ❌ Nếu có phiếu đã xử lý -> show toast rồi return
     if (validation.valid && validation.hasProcessed) {
       const n = validation.processedCount || 0;
       const msg =
@@ -242,7 +249,6 @@ const PhieuSoanProcessor = ({
     }
 
     if (!validation.valid) {
-      // Các lý do invalid thực sự thì vẫn chặn bình thường
       alert(validation.message);
       return;
     }
@@ -261,7 +267,8 @@ const PhieuSoanProcessor = ({
 
       // 2. Xác nhận
       const confirmed = window.confirm(
-        `Xử lý ${validation.data.length} phiếu soạn của cửa hàng ${storeInfo}?`
+        `Xử lý ${validation.data.length} phiếu soạn của cửa hàng ${storeInfo}?\n\n` +
+        `(Bao gồm cả ${selectedRows.length - rows.filter(r => selectedRows.includes(r._id)).length} phiếu đang bị ẩn do filter)`
       );
       if (!confirmed) {
         setIsProcessing(false);
@@ -280,15 +287,19 @@ const PhieuSoanProcessor = ({
       // ✅ 4. Apply sort TRƯỚC KHI tạo excel
       const sortedData = applySortToData(validation.data, sortConfig);
 
-      console.log("📋 Thông tin:", {
+      console.log("📋 Thông tin xử lý:", {
         storeCode: validation.store,
         storeName: tenCuaHang,
         storeInfo,
         dateStr,
+        totalSelected: selectedRows.length,
+        totalToProcess: validation.data.length,
+        visibleOnScreen: rows.filter(r => selectedRows.includes(r._id)).length,
+        hiddenByFilter: validation.data.length - rows.filter(r => selectedRows.includes(r._id)).length,
         sortConfig: sortConfig || "Không sort",
       });
 
-      // 6. Tạo Excel
+      // 5. Tạo Excel
       await generateExcel(
         sortedData,
         validation.store,
@@ -297,7 +308,7 @@ const PhieuSoanProcessor = ({
         chanLe
       );
 
-      // 7. Cập nhật trạng thái
+      // 6. Cập nhật trạng thái
       const phieuIds = validation.data.map((row) => row._id);
       await updatePhieuStatus(phieuIds);
 
@@ -306,7 +317,7 @@ const PhieuSoanProcessor = ({
         { position: "top-center", autoClose: 3000 }
       );
 
-      // 8. Callback
+      // 7. Callback
       if (onSuccess) {
         await onSuccess();
       }
@@ -327,7 +338,7 @@ const PhieuSoanProcessor = ({
     <div className="flex items-center gap-2">
       {selectedRows.length > 0 && (
         <>
-          {/* Chỉ hiển thị cảnh báo khi invalid thực sự (không phải case đã xử lý) */}
+          {/* Chỉ hiển thị cảnh báo khi invalid thực sự */}
           {!validation.valid && (
             <span className="text-sm text-red-600 font-medium">
               ⚠️ {validation.message}

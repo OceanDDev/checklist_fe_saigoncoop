@@ -31,6 +31,11 @@ const PhieuSoanTable = forwardRef((props, ref) => {
   const [maNH, setMaNH] = useState("");
   const [Dept, setDept] = useState("");
   const [SubDept, setSubDept] = useState("");
+  const [sodaTransfer, setSodaTransfer] = useState("");
+  
+  // ✅ LƯU TẤT CẢ DATA ĐÃ LOAD (bao gồm cả đã select)
+  const [allRowsBeforeFilter, setAllRowsBeforeFilter] = useState([]);
+  
   // Dates
   const [tuNgay, setTuNgay] = useState("");
   const [denNgay, setDenNgay] = useState("");
@@ -94,6 +99,7 @@ const PhieuSoanTable = forwardRef((props, ref) => {
       maNH: maNH.trim(),
       Dept: Dept.trim(),
       SubDept: SubDept.trim(),
+      soda_transfer: sodaTransfer.trim(),
     }),
     [
       trangThai,
@@ -104,6 +110,7 @@ const PhieuSoanTable = forwardRef((props, ref) => {
       tuNgay,
       denNgay,
       phieuSoanId,
+      sodaTransfer,
       maNCC,
       maNH,
       Dept,
@@ -118,7 +125,7 @@ const PhieuSoanTable = forwardRef((props, ref) => {
       store !== "" ||
       debouncedSearch !== "" ||
       phieuSoanId !== "" ||
-      // 👇 NEW
+      sodaTransfer !== "" ||
       maNCC.trim() !== "" ||
       maNH.trim() !== "" ||
       Dept.trim() !== "" ||
@@ -129,7 +136,7 @@ const PhieuSoanTable = forwardRef((props, ref) => {
       store,
       debouncedSearch,
       phieuSoanId,
-      // 👇 NEW
+      sodaTransfer,
       maNCC,
       maNH,
       Dept,
@@ -197,6 +204,20 @@ const PhieuSoanTable = forwardRef((props, ref) => {
 
       setRows(data);
 
+      // ✅ LƯU DATA GỐC - luôn update để có full context
+      // Merge với data cũ nếu đang filter để giữ items đã select
+      setAllRowsBeforeFilter(prev => {
+        if (isFilteringWithoutPagination) {
+          // Khi filter: merge data mới với data cũ, loại bỏ duplicate
+          const existingIds = new Set(prev.map(r => r._id));
+          const newItems = data.filter(r => !existingIds.has(r._id));
+          return [...prev, ...newItems];
+        } else {
+          // Không filter: replace hoàn toàn
+          return data;
+        }
+      });
+
       const totalCount =
         Number(res?.pagination?.totalDocuments) ||
         Number(res?.pagination?.total) ||
@@ -213,7 +234,7 @@ const PhieuSoanTable = forwardRef((props, ref) => {
     } finally {
       setLoading(false);
     }
-  }, [params]);
+  }, [params, isFilteringWithoutPagination]);
 
   const fetchStatistics = useCallback(async () => {
     try {
@@ -276,20 +297,16 @@ const PhieuSoanTable = forwardRef((props, ref) => {
   // Initial & whenever params change
   useEffect(() => {
     fetchPhieuSoan();
-    // statistics & special không phụ thuộc params: vẫn refresh cùng lần cho đồng bộ UI
     fetchStatistics();
     fetchSpecialPhieuSoanCount();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchPhieuSoan]);
 
-  // Reset selection khi filter thay đổi
-  useEffect(() => {
-    setSelectedRows([]);
-    setSelectAll(false);
-  }, [filterParams]);
-
+  // ✅ KHÔNG RESET selection khi filter - để giữ nguyên selected state
+  // Người dùng phải tự bỏ chọn bằng nút "Bỏ chọn tất cả" hoặc uncheck manually
+  
   /** ========================= Handlers (stable) ========================= */
   const handleSortChange = useCallback((cfg) => setSortConfig(cfg), []);
+  
   const resetFilters = useCallback(() => {
     setPage(1);
     setLimit(20);
@@ -299,6 +316,7 @@ const PhieuSoanTable = forwardRef((props, ref) => {
     setStore("");
     setSearch("");
     setPhieuSoanId("");
+    setSodaTransfer("");
     setDateRangePreset("3days");
     setTuNgay("");
     setDenNgay("");
@@ -306,8 +324,10 @@ const PhieuSoanTable = forwardRef((props, ref) => {
     setMaNH("");
     setDept("");
     setSubDept("");
+    // ✅ CHỈ reset selection khi click nút "Làm mới"
     setSelectedRows([]);
     setSelectAll(false);
+    setAllRowsBeforeFilter([]);
   }, []);
 
   const handleSelectAll = useCallback(
@@ -343,6 +363,7 @@ const PhieuSoanTable = forwardRef((props, ref) => {
       await phieuSoanService.deleteManyPhieuSoan(selectedRows);
       setSelectedRows([]);
       setSelectAll(false);
+      setAllRowsBeforeFilter([]); // Clear cache sau khi xóa
       await Promise.all([
         fetchPhieuSoan(),
         fetchStatistics(),
@@ -554,11 +575,13 @@ const PhieuSoanTable = forwardRef((props, ref) => {
           <PhieuSoanProcessor
             selectedRows={selectedRows}
             rows={rows}
+            allRowsBeforeFilter={allRowsBeforeFilter} // ✅ TRUYỀN PROP MỚI
             phieuSoanService={phieuSoanService}
             chanLe={chanLe}
             onSuccess={async () => {
               setSelectedRows([]);
               setSelectAll(false);
+              setAllRowsBeforeFilter([]); // Clear cache sau khi process
               await Promise.all([
                 fetchPhieuSoan(),
                 fetchStatistics(),
@@ -629,6 +652,7 @@ const PhieuSoanTable = forwardRef((props, ref) => {
         setDept={setDept}
         SubDept={SubDept}
         setSubDept={setSubDept}
+        setSodaTransfer={setSodaTransfer}
       />
 
       {/* Table */}
@@ -652,6 +676,7 @@ const PhieuSoanTable = forwardRef((props, ref) => {
         getStatusBadge={getStatusBadge}
         getChanLeBadge={getChanLeBadge}
         onSortChange={handleSortChange}
+        allRowsBeforeFilter={allRowsBeforeFilter}
       />
 
       {/* Pagination */}

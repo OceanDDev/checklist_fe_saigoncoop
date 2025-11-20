@@ -26,6 +26,12 @@ const Header = () => {
         return "KPIs";
       case 4:
         return "XUẤT TRẢ";
+      case 20:
+        return "PHIẾU SOẠN";
+         case 21:
+        return "PHỤ XE - BỐC XẾP";
+         case 22:
+        return "PHỤ XE - BỐC XẾP";
       default:
         return "CHECKLIST";
     }
