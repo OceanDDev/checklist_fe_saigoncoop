@@ -15,14 +15,19 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     "34278": ["XUẤT HÀNG SLL"]
   };
 
-  // Chỉ áp dụng phân quyền cho form này
-  const RESTRICTED_FORM_TITLE = "TỔ TRƯỞNG XUẤT HÀNG (NVN)";
+  // Chỉ áp dụng phân quyền cho form này (theo _id)
+  const RESTRICTED_FORM_ID = "687f110132fbc64dbf1c0ac3";
 
   // Kiểm tra form có áp dụng phân quyền không
   const isRestrictedForm = () => {
-    return form?.tieu_de?.includes(RESTRICTED_FORM_TITLE);
+    return formId === RESTRICTED_FORM_ID;
   };
 
+  // Kiểm tra mã NV có quyền truy cập không
+  const hasPermission = () => {
+    if (!isRestrictedForm()) return true;
+    return Object.prototype.hasOwnProperty.call(EMPLOYEE_PERMISSIONS, userInfo.employeeId);
+  };
 
   // Lấy danh sách section được phép truy cập
   const getAllowedSections = () => {
@@ -33,9 +38,9 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     
     // Nếu là form có phân quyền
     const permissions = EMPLOYEE_PERMISSIONS[userInfo.employeeId];
-    // Nếu không có trong danh sách phân quyền, cho phép xem tất cả
+    // Nếu không có trong danh sách phân quyền, trả về mảng rỗng
     if (!permissions) {
-      return form.cac_muc?.map(section => section.ten_muc) || [];
+      return [];
     }
     return permissions;
   };
@@ -45,9 +50,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     const allowedSections = getAllowedSections();
     return allowedSections.includes(sectionName);
   };
-
-  // Lấy tên vai trò dựa trên mã nhân viên
-  
 
   const toggleJob = (job) => {
     const exists = selectedJobs.find((item) => item.noidung === job.noidung);
@@ -70,6 +72,12 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   const handleSubmit = async () => {
     if (!userInfo?.employeeId || !formId) {
       toast.error("Thông tin nhân viên không hợp lệ.");
+      return;
+    }
+
+    // Kiểm tra quyền truy cập
+    if (!hasPermission()) {
+      toast.error("❌ Mã nhân viên không có quyền truy cập form này.");
       return;
     }
 
@@ -119,6 +127,29 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     canAccessSection(section.ten_muc)
   ) || [];
 
+  // Nếu là form có phân quyền và không có quyền, hiển thị thông báo
+  if (isRestrictedForm() && !hasPermission()) {
+    return (
+      <div className="p-4 bg-gradient-to-br from-gray-50 to-white min-h-screen max-w-3xl mx-auto shadow-sm">
+        <h2 className="text-center text-xl font-bold text-blue-700 mb-6 uppercase tracking-wide">
+          {form.tieu_de}
+        </h2>
+        
+        <div className="bg-red-50 border border-red-300 rounded-lg p-6 text-center">
+          <p className="text-red-700 text-lg font-semibold mb-2">
+            ⛔ Không có quyền truy cập
+          </p>
+          <p className="text-red-600">
+            Mã nhân viên <strong>{userInfo.employeeId}</strong> không có quyền truy cập form này.
+          </p>
+          <p className="text-sm text-gray-600 mt-3">
+            Vui lòng liên hệ bộ phận IT nếu bạn cần được cấp quyền.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 bg-gradient-to-br from-gray-50 to-white min-h-screen max-w-3xl mx-auto shadow-sm">
       <h2 className="text-center text-xl font-bold text-blue-700 mb-6 uppercase tracking-wide">
@@ -134,14 +165,12 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
         <p><strong className="text-gray-500">Mã nhân viên:</strong> {userInfo.employeeId}</p>
         <p><strong className="text-gray-500">Họ và tên:</strong> {userInfo.userName}</p>
         <p><strong className="text-gray-500">Bộ phận:</strong> {userInfo.department}</p>
-       
       </div>
 
       {/* Danh sách công việc */}
       <div className="mt-6">
         <h3 className="text-base font-semibold text-blue-700 mb-4 border-b pb-2 border-blue-100">
           📋 Danh sách công việc
-        
         </h3>
 
         {visibleSections.length === 0 ? (

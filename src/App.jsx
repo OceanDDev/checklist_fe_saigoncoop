@@ -21,6 +21,7 @@ import { ToastContainer } from "react-toastify";
 import ToolXuatTra from "./modules/Dieuvan/ToolXuatTra";
 import PhieuSoanHome from "./modules/PhieuSoan";
 import HomePhuXe from "./modules/Dieuvan/ToolPhuXe";
+import DashboardBDH from "./modules/BDH/DasboardBDH";
 
 function App() {
   return (
@@ -93,6 +94,16 @@ function App() {
             <PrivateRoute allowRoles={[0]}>
               <MainLayout>
                 <AdminChecklistFormBDH />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard-bdh"
+          element={
+            <PrivateRoute allowRoles={[0]}>
+              <MainLayout>
+                <DashboardBDH/>
               </MainLayout>
             </PrivateRoute>
           }

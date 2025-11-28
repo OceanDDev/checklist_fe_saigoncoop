@@ -9,6 +9,11 @@ const HomeCheckListBDH = () => {
   const navigate = useNavigate();
   const fetchedRef = useRef(false);
 
+  // Danh sách form bị ẩn tạm thời (có thể bật/tắt)
+  const HIDDEN_FORMS = [
+    "688c153861f98baa9f9e2624", // Form tạm ẩn - xóa dòng này để hiện lại
+  ];
+
   useEffect(() => {
     if (!fetchedRef.current) {
       fetchedRef.current = true;
@@ -19,7 +24,11 @@ const HomeCheckListBDH = () => {
   const fetchChecklists = async () => {
     try {
       const res = await checkListFormServiceBDH.getCheckListBDHForm();
-      const sorted = [...res].sort(
+      
+      // Lọc bỏ các form bị ẩn
+      const filtered = res.filter(form => !HIDDEN_FORMS.includes(form._id));
+      
+      const sorted = [...filtered].sort(
         (a, b) =>
           new Date(b.createdAt || b.ngay_tao) - new Date(a.createdAt || a.ngay_tao)
       );
@@ -40,7 +49,7 @@ const HomeCheckListBDH = () => {
   const handleDelete = async (id) => {
     if (confirm("Bạn có chắc muốn xoá checklist này không?")) {
       try {
-        await checkListFormServiceBDH.deleteCheckListBDHForm(id)
+        await checkListFormServiceBDH.deleteCheckListBDHForm(id);
         toast.success("🗑️ Xoá thành công!");
         fetchChecklists();
       } catch (err) {
@@ -51,7 +60,7 @@ const HomeCheckListBDH = () => {
   };
 
   const handleEdit = (id) => {
-   navigate(`/checklistbdhform/edit/${id}`)
+    navigate(`/checklistbdhform/edit/${id}`);
   };
 
   return (
@@ -61,12 +70,22 @@ const HomeCheckListBDH = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold text-gray-800">Danh sách Checklist BDH</h1>
-        <button
-          onClick={() => navigate("/checklistformBDH")}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg shadow transition-transform hover:scale-105"
-        >
-          ➕ Tạo Checklist
-        </button>
+        
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate("/dashboard-bdh")}
+            className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg shadow transition-transform hover:scale-105 flex items-center gap-2"
+          >
+            📊 Dashboard
+          </button>
+          
+          <button
+            onClick={() => navigate("/checklistformBDH")}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg shadow transition-transform hover:scale-105"
+          >
+            ➕ Tạo Checklist
+          </button>
+        </div>
       </div>
 
       {/* Danh sách checklist */}

@@ -4,11 +4,34 @@ import { IdCard } from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
 import { staffService } from "@/services/staff.service";
 
-const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm }) => {
+const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
   const [employeeIdInput, setEmployeeIdInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  // Danh sách mã NV được phép truy cập cho từng form
+  const FORM_PERMISSIONS = {
+    "BĐH - NHẬP HÀNG": ["20952", "40303", "23204"],
+    "BĐH - XUẤT HÀNG": ["24373", "30541", "34278"]
+  };
+
+  // Kiểm tra form có áp dụng phân quyền không
+  const isRestrictedForm = () => {
+    if (!formTitle) return false;
+    return Object.keys(FORM_PERMISSIONS).some(key => formTitle.includes(key));
+  };
+
+  // Lấy danh sách mã NV được phép cho form hiện tại
+  const getAllowedEmployees = () => {
+    if (!formTitle) return [];
+    for (const [formKey, employees] of Object.entries(FORM_PERMISSIONS)) {
+      if (formTitle.includes(formKey)) {
+        return employees;
+      }
+    }
+    return [];
+  };
 
   const handleCheckEmployee = async () => {
     const id = employeeIdInput.trim();
@@ -24,6 +47,15 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm }) => {
         return;
       }
 
+      // Kiểm tra quyền truy cập nếu là form có phân quyền
+      if (isRestrictedForm()) {
+        const allowedEmployees = getAllowedEmployees();
+        if (!allowedEmployees.includes(id)) {
+          toast.error("❌ Mã nhân viên không có quyền truy cập form này.");
+          return;
+        }
+      }
+
       const info = {
         employeeId: data.ma_nhan_vien,
         userName: data.ho_ten,
@@ -31,7 +63,7 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm }) => {
       };
 
       setSelectedEmployee(info);
-      setShowModal(true); // 👉 mở modal xác nhận
+      setShowModal(true);
     } catch (err) {
       console.error("Lỗi:", err);
       toast.error("❌ Không thể lấy thông tin nhân viên.");
@@ -127,9 +159,9 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm }) => {
               </button>
               <button
                 onClick={() => {
-                  setUserInfo(selectedEmployee); // Cập nhật userInfo
-                  setShowModal(false); // Đóng modal
-                  onConfirm(selectedEmployee); // 👉 Gọi hàm chuyển sang checklist
+                  setUserInfo(selectedEmployee);
+                  setShowModal(false);
+                  onConfirm(selectedEmployee);
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
@@ -147,6 +179,7 @@ UserInfoFormBDH.propTypes = {
   userInfo: PropTypes.object.isRequired,
   setUserInfo: PropTypes.func.isRequired,
   onConfirm: PropTypes.func.isRequired,
+  formTitle: PropTypes.string,
 };
 
 export default UserInfoFormBDH;

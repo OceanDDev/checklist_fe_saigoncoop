@@ -69,6 +69,26 @@ const CaptureTable = ({ tableRef, fileName = "bang-phu-xe" }) => {
           if (clonedContent) {
             clonedContent.style.overflow = 'visible';
           }
+
+          // ẨN CỘT CHỨC NĂNG (cột cuối cùng)
+          // Ẩn header của cột cuối
+          const headerCells = clonedDoc.querySelectorAll('.ant-table-thead th:last-child');
+          headerCells.forEach(cell => cell.style.display = 'none');
+          
+          // Ẩn tất cả các cell của cột cuối trong body
+          const bodyCells = clonedDoc.querySelectorAll('.ant-table-tbody td:last-child');
+          bodyCells.forEach(cell => cell.style.display = 'none');
+
+          // ẨN ICON TRONG BUTTON TÊN PHỤ XE
+          const phuXeIcons = clonedDoc.querySelectorAll('.phu-xe-icon');
+          phuXeIcons.forEach(icon => icon.style.display = 'none');
+
+          // CHỈNH CENTER CHO BUTTON TÊN PHỤ XE
+          const phuXeButtons = clonedDoc.querySelectorAll('.phu-xe-name-button');
+          phuXeButtons.forEach(button => {
+            button.style.justifyContent = 'center';
+            button.style.textAlign = 'center';
+          });
         }
       });
 
