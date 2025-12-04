@@ -66,6 +66,11 @@ const URL = {
     donhang: ENDPOINT_PREFIX + "/donhang",
     phieusoan: ENDPOINT_PREFIX + "/phieusoan",
   },
+  ttb: {
+    ttb: ENDPOINT_PREFIX + "/ttb",
+    thietbi: ENDPOINT_PREFIX + "/thietbi"
+   
+  },
 };
 
 export { URL, ApiServer, DEF_HEADERS };

@@ -22,6 +22,7 @@ import ToolXuatTra from "./modules/Dieuvan/ToolXuatTra";
 import PhieuSoanHome from "./modules/PhieuSoan";
 import HomePhuXe from "./modules/Dieuvan/ToolPhuXe";
 import DashboardBDH from "./modules/BDH/DasboardBDH";
+import HomeTTB from "./modules/TTB";
 
 function App() {
   return (
@@ -103,11 +104,12 @@ function App() {
           element={
             <PrivateRoute allowRoles={[0]}>
               <MainLayout>
-                <DashboardBDH/>
+                <DashboardBDH />
               </MainLayout>
             </PrivateRoute>
           }
         />
+
         <Route
           path="/checklistform"
           element={
@@ -156,14 +158,13 @@ function App() {
             </PrivateRoute>
           }
         />
-         <Route
+        <Route
           path="/phuxe"
           element={
-            <PrivateRoute allowRoles={[21,22]}>
+            <PrivateRoute allowRoles={[21, 22]}>
               <MainLayout>
                 {" "}
-                <HomePhuXe/>
-                {" "}
+                <HomePhuXe />{" "}
               </MainLayout>
             </PrivateRoute>
           }
@@ -180,8 +181,19 @@ function App() {
           }
         />
 
-        {/*    KPI   */}
-        
+  
+        {/* TTB */}
+        <Route
+          path="/ttb"
+          element={
+            <PrivateRoute allowRoles={[23]}>
+              <MainLayout> {" "}
+               <HomeTTB />{" "}
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
         {/*    KPI KETOAN  */}
 
         <Route
@@ -236,6 +248,7 @@ function App() {
             </PrivateRoute>
           }
         />
+
 
         <Route path="/thank-you" element={<ThankYouScreen />} />
 
