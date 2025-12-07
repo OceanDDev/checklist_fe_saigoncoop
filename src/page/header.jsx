@@ -32,6 +32,8 @@ const Header = () => {
         return "PHỤ XE - BỐC XẾP";
          case 22:
         return "PHỤ XE - BỐC XẾP";
+        case 23:
+        return "TRANG THIẾT BỊ";
       default:
         return "CHECKLIST";
     }

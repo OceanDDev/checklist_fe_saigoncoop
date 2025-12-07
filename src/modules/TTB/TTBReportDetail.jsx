@@ -26,6 +26,7 @@ import { cuaHangService } from "@/services/dieuvan/cuahang.service";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
+import TTBExportExcel from "./TTBExportExcel";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -259,7 +260,6 @@ const TTBReportDetail = ({ onBack }) => {
     }
   };
 
-  // Memoized columns cho bảng tổng hợp
   const summaryColumns = useMemo(
     () => [
       {
@@ -273,7 +273,7 @@ const TTBReportDetail = ({ onBack }) => {
           <strong className="text-sm text-blue-500">{text}</strong>
         ),
       },
-      ...thietBiList.flatMap((thietBi) => [
+      ...thietBiList.flatMap((thietBi, index) => [
         {
           title: (
             <div className="text-center">
@@ -284,6 +284,10 @@ const TTBReportDetail = ({ onBack }) => {
           key: `${thietBi.ten_thiet_bi}_di`,
           align: "center",
           width: 80,
+          colSpan: 2,
+          onHeaderCell: () => ({
+            colSpan: 2,
+          }),
           render: (val) => (
             <span className="text-base font-semibold text-green-500">
               {val || 0}
@@ -291,15 +295,14 @@ const TTBReportDetail = ({ onBack }) => {
           ),
         },
         {
-          title: (
-            <div className="text-center">
-              <strong className="text-sm block">{thietBi.ten_thiet_bi}</strong>
-            </div>
-          ),
           dataIndex: `${thietBi.ten_thiet_bi}_tra`,
           key: `${thietBi.ten_thiet_bi}_tra`,
           align: "center",
           width: 80,
+          colSpan: 0,
+          onHeaderCell: () => ({
+            colSpan: 0,
+          }),
           render: (val) => (
             <span className="text-base font-semibold text-red-500">
               {val || 0}
@@ -311,7 +314,10 @@ const TTBReportDetail = ({ onBack }) => {
     [thietBiList]
   );
 
-  // Memoized columns cho bảng chi tiết
+  // TÌM VÀ XÓA phần detailColumns cũ (từ dòng const detailColumns = useMemo...
+  // đến hết dấu ngoặc đóng và dấu phẩy của nó)
+  // SAU ĐÓ dán code này vào vị trí đó:
+
   const detailColumns = useMemo(
     () => [
       {
@@ -328,6 +334,12 @@ const TTBReportDetail = ({ onBack }) => {
         width: 120,
         align: "center",
         fixed: "left",
+        sorter: (a, b) => {
+          const dateA = dayjs(a.day?.ngay_di);
+          const dateB = dayjs(b.day?.ngay_di);
+          return dateA.diff(dateB);
+        },
+        defaultSortOrder: "ascend",
         render: (record) => {
           const ngayDi = dayjs(record.day?.ngay_di);
           return (
@@ -345,6 +357,14 @@ const TTBReportDetail = ({ onBack }) => {
         width: 120,
         align: "center",
         fixed: "left",
+        sorter: (a, b) => {
+          if (!a.day?.ngay_ve && !b.day?.ngay_ve) return 0;
+          if (!a.day?.ngay_ve) return 1;
+          if (!b.day?.ngay_ve) return -1;
+          const dateA = dayjs(a.day.ngay_ve);
+          const dateB = dayjs(b.day.ngay_ve);
+          return dateA.diff(dateB);
+        },
         render: (record) => {
           if (!record.day?.ngay_ve) {
             return <span className="text-gray-300">-</span>;
@@ -370,56 +390,53 @@ const TTBReportDetail = ({ onBack }) => {
           <strong className="text-blue-500 text-sm">{text}</strong>
         ),
       },
-      ...thietBiList.flatMap((thietBi) => [
-        {
-          title: (
-            <div className="text-center">
-              <div className="font-semibold">{thietBi.ten_thiet_bi}</div>
-              <div className="text-xs text-green-500">ĐI</div>
-            </div>
-          ),
-          key: `${thietBi.ten_thiet_bi}_di`,
-          width: 80,
-          align: "center",
-          render: (record) => {
-            const ttb = record.ttb?.find(
-              (t) => t.ten_ttb === thietBi.ten_thiet_bi
-            );
-            const val = ttb?.di_ch || 0;
-            return val > 0 ? (
-              <span className="text-green-500 font-semibold text-base">
-                {val}
-              </span>
-            ) : (
-              <span className="text-gray-300">0</span>
-            );
+      ...thietBiList.map((thietBi) => ({
+        title: (
+          <div className="text-center font-semibold">
+            {thietBi.ten_thiet_bi}
+          </div>
+        ),
+        children: [
+          {
+            title: <div className="text-xs text-green-500">ĐI</div>,
+            key: `${thietBi.ten_thiet_bi}_di`,
+            width: 80,
+            align: "center",
+            render: (record) => {
+              const ttb = record.ttb?.find(
+                (t) => t.ten_ttb === thietBi.ten_thiet_bi
+              );
+              const val = ttb?.di_ch || 0;
+              return val > 0 ? (
+                <span className="text-green-500 font-semibold text-base">
+                  {val}
+                </span>
+              ) : (
+                <span className="text-gray-300">0</span>
+              );
+            },
           },
-        },
-        {
-          title: (
-            <div className="text-center">
-              <div className="font-semibold">{thietBi.ten_thiet_bi}</div>
-              <div className="text-xs text-red-500">TRẢ VỀ</div>
-            </div>
-          ),
-          key: `${thietBi.ten_thiet_bi}_tra`,
-          width: 80,
-          align: "center",
-          render: (record) => {
-            const ttb = record.ttb?.find(
-              (t) => t.ten_ttb === thietBi.ten_thiet_bi
-            );
-            const val = ttb?.ch_tra_ve || 0;
-            return val > 0 ? (
-              <span className="text-red-500 font-semibold text-base">
-                {val}
-              </span>
-            ) : (
-              <span className="text-gray-300">0</span>
-            );
+          {
+            title: <div className="text-xs text-red-500">TRẢ VỀ</div>,
+            key: `${thietBi.ten_thiet_bi}_tra`,
+            width: 80,
+            align: "center",
+            render: (record) => {
+              const ttb = record.ttb?.find(
+                (t) => t.ten_ttb === thietBi.ten_thiet_bi
+              );
+              const val = ttb?.ch_tra_ve || 0;
+              return val > 0 ? (
+                <span className="text-red-500 font-semibold text-base">
+                  {val}
+                </span>
+              ) : (
+                <span className="text-gray-300">0</span>
+              );
+            },
           },
-        },
-      ]),
+        ],
+      })),
       {
         title: <strong>NOTE</strong>,
         dataIndex: "ghi_chu",
@@ -430,6 +447,7 @@ const TTBReportDetail = ({ onBack }) => {
     ],
     [thietBiList]
   );
+  
 
   // Memoized summary data
   const summaryData = useMemo(() => {
@@ -529,7 +547,22 @@ const TTBReportDetail = ({ onBack }) => {
           </Col>
         </Row>
       </Card>
-
+<div className="mb-6">
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <Button
+      icon={<ArrowLeftOutlined />}
+      onClick={onBack}
+      size="large"
+      className="mb-4"
+    >
+      Quay lại
+    </Button>
+    
+    {reportData && (
+      <TTBExportExcel reportData={reportData} thietBiList={thietBiList} />
+    )}
+  </div>
+</div>
       {/* Kết quả báo cáo */}
       {loading ? (
         <div className="text-center py-24 bg-white rounded-lg">
