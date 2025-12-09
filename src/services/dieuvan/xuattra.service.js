@@ -1,42 +1,48 @@
 import { ApiServer, URL } from "@/configs/api-request";
 import { requestService } from "../request.service";
 
-const getAllXuatTra = async () => {
+// ==================== XUAT TRA SERVICE ====================
+
+const getAllXuatTra = async (params = {}) => {
+  // ✅ Tối ưu: Thêm params
   try {
     const results = await requestService.get(
-      URL.dieuvan.xuattra, // ✅ path
-      {},                  // ✅ params (bắt buộc là object)
-      undefined,           // headers (bạn có thể bỏ qua)
-      ApiServer            // axiosInstance
+      URL.dieuvan.xuattra,
+      params, // Truyền params để lọc/phân trang
+      undefined,
+      ApiServer
     );
     return results;
   } catch (error) {
     console.error("Lỗi khi gọi getAllXuatTra:", error);
+    throw error; // Nên throw error để component gọi có thể xử lý
   }
 };
-
-
 
 const getXuatTraById = async (id) => {
   try {
     const results = await requestService.get(
-      ApiServer,
-      `${URL.dieuvan.xuattra}/${id}`
+      `${URL.dieuvan.xuattra}/${id}`, // ✅ Sửa lỗi thứ tự tham số
+      {},
+      undefined,
+      ApiServer
     );
     return results;
   } catch (error) {
     console.error("Lỗi khi gọi getXuatTraById:", error);
+    throw error;
   }
 };
 
 const createXuatTra = async (payload) => {
   try {
+    // ✅ Giữ nguyên logic này (chuyển user name qua header)
     const user = JSON.parse(localStorage.getItem("user"));
     const results = await requestService.post(
       URL.dieuvan.xuattra,
       payload,
       {
-        "x-user-name": user?.name || "Unknown"
+        "x-user-name": user?.name || "Unknown",
       },
       ApiServer
     );
@@ -46,7 +52,6 @@ const createXuatTra = async (payload) => {
     throw error;
   }
 };
-
 
 const updateXuatTra = async (id, payload) => {
   try {
@@ -73,13 +78,14 @@ const deleteXuatTra = async (id) => {
     return results;
   } catch (error) {
     console.error("Lỗi khi gọi deleteXuatTra:", error);
+    throw error;
   }
 };
 
-export const rotKienService = {
+export const xuatTraService = {
   getAllXuatTra,
   getXuatTraById,
   createXuatTra,
-    updateXuatTra,
+  updateXuatTra,
   deleteXuatTra,
 };

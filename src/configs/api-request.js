@@ -58,7 +58,9 @@ const URL = {
     cuahang: ENDPOINT_PREFIX + "/cuahang",
     xuattra: ENDPOINT_PREFIX + "/xuattra",
     phuxe: ENDPOINT_PREFIX + "/phuxe",
-    tenphuxe: ENDPOINT_PREFIX + "/tenphuxe"
+    tenphuxe: ENDPOINT_PREFIX + "/tenphuxe",
+    product: ENDPOINT_PREFIX + "/product",
+    vendor: ENDPOINT_PREFIX + "/vendor",
   },
   phieusoan: {
     dinhvi: ENDPOINT_PREFIX + "/dinhvi",
@@ -68,8 +70,7 @@ const URL = {
   },
   ttb: {
     ttb: ENDPOINT_PREFIX + "/ttb",
-    thietbi: ENDPOINT_PREFIX + "/thietbi"
-   
+    thietbi: ENDPOINT_PREFIX + "/thietbi",
   },
 };
 

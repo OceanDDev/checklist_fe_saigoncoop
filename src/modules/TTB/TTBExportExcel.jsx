@@ -24,6 +24,7 @@ const TTBExportExcel = ({ thietBiList }) => {
       }
 
       const allData = ttbResponse.data;
+      // eslint-disable-next-line no-unused-vars
       const allCuaHang = cuaHangResponse?.data || [];
 
       if (allData.length === 0) {

@@ -1,22 +1,18 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-
-import { rotKienService } from "@/services/dieuvan/xuattra.service"; // service xuất trả
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { xuatTraService } from "@/services/dieuvan/xuattra.service";
 import { cuaHangService } from "@/services/dieuvan/cuahang.service";
-
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
 import ExcelJS from "exceljs";
-
 import AddXuatTraDialog from "./addXuatTra";
 import CustomPagination from "@/components/ui/customPagination";
 import XuatTraRow from "./xuatTrarow";
 import XuatTraHT from "./xuatTrarow/xuatTraHT";
+import TableVendor from "./vendor";
+import TableSKU from "./product";
 
-// ===== Helpers =====
-
-// Unwrap: đảm bảo luôn trả mảng cho setState
 const unwrapArray = (res) => {
   if (Array.isArray(res)) return res;
   if (res && Array.isArray(res.data)) return res.data;
@@ -24,28 +20,24 @@ const unwrapArray = (res) => {
   return [];
 };
 
-// YYYY-MM-DD (local timezone) — dùng cho <input type="date" />
 const toDateInputValue = (d = new Date()) => {
   const tz = d.getTimezoneOffset() * 60000;
   return new Date(d.getTime() - tz).toISOString().slice(0, 10);
 };
 
-// 24h vi-VN, không AM/PM (dùng để hiển thị)
-const formatDateTimeVN = (value) => {
+const formatDateVN = (value) => {
   if (!value) return "";
-  return new Date(value)
-    .toLocaleString("vi-VN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    })
-    .replace(",", "");
+  return new Date(value).toLocaleString("vi-VN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 };
 
-// Debounce nhỏ cho search
+const getLocalYMD = (d) => {
+  return d ? toDateInputValue(new Date(d)) : "";
+};
+
 const useDebouncedValue = (value, delay = 200) => {
   const [v, setV] = useState(value);
   useEffect(() => {
@@ -56,91 +48,78 @@ const useDebouncedValue = (value, delay = 200) => {
 };
 
 const ToolXuatTra = () => {
-  const [viewMode, setViewMode] = useState("chua"); // ⟵ giống ToolRotKien
+  const [viewMode, setViewMode] = useState("xuattra");
+  const [statusMode, setStatusMode] = useState("chua");
+  const [showAllColumns, setShowAllColumns] = useState(false);
+  
   const [data, setData] = useState([]);
   const [cuahangs, setCuahangs] = useState([]);
-
+  const [isLoading, setIsLoading] = useState(false);
   const [searchMaCH, setSearchMaCH] = useState("");
-  const debouncedSearch = useDebouncedValue(searchMaCH, 200);
+  const debouncedSearch = useDebouncedValue(searchMaCH, 300);
   const [filterNgayXuatTra, setFilterNgayXuatTra] = useState("");
-  const [filterBoPhan, setFilterBoPhan] = useState(""); // ⟵ filter Bộ phận
+  const [filterBoPhan, setFilterBoPhan] = useState("");
+  const [filterDuplicate, setFilterDuplicate] = useState(false);
 
-  // PHÂN TRANG (cố định 10 dòng/trang) — tách đôi cho 2 view
   const pageSize = 10;
   const [pageChua, setPageChua] = useState(0);
   const [pageDa, setPageDa] = useState(0);
 
-  // Fetch (chặn double-fetch ở Strict Mode)
-  const loadedRef = useRef(false);
-  useEffect(() => {
-    if (loadedRef.current) return;
-    loadedRef.current = true;
-
-    (async () => {
-      try {
-        const [xuattra, ch] = await Promise.all([
-          rotKienService.getAllXuatTra(),
-          cuaHangService.getAllCuaHang(),
-        ]);
-        setData(unwrapArray(xuattra));
-        setCuahangs(unwrapArray(ch));
-      } catch (err) {
-        console.error("Fetch error:", err);
-        setData([]);
-        setCuahangs([]);
-      }
-    })();
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [xuattra, ch] = await Promise.all([
+        xuatTraService.getAllXuatTra(),
+        cuaHangService.getAllCuaHang(),
+      ]);
+      setData(unwrapArray(xuattra));
+      setCuahangs(unwrapArray(ch));
+    } catch (err) {
+      console.error("Fetch error:", err);
+      toast.error("❌ Lỗi tải dữ liệu ban đầu!");
+      setData([]);
+      setCuahangs([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  // Safe guard nếu vì lý do gì đó data không phải mảng
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   const safeData = Array.isArray(data) ? data : [];
 
-  const getLocalYMD = (d) => (d ? toDateInputValue(new Date(d)) : "");
+  const filteredData = useMemo(() => {
+    const q = (debouncedSearch || "").toLowerCase();
+    return safeData.filter((item) => {
+      const isChuaHT = !item?.trangThai;
+      const statusMatch = statusMode === "chua" ? isChuaHT : !isChuaHT;
+      if (!statusMatch) return false;
 
-  // Lọc dữ liệu (tách CHƯA/ĐÃ)
+      const passMaCH = (item?.maCH || "").toLowerCase().includes(q);
+      const ngayXuatTraDate = getLocalYMD(item?.ngayXuatTra);
+      const passNgay = !filterNgayXuatTra || ngayXuatTraDate === filterNgayXuatTra;
+      const passBoPhan = !filterBoPhan || item?.boPhan === filterBoPhan;
+      const passDuplicate = !filterDuplicate || item?.kiem_tra_trung > 1;
+
+      return passMaCH && passNgay && passBoPhan && passDuplicate;
+    });
+  }, [safeData, debouncedSearch, filterNgayXuatTra, filterBoPhan, statusMode, filterDuplicate]);
+
   const filteredDataChuaHT = useMemo(() => {
-    const q = (debouncedSearch || "").toLowerCase();
-    return safeData
-      .filter((item) => !item?.trangThai)
-      .filter((item) => {
-        const passMaCH = (item?.maCH || "").toLowerCase().includes(q);
-        const anyDate =
-          item?.ngayXuatTra ??
-          item?.ngayCapNhap ??
-          item?.updatedAt ??
-          item?.createdAt;
-        const passNgay =
-          !filterNgayXuatTra || getLocalYMD(anyDate) === filterNgayXuatTra;
-        const passBoPhan = !filterBoPhan || item?.boPhan === filterBoPhan;
-        return passMaCH && passNgay && passBoPhan;
-      });
-  }, [safeData, debouncedSearch, filterNgayXuatTra, filterBoPhan]);
-
+    return filteredData.filter(item => !item?.trangThai);
+  }, [filteredData]);
+  
   const filteredDataDaHT = useMemo(() => {
-    const q = (debouncedSearch || "").toLowerCase();
-    return safeData
-      .filter((item) => !!item?.trangThai)
-      .filter((item) => {
-        const passMaCH = (item?.maCH || "").toLowerCase().includes(q);
-        const anyDate =
-          item?.ngayXuatTra ??
-          item?.ngayCapNhap ??
-          item?.updatedAt ??
-          item?.createdAt;
-        const passNgay =
-          !filterNgayXuatTra || getLocalYMD(anyDate) === filterNgayXuatTra;
-        const passBoPhan = !filterBoPhan || item?.boPhan === filterBoPhan;
-        return passMaCH && passNgay && passBoPhan;
-      });
-  }, [safeData, debouncedSearch, filterNgayXuatTra, filterBoPhan]);
+    return filteredData.filter(item => !!item?.trangThai);
+  }, [filteredData]);
 
-  // Reset trang khi đổi filter / view hoặc đổi dữ liệu
   useEffect(() => {
     setPageChua(0);
     setPageDa(0);
-  }, [debouncedSearch, filterNgayXuatTra, filterBoPhan, viewMode, safeData.length]);
+  }, [debouncedSearch, filterNgayXuatTra, filterBoPhan, statusMode, filterDuplicate]);
 
-  // Tính toán phân trang
   const pageCountChua = Math.max(0, Math.ceil(filteredDataChuaHT.length / pageSize));
   const pageCountDa = Math.max(0, Math.ceil(filteredDataDaHT.length / pageSize));
 
@@ -156,91 +135,84 @@ const ToolXuatTra = () => {
     return filteredDataDaHT.slice(start, end);
   }, [filteredDataDaHT, pageDa]);
 
-  // ===== CRUD Handlers =====
   const handleComplete = useCallback(async (id) => {
     try {
-      await rotKienService.updateXuatTra(id, { trangThai: true });
-      const list = await rotKienService.getAllXuatTra();
-      setData(unwrapArray(list));
+      await xuatTraService.updateXuatTra(id, { trangThai: true });
+      fetchData();
       toast.success("✅ Đánh dấu hoàn thành!");
     } catch (err) {
       console.error("Lỗi cập nhật:", err);
       toast.error("❌ Lỗi cập nhật");
     }
-  }, []);
+  }, [fetchData]);
 
   const handleUncomplete = useCallback(async (id) => {
     try {
-      await rotKienService.updateXuatTra(id, { trangThai: false });
-      const list = await rotKienService.getAllXuatTra();
-      setData(unwrapArray(list));
+      await xuatTraService.updateXuatTra(id, { trangThai: false });
+      fetchData();
       toast.success("↩ Đã đưa về trạng thái chưa hoàn thành!");
     } catch (err) {
       console.error("Lỗi hoàn tác:", err);
       toast.error("❌ Lỗi hoàn tác");
     }
-  }, []);
+  }, [fetchData]);
 
-  // Handler tạo mới (được truyền xuống AddXuatTraDialog)
   const handleCreate = useCallback(async (payload) => {
     try {
-      await rotKienService.createXuatTra(payload);
-      const list = await rotKienService.getAllXuatTra();
-      setData(unwrapArray(list));
+      await xuatTraService.createXuatTra(payload);
+      fetchData();
       toast.success("✅ Thêm xuất trả thành công!");
     } catch (err) {
       console.error("Lỗi tạo xuất trả:", err);
       toast.error("❌ Lỗi tạo xuất trả");
     }
-  }, []);
+  }, [fetchData]);
 
   const handleClearFilter = useCallback(() => {
     setSearchMaCH("");
     setFilterNgayXuatTra("");
     setFilterBoPhan("");
+    setFilterDuplicate(false);
   }, []);
 
-  // ===== Excel helpers =====
   const stamp = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-      d.getDate()
-    )}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
   };
 
-  // Map field fallback nhiều tên để tránh undefined khi backend đổi key
-  const mapRowsForExcel = (rows) =>
-    rows.map((item, i) => {
-      const ngay =
-        item?.ngayXuatTra ??
-        item?.ngayCapNhap ??
-        item?.updatedAt ??
-        item?.createdAt;
-      const soKien = item?.soKien ?? item?.soKienRot ?? "";
-      const sku = item?.SKU ?? item?.sku ?? "";
-      return {
-        STT: i + 1,
-        "Mã CH": item?.maCH || "",
-        "Tên CH": item?.tenCH || "",
-        "Số kiện xuất trả": soKien,
-        SKU: sku,
-        "Số soda - hóa đơn": item?.soSoda ?? "",
-        "Ngày cập nhật": ngay
-          ? new Date(ngay).toLocaleString("vi-VN", {
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            })
-          : "",
-        "Ghi chú": item?.ghiChu || "",
-        "Bộ phận": item?.boPhan || "",
-        "Trạng thái": item?.trangThai ? "Đã hoàn thành" : "Chưa hoàn thành",
-      };
-    });
+  const mapRowsForExcel = (rows) => {
+    return rows.map((item, i) => ({
+      STT: i + 1,
+      "Ngày nhập trả": item?.ngayNhapTra ? formatDateVN(item.ngayNhapTra) : "",
+      "Số": item?.so || "",
+      "Tài xế": item?.taiXe || "",
+      "Biển số xe": item?.bienSoXe || "",
+      "Ngày CH trả NVC": item?.ngayCHTraNVC ? formatDateVN(item.ngayCHTraNVC) : "",
+      "NV nhập trả": item?.nvNhapTra || "",
+      "Ký hiệu": item?.kyHieu || "",
+      "Số hóa đơn": item?.soHoaDon || "",
+      "Số tiền sau thuế": item?.soTienSauThue || "",
+      "Ngày hóa đơn": item?.ngayHoaDon ? formatDateVN(item.ngayHoaDon) : "",
+      "Mã CH": item?.maCH || "",
+      "Tên CH": item?.tenCH || "",
+      "SKU": item?.sku || "",
+      "UPC": item?.upc || "",
+      "Tên hàng": item?.tenHang || "",
+      "Lượng": item?.luong ?? "",
+      "Vendor": item?.vendor || "",
+      "Vendor Name": item?.vendorName || "",
+      "Ngày BG kế toán": item?.ngayBGKeToan ? formatDateVN(item.ngayBGKeToan) : "",
+      "Số RTV": item?.soRTV || "",
+      "NV kế toán nhập trả": item?.nvKeToanNhapTra || "",
+      "Ngày BG xuất trả": item?.ngayBGXuatTra ? formatDateVN(item.ngayBGXuatTra) : "",
+      "Ngày sản xuất": item?.ngaySanXuat ? formatDateVN(item.ngaySanXuat) : "",
+      "Hạn sử dụng": item?.hanSuDung ? formatDateVN(item.hanSuDung) : "",
+      "Ghi chú": item?.ghiChu || "",
+      "Kiểm tra trùng": item?.kiem_tra_trung || 1,
+      "Trạng thái": item?.trangThai ? "Đã hoàn thành" : "Chưa hoàn thành",
+    }));
+  };
 
   const autoFitColumns = (ws) => {
     ws.columns.forEach((col) => {
@@ -264,14 +236,32 @@ const ToolXuatTra = () => {
 
     ws.columns = [
       { header: "STT", key: "STT" },
+      { header: "Ngày nhập trả", key: "Ngày nhập trả" },
+      { header: "Số", key: "Số" },
+      { header: "Tài xế", key: "Tài xế" },
+      { header: "Biển số xe", key: "Biển số xe" },
+      { header: "Ngày CH trả NVC", key: "Ngày CH trả NVC" },
+      { header: "NV nhập trả", key: "NV nhập trả" },
+      { header: "Ký hiệu", key: "Ký hiệu" },
+      { header: "Số hóa đơn", key: "Số hóa đơn" },
+      { header: "Số tiền sau thuế", key: "Số tiền sau thuế" },
+      { header: "Ngày hóa đơn", key: "Ngày hóa đơn" },
       { header: "Mã CH", key: "Mã CH" },
       { header: "Tên CH", key: "Tên CH" },
-      { header: "Số kiện xuất trả", key: "Số kiện xuất trả" },
       { header: "SKU", key: "SKU" },
-      { header: "Số soda - hóa đơn", key: "Số soda - hóa đơn" },
-      { header: "Ngày cập nhật", key: "Ngày cập nhật" },
+      { header: "UPC", key: "UPC" },
+      { header: "Tên hàng", key: "Tên hàng" },
+      { header: "Lượng", key: "Lượng" },
+      { header: "Vendor", key: "Vendor" },
+      { header: "Vendor Name", key: "Vendor Name" },
+      { header: "Ngày BG kế toán", key: "Ngày BG kế toán" },
+      { header: "Số RTV", key: "Số RTV" },
+      { header: "NV kế toán nhập trả", key: "NV kế toán nhập trả" },
+      { header: "Ngày BG xuất trả", key: "Ngày BG xuất trả" },
+      { header: "Ngày sản xuất", key: "Ngày sản xuất" },
+      { header: "Hạn sử dụng", key: "Hạn sử dụng" },
+      { header: "Kiểm tra trùng", key: "Kiểm tra trùng" },
       { header: "Ghi chú", key: "Ghi chú" },
-      { header: "Bộ phận", key: "Bộ phận" },
       { header: "Trạng thái", key: "Trạng thái" },
     ];
 
@@ -298,18 +288,8 @@ const ToolXuatTra = () => {
 
     ws.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
-      row.eachCell((cell, colNumber) => {
+      row.eachCell((cell) => {
         cell.border = { top: { style: "hair" }, bottom: { style: "hair" } };
-        const headerText = ws.getColumn(colNumber).header;
-        if (
-          headerText === "Số kiện xuất trả" ||
-          headerText === "Số soda - hóa đơn" ||
-          headerText === "SKU"
-        ) {
-          cell.alignment = { horizontal: "right" };
-        } else if (headerText === "Ngày cập nhật") {
-          cell.alignment = { horizontal: "center" };
-        }
       });
     });
 
@@ -328,104 +308,148 @@ const ToolXuatTra = () => {
   };
 
   const handleExportVisible = async () => {
-    const visible = viewMode === "chua" ? filteredDataChuaHT : filteredDataDaHT;
-    const suffix = viewMode === "chua" ? "chuaHT" : "daHT";
+    const visible = statusMode === "chua" ? filteredDataChuaHT : filteredDataDaHT;
+    const suffix = statusMode === "chua" ? "chuaHT" : "daHT";
     await exportToExcel(visible, `xuat-tra_${suffix}_${stamp()}.xlsx`);
   };
 
-  // ===== Render =====
-  return (
-    <div className="px-4 sm:px-8 py-8">
-      <h2 className="text-2xl font-bold text-gray-800 border-b pb-2 mb-4">
-        TOOL XUẤT TRẢ
-      </h2>
+  if (viewMode === "sku") {
+    return <TableSKU onBack={() => setViewMode("xuattra")} />;
+  }
 
-      {/* Trạng thái + Bộ phận (giống ToolRotKien) */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <label htmlFor="viewMode" className="text-sm font-medium text-gray-700">
-            Trạng thái:
-          </label>
-          <select
-            id="viewMode"
-            value={viewMode}
-            onChange={(e) => setViewMode(e.target.value)}
-            className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  if (viewMode === "vendor") {
+    return <TableVendor onBack={() => setViewMode("xuattra")} />;
+  }
+
+  return (
+    <div className="p-4 bg-gray-50 min-h-screen">
+      <div className="mb-6 bg-white rounded-lg shadow p-4">
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">TOOL XUẤT TRẢ</h1>
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Button
+          onClick={() => setViewMode("xuattra")}
+          variant={viewMode === "xuattra" ? "default" : "outline"}
+        >
+          📋 XUẤT TRẢ
+        </Button>
+        <Button onClick={() => setViewMode("sku")} variant="outline">
+          📦 SKU
+        </Button>
+        <Button onClick={() => setViewMode("vendor")} variant="outline">
+          🏢 VENDOR
+        </Button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow p-4 mb-4">
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Trạng thái:</label>
+            <select
+              value={statusMode}
+              onChange={(e) => setStatusMode(e.target.value)}
+              className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="chua">Chưa hoàn thành ({filteredDataChuaHT.length})</option>
+              <option value="da">Đã hoàn thành ({filteredDataDaHT.length})</option>
+            </select>
+          </div>
+
+          <Button
+            onClick={() => setShowAllColumns(!showAllColumns)}
+            variant="outline"
+            className="gap-2"
           >
-            <option value="chua">Chưa hoàn thành</option>
-            <option value="hoan">Đã hoàn thành</option>
-          </select>
+            {showAllColumns ? "🔽 Ẩn chi tiết" : "🔼 Hiện chi tiết"}
+          </Button>
+
+          <Button
+            onClick={() => setFilterDuplicate(!filterDuplicate)}
+            variant={filterDuplicate ? "destructive" : "outline"}
+            className="gap-2"
+          >
+            {filterDuplicate ? "❌ Chỉ hiển thị Trùng lặp" : "🔍 Lọc trùng lặp"}
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap gap-3 mb-4">
+          <Input
+            type="text"
+            placeholder="🔍 Tìm theo Mã CH..."
+            value={searchMaCH}
+            onChange={(e) => setSearchMaCH(e.target.value)}
+            className="w-full sm:w-48"
+          />
+          <Input
+            type="date"
+            value={filterNgayXuatTra}
+            onChange={(e) => setFilterNgayXuatTra(e.target.value)}
+            max={toDateInputValue()}
+            className="w-full sm:w-48"
+          />
+          <Button onClick={handleClearFilter} variant="outline">
+            🧹 Xóa bộ lọc
+          </Button>
+          <AddXuatTraDialog onSubmit={handleCreate} cuahangs={cuahangs} />
+          <Button onClick={handleExportVisible} variant="outline">
+            ⬇️ Xuất Excel
+          </Button>
         </div>
       </div>
 
-      {/* Bộ lọc & thêm */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-      
-        <Input
-          type="text"
-          placeholder="🔍 Mã cửa hàng..."
-          value={searchMaCH}
-          onChange={(e) => setSearchMaCH(e.target.value)}
-          className="w-full sm:w-48"
-        />
+      {isLoading && <div className="text-center py-8">Đang tải dữ liệu...</div>}
 
-        <Input
-          type="date"
-          value={filterNgayXuatTra}
-          onChange={(e) => setFilterNgayXuatTra(e.target.value)}
-          max={toDateInputValue()}
-          className="w-full sm:w-48"
-        />
-
-        <Button variant="secondary" onClick={handleClearFilter}>
-          🧹 Xóa bộ lọc
-        </Button>
-
-        <Button
-          onClick={handleExportVisible}
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          title="Xuất đúng nội dung đang hiển thị (đã lọc)"
-        >
-          ⬇️ Xuất Excel
-        </Button>
-
-        {/* Dialog thêm xuất trả */}
-        <AddXuatTraDialog cuahangs={cuahangs} onSubmit={handleCreate} />
-      </div>
-
-      {/* Bảng dữ liệu + phân trang theo view */}
-      {viewMode === "chua" ? (
+      {statusMode === "chua" && !isLoading ? (
         <>
-          <div className="overflow-x-auto shadow border rounded">
-            <table className="w-full text-sm text-left bg-white">
-              <thead className="text-xs bg-gray-50 border-b text-center">
+          <div className="overflow-x-auto bg-white rounded-lg shadow">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">STT</th>
-                  <th className="px-4 py-3 font-semibold">MÃ CH</th>
-                  <th className="px-4 py-3 font-semibold">TÊN CH</th>
-                  <th className="px-4 py-3 font-semibold">SKU</th>
-                  <th className="px-4 py-3 font-semibold">SỐ KIỆN XUẤT TRẢ</th>
-                  <th className="px-4 py-3 font-semibold">SỐ SODA - HÓA ĐƠN</th>
-                  <th className="px-4 py-3 font-semibold">NGÀY GIỜ CẬP NHẬT</th>
-                  <th className="px-4 py-3 font-semibold">GHI CHÚ</th>
-                  <th className="px-4 py-3 font-semibold">TRẠNG THÁI</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">STT</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Trùng</th>
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày nhập trả</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Số</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tài xế</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Biển số xe</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày CH trả NVC</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">NV nhập trả</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ký hiệu</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Số HĐ</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Số tiền</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày HĐ</th>}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Mã CH</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tên CH</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">SKU</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">UPC</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tên hàng</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Lượng</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Vendor</th>
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày BG KT</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Số RTV</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">NV KT nhập trả</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày BG xuất trả</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">NSX</th>}
+                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">HSD</th>}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ghi chú</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Trạng thái</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="bg-white divide-y divide-gray-200">
                 {currentSliceChua.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="text-center py-5 text-gray-500">
+                    <td colSpan="100" className="px-4 py-8 text-center text-gray-500">
                       Không có dữ liệu
                     </td>
                   </tr>
                 ) : (
                   currentSliceChua.map((item, index) => (
                     <XuatTraRow
-                      key={item._id}
-                      data={item}
+                      key={item._id || index}
+                      item={item}
                       index={pageChua * pageSize + index}
-                      formatDateTimeVN={formatDateTimeVN}
                       onComplete={handleComplete}
+                      showAllColumns={showAllColumns}
                     />
                   ))
                 )}
@@ -433,12 +457,11 @@ const ToolXuatTra = () => {
             </table>
           </div>
 
-          {/* Footer phân trang */}
-          <div className="mt-4 flex justify-center">
+          <div className="mt-4">
             <CustomPagination
               pageCount={pageCountChua}
-              forcePage={pageChua}
-              onPageChange={({ selected }) => setPageChua(selected)}
+              currentPage={pageChua}
+              onPageChange={(selected) => setPageChua(selected)}
               marginPagesDisplayed={2}
               pageRangeDisplayed={3}
               additionalClassname="gap-2 justify-center"
@@ -446,24 +469,26 @@ const ToolXuatTra = () => {
           </div>
         </>
       ) : (
-        <>
-          <XuatTraHT
-            data={currentSliceDa}
-            onUncomplete={handleUncomplete}
-          />
-
-          {/* Footer phân trang */}
-          <div className="mt-4 flex justify-center">
-            <CustomPagination
-              pageCount={pageCountDa}
-              forcePage={pageDa}
-              onPageChange={({ selected }) => setPageDa(selected)}
-              marginPagesDisplayed={2}
-              pageRangeDisplayed={3}
-              additionalClassname="gap-2 justify-center"
+        !isLoading && (
+          <>
+            <XuatTraHT
+              data={currentSliceDa}
+              onUncomplete={handleUncomplete}
+              showAllColumns={showAllColumns}
+              startIndex={pageDa * pageSize}
             />
-          </div>
-        </>
+            <div className="mt-4">
+              <CustomPagination
+                pageCount={pageCountDa}
+                currentPage={pageDa}
+                onPageChange={(selected) => setPageDa(selected)}
+                marginPagesDisplayed={2}
+                pageRangeDisplayed={3}
+                additionalClassname="gap-2 justify-center"
+              />
+            </div>
+          </>
+        )
       )}
     </div>
   );
