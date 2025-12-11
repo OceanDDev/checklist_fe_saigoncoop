@@ -12,7 +12,7 @@ import {
   ArcElement,
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
-import { Calendar, RefreshCw, X } from "lucide-react";
+import { Calendar, RefreshCw, X, ChevronDown, ChevronUp } from "lucide-react";
 
 ChartJS.register(
   CategoryScale,
@@ -57,6 +57,7 @@ const DashboardBDH = () => {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [employeeNames, setEmployeeNames] = useState({});
+  const [expandedEmployee, setExpandedEmployee] = useState(null);
   const datePickerRef = useRef(null);
 
   // Date utilities
@@ -176,8 +177,10 @@ const DashboardBDH = () => {
         let totalJobs = 0;
         let completedJobs = 0;
         const incompleteBySection = {};
+        const otherJobsList = [];
 
         empChecklists.forEach(checklist => {
+          // Regular jobs
           checklist.cac_muc?.forEach(muc => {
             const sectionName = muc.ten_muc || "Không có tiêu đề";
             muc.cong_viec?.forEach(job => {
@@ -189,6 +192,19 @@ const DashboardBDH = () => {
               }
             });
           });
+
+          // Other jobs (cong_viec_khac)
+          if (checklist.cong_viec_khac && Array.isArray(checklist.cong_viec_khac)) {
+            checklist.cong_viec_khac.forEach(job => {
+              if (job.noidung) {
+                otherJobsList.push({
+                  noidung: job.noidung,
+                  da_chon: job.da_chon || false,
+                  ngay_tao: checklist.ngay_tao || checklist.thoi_gian_tao || checklist.createdAt
+                });
+              }
+            });
+          }
         });
 
         stats[teamName][empId] = {
@@ -198,7 +214,8 @@ const DashboardBDH = () => {
           completedJobs,
           incompleteJobs: totalJobs - completedJobs,
           completionRate: totalJobs > 0 ? ((completedJobs / totalJobs) * 100).toFixed(1) : 0,
-          incompleteBySection
+          incompleteBySection,
+          otherJobs: otherJobsList
         };
       });
     });
@@ -290,9 +307,6 @@ const DashboardBDH = () => {
       ]
     };
   };
-
-
-
 
   // Total stats
   const totalStats = useMemo(() => {
@@ -522,7 +536,85 @@ const DashboardBDH = () => {
             </div>
           </div>
 
-        
+          {/* Row 3: Other Jobs (Công việc khác) */}
+          <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+              ✏️ Công Việc Khác
+            </h2>
+            <div className="space-y-4">
+              {Object.entries(employeeStats).map(([teamName, employees]) => (
+                <div key={teamName}>
+                  <h3 className="text-lg font-semibold mb-3 pb-2 border-b" style={{ color: TEAM_CONFIG[teamName].color }}>
+                    {teamName}
+                  </h3>
+                  <div className="space-y-3">
+                    {Object.entries(employees).map(([empId, empData]) => {
+                      const hasOtherJobs = empData.otherJobs && empData.otherJobs.length > 0;
+                      if (!hasOtherJobs) return null;
+
+                      const isExpanded = expandedEmployee === `${teamName}-${empId}`;
+
+                      return (
+                        <div key={empId} className="border rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => setExpandedEmployee(isExpanded ? null : `${teamName}-${empId}`)}
+                            className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="font-medium text-gray-800">{empData.name}</span>
+                              <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                                {empData.otherJobs.length} công việc
+                              </span>
+                            </div>
+                            {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                          </button>
+                          
+                          {isExpanded && (
+                            <div className="p-4 bg-white">
+                              <div className="space-y-2">
+                                {empData.otherJobs.map((job, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+                                  >
+                                    <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                                      job.da_chon ? 'bg-green-500' : 'bg-gray-300'
+                                    }`} />
+                                    <div className="flex-1">
+                                      <p className="text-sm text-gray-800">{job.noidung}</p>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {formatDate(job.ngay_tao)}
+                                      </p>
+                                    </div>
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                      job.da_chon 
+                                        ? 'bg-green-100 text-green-700' 
+                                        : 'bg-gray-200 text-gray-600'
+                                    }`}>
+                                      {job.da_chon ? 'Hoàn thành' : 'Chưa làm'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              
+              {/* Show message if no other jobs */}
+              {Object.values(employeeStats).every(employees => 
+                Object.values(employees).every(emp => !emp.otherJobs || emp.otherJobs.length === 0)
+              ) && (
+                <div className="text-center py-8 text-gray-500">
+                  <p>Không có công việc khác nào được ghi nhận</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="bg-white p-12 rounded-xl shadow text-center">

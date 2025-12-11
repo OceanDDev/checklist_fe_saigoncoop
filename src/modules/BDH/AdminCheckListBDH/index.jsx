@@ -503,6 +503,7 @@ const UserTableCheckListBDH = () => {
               <th className="px-4 py-3 font-semibold">Họ tên</th>
               <th className="px-4 py-3 font-semibold">Bộ phận</th>
               <th className="px-4 py-3 font-semibold">Ngày điền</th>
+              <th className="px-4 py-3 font-semibold">Tỉ lệ</th>
               <th className="px-4 py-3 font-semibold">Chi tiết</th>
               <th className="px-4 py-3 font-semibold">Chức năng</th>
             </tr>

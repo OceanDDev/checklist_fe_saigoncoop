@@ -5,6 +5,8 @@ import { checkListBDHService } from "@/services/checklistbdh.service";
 
 const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   const [selectedJobs, setSelectedJobs] = useState([]);
+  const [selectedDetails, setSelectedDetails] = useState({});
+  const [expandedJobs, setExpandedJobs] = useState({});
   const [customJobs, setCustomJobs] = useState([]);
   const [newJob, setNewJob] = useState("");
 
@@ -77,9 +79,8 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       return form.cac_muc?.map(section => section.ten_muc) || [];
     }
     
-    // Nếu là form có phân quyền
+    // Nếu là form có phân quyền và không có trong danh sách, chặn hoàn toàn
     const permissions = EMPLOYEE_PERMISSIONS[userInfo.employeeId];
-    // Nếu không có trong danh sách phân quyền, trả về mảng rỗng
     if (!permissions) {
       return [];
     }
@@ -123,20 +124,59 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     );
   };
 
-  const toggleJob = (job) => {
-    const exists = selectedJobs.find((item) => item.noidung === job.noidung);
+  const toggleExpand = (sectionIdx, jobIdx) => {
+    const key = `${sectionIdx}-${jobIdx}`;
+    setExpandedJobs(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const toggleJob = (sectionIdx, jobIdx, job) => {
+    const key = `${sectionIdx}-${jobIdx}`;
+    const exists = selectedJobs.find((item) => item.key === key);
+    
     if (exists) {
-      setSelectedJobs(selectedJobs.filter((item) => item.noidung !== job.noidung));
+      // Bỏ chọn công việc
+      setSelectedJobs(selectedJobs.filter((item) => item.key !== key));
     } else {
-      setSelectedJobs([...selectedJobs, { noidung: job.noidung }]);
+      // Chọn công việc
+      setSelectedJobs([...selectedJobs, { key, sectionIdx, jobIdx, noidung: job.noidung }]);
+      // Auto chọn tất cả chi tiết khi chọn công việc cha
+      if (job.chi_tiet && job.chi_tiet.length > 0) {
+        const allDetailIndexes = job.chi_tiet.map((_, idx) => idx);
+        setSelectedDetails(prev => ({
+          ...prev,
+          [key]: allDetailIndexes
+        }));
+      }
     }
+  };
+
+  const toggleDetail = (sectionIdx, jobIdx, detailIdx) => {
+    const jobKey = `${sectionIdx}-${jobIdx}`;
+      
+    setSelectedDetails(prev => {
+      const current = prev[jobKey] || [];
+      if (current.includes(detailIdx)) {
+        return {
+          ...prev,
+          [jobKey]: current.filter(idx => idx !== detailIdx)
+        };
+      } else {
+        return {
+          ...prev,
+          [jobKey]: [...current, detailIdx]
+        };
+      }
+    });
   };
 
   const addCustomJob = () => {
     const jobText = newJob.trim();
     if (!jobText) return;
     
-    const newJobObj = { noidung: jobText };
+    const newJobObj = { noidung: jobText, chi_tiet: [] };
     setCustomJobs([...customJobs, newJobObj]);
     setNewJob("");
   };
@@ -163,21 +203,32 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       return;
     }
 
-    const transformedMucChecklist = filteredSections.map((section) => {
+    const transformedMucChecklist = filteredSections.map((section, sectionIdx) => {
       const filteredJobs = getFilteredJobs(section);
       
       return {
         ten_muc: section.ten_muc,
-        cong_viec: filteredJobs.map((job) => ({
-          noidung: job.noidung,
-          da_chon: selectedJobs.some((j) => j.noidung === job.noidung),
-        })),
+        cong_viec: filteredJobs.map((job, jobIdx) => {
+          const jobKey = `${sectionIdx}-${jobIdx}`;
+          const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
+          const selectedDetailIndexes = selectedDetails[jobKey] || [];
+
+          return {
+            noidung: job.noidung,
+            da_chon: isJobSelected,
+            chi_tiet: (job.chi_tiet || []).map((detail, detailIdx) => ({
+              noi_dung_chi_tiet: detail.noi_dung_chi_tiet,
+              da_chon: selectedDetailIndexes.includes(detailIdx),
+            })),
+          };
+        }),
       };
     });
 
     const transformedCustomJobs = customJobs.map((job) => ({
       noidung: job.noidung,
       da_chon: true,
+      chi_tiet: [],
     }));
 
     const payload = {
@@ -266,22 +317,65 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                   🔹 {section.ten_muc}
                 </p>
                 <div className="space-y-3">
-                  {filteredJobs.map((job, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-3 border rounded-lg bg-white shadow hover:bg-gray-50 transition-all"
-                    >
-                      <label className="flex items-center gap-3 w-full cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="accent-blue-600 w-4 h-4"
-                          checked={selectedJobs.some((j) => j.noidung === job.noidung)}
-                          onChange={() => toggleJob(job)}
-                        />
-                        <span className="text-sm text-gray-800">{job.noidung}</span>
-                      </label>
-                    </div>
-                  ))}
+                  {filteredJobs.map((job, jobIdx) => {
+                    const jobKey = `${sectionIdx}-${jobIdx}`;
+                    const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
+                    const isExpanded = expandedJobs[jobKey];
+                    const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
+                    
+                    return (
+                      <div key={jobIdx} className="border rounded-lg bg-white shadow">
+                        <div className="flex items-center justify-between p-3 hover:bg-gray-50 transition-all">
+                          <label className="flex items-center gap-3 w-full cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="accent-blue-600 w-4 h-4"
+                              checked={isJobSelected}
+                              onChange={() => toggleJob(sectionIdx, jobIdx, job)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span 
+                              className="text-sm font-medium text-gray-800 flex-1"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (hasDetails) toggleExpand(sectionIdx, jobIdx);
+                              }}
+                            >
+                              {job.noidung}
+                            </span>
+                          </label>
+                          {hasDetails && (
+                            <button
+                              onClick={() => toggleExpand(sectionIdx, jobIdx)}
+                              className="text-gray-400 hover:text-gray-600 ml-2"
+                            >
+                              {isExpanded ? "▼" : "▶"}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Chi tiết */}
+                        {hasDetails && isExpanded && (
+                          <div className="px-3 pb-3 pl-10 space-y-2 border-t bg-gray-50">
+                            {job.chi_tiet.map((detail, detailIdx) => (
+                              <label
+                                key={detailIdx}
+                                className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-gray-800 py-1"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="accent-green-600 w-3 h-3"
+                                  checked={(selectedDetails[jobKey] || []).includes(detailIdx)}
+                                  onChange={() => toggleDetail(sectionIdx, jobIdx, detailIdx)}
+                                />
+                                <span className="text-xs">→ {detail.noi_dung_chi_tiet}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

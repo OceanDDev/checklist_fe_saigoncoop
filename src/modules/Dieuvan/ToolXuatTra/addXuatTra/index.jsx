@@ -48,6 +48,9 @@ const unwrapResult = (res) => {
     return res;
 };
 
+// Độ dài tối thiểu để kích hoạt tìm kiếm UPC/SKU
+const MIN_SEARCH_LENGTH = 3; 
+
 const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
   const [open, setOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -140,24 +143,54 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
       };
   }, []);
 
-  const handleSkuRowChange = useCallback(async (id, field, value) => {
-
-    const trimmedValue = value.trim().toUpperCase();
-
-    // 1. Cập nhật giá trị và trạng thái tải
+  // --- Hàm chỉ dùng để cập nhật giá trị trong ô input (ON CHANGE) ---
+  const handleSkuRowChange = useCallback((id, field, value) => {
     setSkuRows(prev => prev.map(row => {
       if (row.id !== id) return row;
       return {
         ...row,
         [field]: value,
-        isLoading: (field === 'upc' || field === 'sku') && trimmedValue.length > 0
       };
     }));
+    setErrors(prev => ({ ...prev, [`${field}_${id}`]: undefined }));
+  }, []);
 
+
+  // --- Hàm dùng để tìm kiếm (ON BLUR) ---
+  const handleSearchProduct = useCallback(async (id, field, value) => {
+    
+    // Nếu không phải UPC hoặc SKU thì bỏ qua
+    if (field !== 'upc' && field !== 'sku') return; 
+      
+    const trimmedValue = value.trim().toUpperCase();
+
+    // 1. Kiểm tra điều kiện tìm kiếm: KHÔNG RỖNG VÀ ĐỦ ĐỘ DÀI
+    if (!trimmedValue || trimmedValue.length < MIN_SEARCH_LENGTH) {
+        // Nếu chuỗi rỗng hoặc quá ngắn, xóa thông tin tự động điền và tắt loading
+        setSkuRows(prev => prev.map(row => {
+            if (row.id !== id) return row;
+            let updateData = { 
+                tenHang: "", vendor: "", vendorName: "", 
+                isLoading: false 
+            };
+            if (field === 'upc') updateData.sku = ""; 
+            return { ...row, ...updateData };
+        }));
+        setErrors(prev => ({ ...prev, [`${field}_${id}`]: undefined }));
+        
+        if (trimmedValue.length > 0 && trimmedValue.length < MIN_SEARCH_LENGTH) {
+             setErrors(prev => ({ 
+                 ...prev, 
+                 [`${field}_${id}`]: `Mã ${field.toUpperCase()} cần ít nhất ${MIN_SEARCH_LENGTH} ký tự.`,
+             }));
+        }
+        return;
+    }
+    
+    // 2. Bật trạng thái tải (Loading)
+    setSkuRows(prev => prev.map(row => (row.id === id ? { ...row, isLoading: true } : row)));
     setErrors(prev => ({ ...prev, [`${field}_${id}`]: undefined }));
 
-    if (!trimmedValue || (field !== 'upc' && field !== 'sku')) return;
-    
     let productData = null;
     let foundSKU = null;
 
@@ -221,12 +254,10 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
                 return { ...row, ...updateData };
             }));
 
-            if (field === 'sku' || field === 'upc') {
-                setErrors(prev => ({
-                    ...prev,
-                    [`${field}_${id}`]: `Mã ${field.toUpperCase()} không tìm thấy hoặc không khớp.`,
-                }));
-            }
+            setErrors(prev => ({
+                ...prev,
+                [`${field}_${id}`]: `Mã ${field.toUpperCase()} không tìm thấy hoặc không khớp.`,
+            }));
         }
 
     } catch (error) {
@@ -278,7 +309,7 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
     if (formData.so && !/^\d+$/.test(formData.so)) errs.so = "Số phải là số";
 
     skuRows.forEach(row => {
-      if (!row.sku.trim()) {
+      if (!row.isLoading && !row.sku.trim()) {
         errs[`sku_${row.id}`] = "SKU không được để trống";
       }
       if (!row.luong.trim() || isNaN(Number(row.luong)) || Number(row.luong) <= 0) {
@@ -292,6 +323,13 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
 
   const handleSave = async () => {
     if (!validate()) return;
+    
+    // Đảm bảo không còn dòng nào đang loading
+    if (skuRows.some(row => row.isLoading)) {
+        alert("Vui lòng đợi quá trình tìm kiếm UPC/SKU hoàn tất trước khi lưu.");
+        return;
+    }
+    
     setIsSaving(true);
 
     try {
@@ -384,6 +422,7 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
 
     } catch(error) {
         console.error("Lỗi khi lưu dữ liệu:", error);
+        alert("Lỗi khi lưu dữ liệu. Vui lòng kiểm tra console.");
     } finally {
         setIsSaving(false);
     }
@@ -618,8 +657,10 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
                       {/* UPC */}
                       <div className="space-y-1">
                         <label className="text-xs font-medium text-slate-600">UPC</label>
-                        <Input placeholder="Nhập UPC" value={row.upc} onChange={(e) => handleSkuRowChange(row.id, 'upc', e.target.value)} 
-                            onBlur={(e) => { const value = e.target.value.trim(); if (value) handleSkuRowChange(row.id, 'upc', value); }}
+                        <Input placeholder="Nhập UPC" 
+                            value={row.upc} 
+                            onChange={(e) => handleSkuRowChange(row.id, 'upc', e.target.value)} 
+                            onBlur={(e) => { handleSearchProduct(row.id, 'upc', e.target.value); }}
                             disabled={isSaving || row.isLoading} className="h-10 text-sm font-mono" />
                          {errors[`upc_${row.id}`] && (<p className="text-xs text-rose-600">{errors[`upc_${row.id}`]}</p>)}
                       </div>
@@ -627,8 +668,10 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
                       {/* SKU */}
                       <div className="space-y-1">
                         <label className="text-xs font-medium text-slate-600">SKU <span className="text-rose-600">*</span></label>
-                        <Input placeholder="Nhập SKU" value={row.sku} onChange={(e) => handleSkuRowChange(row.id, 'sku', e.target.value)} 
-                            onBlur={(e) => { const value = e.target.value.trim(); if (value) handleSkuRowChange(row.id, 'sku', value); }}
+                        <Input placeholder="Nhập SKU" 
+                            value={row.sku} 
+                            onChange={(e) => handleSkuRowChange(row.id, 'sku', e.target.value)} 
+                            onBlur={(e) => { handleSearchProduct(row.id, 'sku', e.target.value); }}
                             disabled={isSaving || row.isLoading} className={["h-10 text-sm font-mono", errors[`sku_${row.id}`] ? "border-rose-500 ring-1 ring-rose-500" : ""].join(" ")} />
                         {errors[`sku_${row.id}`] && (<p className="text-xs text-rose-600">{errors[`sku_${row.id}`]}</p>)}
                       </div>

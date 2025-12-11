@@ -14,7 +14,7 @@ const AdminChecklistFormBDH = () => {
     cac_muc: [
       {
         ten_muc: "",
-        cong_viec: [{ noidung: "" }],
+        cong_viec: [{ noidung: "", chi_tiet: [{ noi_dung_chi_tiet: "" }] }],
       },
     ],
   });
@@ -49,12 +49,18 @@ const AdminChecklistFormBDH = () => {
     setForm({ ...form, cac_muc: updated });
   };
 
+  const handleChiTietChange = (sectionIdx, jobIdx, chiTietIdx, value) => {
+    const updated = [...form.cac_muc];
+    updated[sectionIdx].cong_viec[jobIdx].chi_tiet[chiTietIdx].noi_dung_chi_tiet = value;
+    setForm({ ...form, cac_muc: updated });
+  };
+
   const addSection = () => {
     setForm({
       ...form,
       cac_muc: [
         ...form.cac_muc,
-        { ten_muc: "", cong_viec: [{ noidung: "" }] },
+        { ten_muc: "", cong_viec: [{ noidung: "", chi_tiet: [{ noi_dung_chi_tiet: "" }] }] },
       ],
     });
   };
@@ -66,7 +72,7 @@ const AdminChecklistFormBDH = () => {
 
   const addJobToSection = (sectionIdx) => {
     const updated = [...form.cac_muc];
-    updated[sectionIdx].cong_viec.push({ noidung: "" });
+    updated[sectionIdx].cong_viec.push({ noidung: "", chi_tiet: [{ noi_dung_chi_tiet: "" }] });
     setForm({ ...form, cac_muc: updated });
   };
 
@@ -74,6 +80,24 @@ const AdminChecklistFormBDH = () => {
     const updated = [...form.cac_muc];
     updated[sectionIdx].cong_viec = updated[sectionIdx].cong_viec.filter(
       (_, i) => i !== jobIdx
+    );
+    setForm({ ...form, cac_muc: updated });
+  };
+
+  const addChiTietToJob = (sectionIdx, jobIdx) => {
+    const updated = [...form.cac_muc];
+    // Khởi tạo chi_tiet nếu chưa tồn tại
+    if (!updated[sectionIdx].cong_viec[jobIdx].chi_tiet) {
+      updated[sectionIdx].cong_viec[jobIdx].chi_tiet = [];
+    }
+    updated[sectionIdx].cong_viec[jobIdx].chi_tiet.push({ noi_dung_chi_tiet: "" });
+    setForm({ ...form, cac_muc: updated });
+  };
+
+  const removeChiTietFromJob = (sectionIdx, jobIdx, chiTietIdx) => {
+    const updated = [...form.cac_muc];
+    updated[sectionIdx].cong_viec[jobIdx].chi_tiet = updated[sectionIdx].cong_viec[jobIdx].chi_tiet.filter(
+      (_, i) => i !== chiTietIdx
     );
     setForm({ ...form, cac_muc: updated });
   };
@@ -98,7 +122,7 @@ const AdminChecklistFormBDH = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <ToastContainer />
-      <div className="max-w-3xl mx-auto p-8 bg-white border border-blue-200 rounded-xl shadow-lg">
+      <div className="max-w-4xl mx-auto p-8 bg-white border border-blue-200 rounded-xl shadow-lg">
         <h2 className="text-2xl font-bold mb-6 text-blue-700">
           {id ? "✏️ Cập nhật Checklist" : "📝 Tạo Checklist BDH"}
         </h2>
@@ -154,21 +178,55 @@ const AdminChecklistFormBDH = () => {
 
               {/* Công việc trong mục này */}
               {section.cong_viec.map((job, jobIdx) => (
-                <div key={jobIdx} className="flex items-center gap-2 mb-2">
-                  <input
-                    className="flex-1 p-2 border rounded-md"
-                    value={job.noidung}
-                    onChange={(e) =>
-                      handleJobChange(sectionIdx, jobIdx, e.target.value)
-                    }
-                    placeholder={`Công việc ${jobIdx + 1}`}
-                  />
-                  <button
-                    onClick={() => removeJobFromSection(sectionIdx, jobIdx)}
-                    className="text-red-500 text-sm hover:underline"
-                  >
-                    Xoá
-                  </button>
+                <div key={jobIdx} className="mb-4 border-l-4 border-green-400 pl-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      className="flex-1 p-2 border rounded-md font-medium"
+                      value={job.noidung}
+                      onChange={(e) =>
+                        handleJobChange(sectionIdx, jobIdx, e.target.value)
+                      }
+                      placeholder={`Công việc ${jobIdx + 1}`}
+                    />
+                    <button
+                      onClick={() => addChiTietToJob(sectionIdx, jobIdx)}
+                      className="bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600 text-sm"
+                      title="Thêm chi tiết"
+                    >
+                      +
+                    </button>
+                    <button
+                      onClick={() => removeJobFromSection(sectionIdx, jobIdx)}
+                      className="text-red-500 text-sm hover:underline"
+                    >
+                      Xoá
+                    </button>
+                  </div>
+
+                  {/* Chi tiết của công việc */}
+                  {job.chi_tiet && job.chi_tiet.length > 0 && (
+                    <div className="ml-4 space-y-2">
+                      {job.chi_tiet.map((detail, chiTietIdx) => (
+                        <div key={chiTietIdx} className="flex items-center gap-2">
+                          <span className="text-gray-400">→</span>
+                          <input
+                            className="flex-1 p-2 border rounded-md text-sm bg-white"
+                            value={detail.noi_dung_chi_tiet}
+                            onChange={(e) =>
+                              handleChiTietChange(sectionIdx, jobIdx, chiTietIdx, e.target.value)
+                            }
+                            placeholder={`Chi tiết ${chiTietIdx + 1}`}
+                          />
+                          <button
+                            onClick={() => removeChiTietFromJob(sectionIdx, jobIdx, chiTietIdx)}
+                            className="text-red-400 text-xs hover:underline"
+                          >
+                            Xoá
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
 
