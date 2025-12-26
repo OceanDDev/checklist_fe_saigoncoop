@@ -58,28 +58,58 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     }
   };
 
-  // Chỉ áp dụng phân quyền cho form này (theo _id)
   const RESTRICTED_FORM_ID = "687f155b32fbc64dbf1c0bb0";
 
-  // Kiểm tra form có áp dụng phân quyền không
+  // ✅ Hàm kiểm tra công việc có hiển thị hôm nay không
+  const shouldShowToday = (quy_dinh) => {
+    if (!quy_dinh) return true;
+
+    const now = new Date();
+    const vietnamTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+    
+    const dayOfWeek = vietnamTime.getDay();
+    const dayOfMonth = vietnamTime.getDate();
+
+    if (quy_dinh.loai === "ngày") {
+      return true;
+    }
+
+    if (quy_dinh.loai === "tuần") {
+      if (!quy_dinh.ngay_trong_tuan || quy_dinh.ngay_trong_tuan.length === 0) {
+        return false;
+      }
+      return quy_dinh.ngay_trong_tuan.includes(dayOfWeek);
+    }
+
+    if (quy_dinh.loai === "tháng") {
+      if (!quy_dinh.ngay_trong_thang || quy_dinh.ngay_trong_thang.length === 0) {
+        return false;
+      }
+      return quy_dinh.ngay_trong_thang.includes(dayOfMonth);
+    }
+
+    return true;
+  };
+
+  // ✅ Kiểm tra có quy định đặc biệt không
+  const hasSpecialSchedule = (quy_dinh) => {
+    return quy_dinh && quy_dinh.loai !== "ngày";
+  };
+
   const isRestrictedForm = () => {
     return formId === RESTRICTED_FORM_ID;
   };
 
-  // Kiểm tra mã NV có quyền truy cập không
   const hasPermission = () => {
     if (!isRestrictedForm()) return true;
     return Object.prototype.hasOwnProperty.call(EMPLOYEE_PERMISSIONS, userInfo.employeeId);
   };
 
-  // Lấy danh sách section được phép truy cập
   const getAllowedSections = () => {
-    // Nếu không phải form có phân quyền, cho phép xem tất cả
     if (!isRestrictedForm()) {
       return form.cac_muc?.map(section => section.ten_muc) || [];
     }
     
-    // Nếu là form có phân quyền và không có trong danh sách, chặn hoàn toàn
     const permissions = EMPLOYEE_PERMISSIONS[userInfo.employeeId];
     if (!permissions) {
       return [];
@@ -87,13 +117,11 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return permissions.sections;
   };
 
-  // Kiểm tra có thể truy cập section này không
   const canAccessSection = (sectionName) => {
     const allowedSections = getAllowedSections();
     return allowedSections.includes(sectionName);
   };
 
-  // Kiểm tra công việc có được phép hiển thị không
   const canAccessJob = (sectionName, jobContent) => {
     if (!isRestrictedForm()) {
       return true;
@@ -104,12 +132,10 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       return false;
     }
 
-    // Kiểm tra includedJobs (chỉ hiển thị các job này)
     if (permissions.includedJobs && permissions.includedJobs[sectionName]) {
       return permissions.includedJobs[sectionName].includes(jobContent);
     }
 
-    // Kiểm tra excludedJobs (ẩn các job này)
     if (permissions.excludedJobs && permissions.excludedJobs[sectionName]) {
       return !permissions.excludedJobs[sectionName].includes(jobContent);
     }
@@ -117,10 +143,10 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return true;
   };
 
-  // Lọc công việc theo quyền
+  // ✅ Lọc công việc theo quyền VÀ lịch trình
   const getFilteredJobs = (section) => {
     return section.cong_viec.filter(job => 
-      canAccessJob(section.ten_muc, job.noidung)
+      canAccessJob(section.ten_muc, job.noidung) && shouldShowToday(job.quy_dinh)
     );
   };
 
@@ -137,12 +163,9 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     const exists = selectedJobs.find((item) => item.key === key);
     
     if (exists) {
-      // Bỏ chọn công việc
       setSelectedJobs(selectedJobs.filter((item) => item.key !== key));
     } else {
-      // Chọn công việc
       setSelectedJobs([...selectedJobs, { key, sectionIdx, jobIdx, noidung: job.noidung }]);
-      // Auto chọn tất cả chi tiết khi chọn công việc cha
       if (job.chi_tiet && job.chi_tiet.length > 0) {
         const allDetailIndexes = job.chi_tiet.map((_, idx) => idx);
         setSelectedDetails(prev => ({
@@ -187,13 +210,11 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       return;
     }
 
-    // Kiểm tra quyền truy cập
     if (!hasPermission()) {
       toast.error("❌ Mã nhân viên không có quyền truy cập form này.");
       return;
     }
 
-    // Lọc sections theo quyền
     const filteredSections = form.cac_muc.filter(section => 
       canAccessSection(section.ten_muc)
     );
@@ -216,6 +237,7 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
           return {
             noidung: job.noidung,
             da_chon: isJobSelected,
+            quy_dinh: job.quy_dinh, // ✅ Thêm quy_dinh
             chi_tiet: (job.chi_tiet || []).map((detail, detailIdx) => ({
               noi_dung_chi_tiet: detail.noi_dung_chi_tiet,
               da_chon: selectedDetailIndexes.includes(detailIdx),
@@ -249,12 +271,10 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     }
   };
 
-  // Lọc sections theo quyền
   const visibleSections = form.cac_muc?.filter(section => 
     canAccessSection(section.ten_muc)
   ) || [];
 
-  // Nếu là form có phân quyền và không có quyền, hiển thị thông báo
   if (isRestrictedForm() && !hasPermission()) {
     return (
       <div className="p-4 bg-gradient-to-br from-gray-50 to-white min-h-screen max-w-3xl mx-auto shadow-sm">
@@ -287,14 +307,12 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
         <p className="text-gray-600 mb-6 text-sm text-center italic">{form.mo_ta}</p>
       )}
 
-      {/* Thông tin nhân viên */}
       <div className="mb-6 text-sm text-gray-800 space-y-1 bg-white p-4 rounded-lg border shadow">
         <p><strong className="text-gray-500">Mã nhân viên:</strong> {userInfo.employeeId}</p>
         <p><strong className="text-gray-500">Họ và tên:</strong> {userInfo.userName}</p>
         <p><strong className="text-gray-500">Bộ phận:</strong> {userInfo.department}</p>
       </div>
 
-      {/* Danh sách công việc */}
       <div className="mt-6">
         <h3 className="text-base font-semibold text-blue-700 mb-4 border-b pb-2 border-blue-100">
           📋 Danh sách công việc
@@ -308,7 +326,6 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
           visibleSections.map((section, sectionIdx) => {
             const filteredJobs = getFilteredJobs(section);
             
-            // Chỉ hiển thị section nếu có công việc
             if (filteredJobs.length === 0) return null;
             
             return (
@@ -323,8 +340,18 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                     const isExpanded = expandedJobs[jobKey];
                     const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
                     
+                    // ✅ Kiểm tra có quy định đặc biệt không
+                    const isSpecial = hasSpecialSchedule(job.quy_dinh);
+                    
                     return (
-                      <div key={jobIdx} className="border rounded-lg bg-white shadow">
+                      <div 
+                        key={jobIdx} 
+                        className={`border rounded-lg shadow transition-all duration-300 ${
+                          isSpecial
+                            ? "border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 ring-2 ring-amber-300"
+                            : "border-gray-200 bg-white"
+                        }`}
+                      >
                         <div className="flex items-center justify-between p-3 hover:bg-gray-50 transition-all">
                           <label className="flex items-center gap-3 w-full cursor-pointer">
                             <input
@@ -335,14 +362,24 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                               onClick={(e) => e.stopPropagation()}
                             />
                             <span 
-                              className="text-sm font-medium text-gray-800 flex-1"
+                              className={`text-sm font-medium flex-1 ${
+                                isSpecial ? "text-amber-900 font-semibold" : "text-gray-800"
+                              }`}
                               onClick={(e) => {
                                 e.preventDefault();
                                 if (hasDetails) toggleExpand(sectionIdx, jobIdx);
                               }}
                             >
+                              {isSpecial && "🎯 "}
                               {job.noidung}
                             </span>
+                            
+                            {/* ✅ Badge đặc biệt */}
+                            {isSpecial && (
+                              <span className="px-2 py-1 bg-amber-500 text-white text-xs font-bold rounded-full shadow-sm animate-pulse">
+                                HÔM NAY
+                              </span>
+                            )}
                           </label>
                           {hasDetails && (
                             <button
@@ -356,7 +393,9 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
                         {/* Chi tiết */}
                         {hasDetails && isExpanded && (
-                          <div className="px-3 pb-3 pl-10 space-y-2 border-t bg-gray-50">
+                          <div className={`px-3 pb-3 pl-10 space-y-2 border-t ${
+                            isSpecial ? "bg-amber-50/50" : "bg-gray-50"
+                          }`}>
                             {job.chi_tiet.map((detail, detailIdx) => (
                               <label
                                 key={detailIdx}
@@ -383,7 +422,6 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
         )}
       </div>
 
-      {/* Công việc khác */}
       <div className="mt-8">
         <h3 className="text-base font-semibold text-blue-700 mb-3 border-b pb-2 border-blue-100">
           ✏️ Công việc khác
@@ -424,7 +462,6 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
         </div>
       </div>
 
-      {/* Nút submit */}
       <button
         onClick={handleSubmit}
         disabled={visibleSections.length === 0}

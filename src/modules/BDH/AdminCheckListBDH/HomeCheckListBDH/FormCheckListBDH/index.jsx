@@ -14,9 +14,22 @@ const AdminChecklistFormBDH = () => {
     cac_muc: [
       {
         ten_muc: "",
-        cong_viec: [{ noidung: "", chi_tiet: [{ noi_dung_chi_tiet: "" }] }],
+        cong_viec: [{ 
+          noidung: "", 
+          chi_tiet: [{ noi_dung_chi_tiet: "" }],
+          quy_dinh: { loai: "ngày", ngay_trong_tuan: null, ngay_trong_thang: null, tan_suat: 1 }
+        }],
       },
     ],
+  });
+
+  const [showQuyDinhModal, setShowQuyDinhModal] = useState(false);
+  const [selectedJob, setSelectedJob] = useState({ sectionIdx: null, jobIdx: null });
+  const [tempQuyDinh, setTempQuyDinh] = useState({
+    loai: "ngày",
+    ngay_trong_tuan: null,
+    ngay_trong_thang: null,
+    tan_suat: 1
   });
 
   useEffect(() => {
@@ -55,12 +68,107 @@ const AdminChecklistFormBDH = () => {
     setForm({ ...form, cac_muc: updated });
   };
 
+  const openQuyDinhModal = (sectionIdx, jobIdx) => {
+    const currentQuyDinh = form.cac_muc[sectionIdx].cong_viec[jobIdx].quy_dinh || {
+      loai: "ngày",
+      ngay_trong_tuan: null,
+      ngay_trong_thang: null,
+      tan_suat: 1
+    };
+    setSelectedJob({ sectionIdx, jobIdx });
+    setTempQuyDinh(currentQuyDinh);
+    setShowQuyDinhModal(true);
+  };
+
+  // ✅ Hàm thay đổi loại quy định (với logic reset)
+  const changeLoaiQuyDinh = (newLoai) => {
+    setTempQuyDinh({
+      loai: newLoai,
+      ngay_trong_tuan: newLoai === "tuần" ? [] : null,
+      ngay_trong_thang: newLoai === "tháng" ? [] : null,
+      tan_suat: tempQuyDinh.tan_suat || 1
+    });
+  };
+
+  const saveQuyDinh = () => {
+    // ✅ Validate trước khi lưu
+    if (tempQuyDinh.loai === "tuần" && (!tempQuyDinh.ngay_trong_tuan || tempQuyDinh.ngay_trong_tuan.length === 0)) {
+      toast.warning("⚠️ Vui lòng chọn ít nhất 1 ngày trong tuần!");
+      return;
+    }
+    
+    if (tempQuyDinh.loai === "tháng" && (!tempQuyDinh.ngay_trong_thang || tempQuyDinh.ngay_trong_thang.length === 0)) {
+      toast.warning("⚠️ Vui lòng chọn ít nhất 1 ngày trong tháng!");
+      return;
+    }
+
+    const updated = [...form.cac_muc];
+    updated[selectedJob.sectionIdx].cong_viec[selectedJob.jobIdx].quy_dinh = tempQuyDinh;
+    setForm({ ...form, cac_muc: updated });
+    setShowQuyDinhModal(false);
+    toast.success("✅ Đã lưu quy định!");
+  };
+
+  const toggleNgayTrongTuan = (day) => {
+    const current = tempQuyDinh.ngay_trong_tuan || [];
+    if (current.includes(day)) {
+      setTempQuyDinh({
+        ...tempQuyDinh,
+        ngay_trong_tuan: current.filter(d => d !== day)
+      });
+    } else {
+      setTempQuyDinh({
+        ...tempQuyDinh,
+        ngay_trong_tuan: [...current, day].sort()
+      });
+    }
+  };
+
+  const toggleNgayTrongThang = (day) => {
+    const current = tempQuyDinh.ngay_trong_thang || [];
+    if (current.includes(day)) {
+      setTempQuyDinh({
+        ...tempQuyDinh,
+        ngay_trong_thang: current.filter(d => d !== day)
+      });
+    } else {
+      setTempQuyDinh({
+        ...tempQuyDinh,
+        ngay_trong_thang: [...current, day].sort((a, b) => a - b)
+      });
+    }
+  };
+
+  // ✅ Hiển thị quy định với xử lý null
+  const displayQuyDinh = (quyDinh) => {
+    if (!quyDinh) return "Chưa có quy định";
+    
+    if (quyDinh.loai === "ngày") return "📅 Hàng ngày";
+    
+    if (quyDinh.loai === "tuần") {
+      const days = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+      const selected = (quyDinh.ngay_trong_tuan || []).map(d => days[d]).join(", ");
+      return selected ? `📅 Hàng tuần: ${selected}` : "📅 Hàng tuần (chưa chọn ngày)";
+    }
+    
+    if (quyDinh.loai === "tháng") {
+      const selected = (quyDinh.ngay_trong_thang || []).join(", ");
+      return selected ? `📅 Hàng tháng: Ngày ${selected}` : "📅 Hàng tháng (chưa chọn ngày)";
+    }
+    
+    return "Chưa có quy định";
+  };
+
   const addSection = () => {
     setForm({
       ...form,
       cac_muc: [
         ...form.cac_muc,
-        { ten_muc: "", cong_viec: [{ noidung: "", chi_tiet: [{ noi_dung_chi_tiet: "" }] }] },
+        { ten_muc: "", cong_viec: [{ 
+          noidung: "", 
+          chi_tiet: [{ noi_dung_chi_tiet: "" }],
+          quy_dinh: { loai: "ngày", ngay_trong_tuan: null, ngay_trong_thang: null, tan_suat: 1 }
+        }] },
       ],
     });
   };
@@ -72,7 +180,11 @@ const AdminChecklistFormBDH = () => {
 
   const addJobToSection = (sectionIdx) => {
     const updated = [...form.cac_muc];
-    updated[sectionIdx].cong_viec.push({ noidung: "", chi_tiet: [{ noi_dung_chi_tiet: "" }] });
+    updated[sectionIdx].cong_viec.push({ 
+      noidung: "", 
+      chi_tiet: [{ noi_dung_chi_tiet: "" }],
+      quy_dinh: { loai: "ngày", ngay_trong_tuan: null, ngay_trong_thang: null, tan_suat: 1 }
+    });
     setForm({ ...form, cac_muc: updated });
   };
 
@@ -86,7 +198,6 @@ const AdminChecklistFormBDH = () => {
 
   const addChiTietToJob = (sectionIdx, jobIdx) => {
     const updated = [...form.cac_muc];
-    // Khởi tạo chi_tiet nếu chưa tồn tại
     if (!updated[sectionIdx].cong_viec[jobIdx].chi_tiet) {
       updated[sectionIdx].cong_viec[jobIdx].chi_tiet = [];
     }
@@ -148,7 +259,6 @@ const AdminChecklistFormBDH = () => {
           />
         </div>
 
-        {/* Danh sách các mục (section) */}
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2 text-blue-700">
             Danh sách các mục công việc
@@ -176,7 +286,6 @@ const AdminChecklistFormBDH = () => {
                 </button>
               </div>
 
-              {/* Công việc trong mục này */}
               {section.cong_viec.map((job, jobIdx) => (
                 <div key={jobIdx} className="mb-4 border-l-4 border-green-400 pl-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -188,6 +297,15 @@ const AdminChecklistFormBDH = () => {
                       }
                       placeholder={`Công việc ${jobIdx + 1}`}
                     />
+                    
+                    <button
+                      onClick={() => openQuyDinhModal(sectionIdx, jobIdx)}
+                      className="bg-purple-500 text-white px-3 py-2 rounded-md hover:bg-purple-600 text-sm whitespace-nowrap"
+                      title="Cài đặt quy định"
+                    >
+                      📅 Quy định
+                    </button>
+                    
                     <button
                       onClick={() => addChiTietToJob(sectionIdx, jobIdx)}
                       className="bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600 text-sm"
@@ -203,7 +321,10 @@ const AdminChecklistFormBDH = () => {
                     </button>
                   </div>
 
-                  {/* Chi tiết của công việc */}
+                  <div className="ml-4 mb-2 text-xs text-gray-600">
+                    {displayQuyDinh(job.quy_dinh)}
+                  </div>
+
                   {job.chi_tiet && job.chi_tiet.length > 0 && (
                     <div className="ml-4 space-y-2">
                       {job.chi_tiet.map((detail, chiTietIdx) => (
@@ -256,6 +377,116 @@ const AdminChecklistFormBDH = () => {
           </button>
         </div>
       </div>
+
+      {/* ✅ Modal Quy Định với logic reset */}
+      {showQuyDinhModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4 text-purple-700">📅 Cài đặt Quy định</h3>
+
+            {/* ✅ Chọn loại quy định với logic reset */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Loại quy định</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => changeLoaiQuyDinh("ngày")}
+                  className={`px-4 py-2 rounded-md transition-colors ${
+                    tempQuyDinh.loai === "ngày"
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  Hàng ngày
+                </button>
+                <button
+                  onClick={() => changeLoaiQuyDinh("tuần")}
+                  className={`px-4 py-2 rounded-md transition-colors ${
+                    tempQuyDinh.loai === "tuần"
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  Hàng tuần
+                </button>
+                <button
+                  onClick={() => changeLoaiQuyDinh("tháng")}
+                  className={`px-4 py-2 rounded-md transition-colors ${
+                    tempQuyDinh.loai === "tháng"
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  Hàng tháng
+                </button>
+              </div>
+            </div>
+
+            {/* Chọn ngày trong tuần */}
+            {tempQuyDinh.loai === "tuần" && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">
+                  Chọn các ngày trong tuần <span className="text-red-500">*</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {["CN", "T2", "T3", "T4", "T5", "T6", "T7"].map((day, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => toggleNgayTrongTuan(idx)}
+                      className={`px-4 py-2 rounded-md transition-colors ${
+                        (tempQuyDinh.ngay_trong_tuan || []).includes(idx)
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Chọn ngày trong tháng */}
+            {tempQuyDinh.loai === "tháng" && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">
+                  Chọn các ngày trong tháng <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-7 gap-2">
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                    <button
+                      key={day}
+                      onClick={() => toggleNgayTrongThang(day)}
+                      className={`px-3 py-2 rounded-md transition-colors ${
+                        (tempQuyDinh.ngay_trong_thang || []).includes(day)
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowQuyDinhModal(false)}
+                className="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={saveQuyDinh}
+                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+              >
+                Lưu quy định
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

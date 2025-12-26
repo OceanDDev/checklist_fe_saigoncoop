@@ -20,6 +20,8 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Coffee,
+  CalendarX,
 } from "lucide-react";
 
 const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
@@ -54,13 +56,9 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
     }
   };
 
-  // Kiểm tra có phải form vệ sinh không (có số lần)
-    user.cac_muc?.some((muc) =>
-      muc.cong_viec?.some((cv) => cv.so_lan !== undefined && cv.so_lan !== null)
-    ) ||
-    user.cong_viec_khac?.some(
-      (cv) => cv.so_lan !== undefined && cv.so_lan !== null
-    );
+  // ✅ Kiểm tra status nghỉ
+  const isOffDayStatus = user.status && user.status !== "Đi làm";
+  const isUnpaidLeave = user.status === "Nghỉ không lương";
 
   const toggleJobExpand = (mucIndex, cvIndex) => {
     const key = `${mucIndex}-${cvIndex}`;
@@ -78,7 +76,6 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
     }));
   };
 
-  // Tính phần trăm hoàn thành của công việc dựa trên chi tiết
   const calculateJobPercentage = (job) => {
     if (!job.chi_tiet || job.chi_tiet.length === 0) {
       return job.da_chon ? 100 : 0;
@@ -88,13 +85,11 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
     return Math.round((completedDetails / totalDetails) * 100);
   };
 
-  // Tính phần trăm của mỗi chi tiết (dùng cho hiển thị trong dialog)
   const calculateDetailPercentage = (job) => {
     if (!job.chi_tiet || job.chi_tiet.length === 0) return 0;
     return Math.round(100 / job.chi_tiet.length);
   };
 
-  // Lấy màu dựa trên phần trăm
   const getPercentageColor = (percentage) => {
     if (percentage === 0)
       return "bg-gray-100 text-gray-500 border border-gray-200";
@@ -104,25 +99,43 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
     return "bg-green-50 text-green-600 border border-green-200";
   };
 
-  // Lấy màu cho trạng thái (Đã chọn/Chưa chọn)
   const getStatusColor = (isChosen) => {
     return isChosen
       ? "bg-green-50 text-green-600 border border-green-200"
       : "bg-red-50 text-red-600 border border-red-200";
   };
 
-  // -------------------------------------------------------------------
-  // ⭐ HÀM TÍNH TỶ LỆ HOÀN THÀNH TOÀN BỘ CHECKLIST ⭐
-  // -------------------------------------------------------------------
+  // ✅ Lấy màu cho status badge
+  const getStatusBadgeColor = (status) => {
+    switch (status) {
+      case "Đi làm":
+        return "bg-green-100 text-green-700 border-green-300";
+      case "Nghỉ ca":
+        return "bg-blue-100 text-blue-700 border-blue-300";
+      case "Nghỉ bù":
+        return "bg-purple-100 text-purple-700 border-purple-300";
+      case "Nghỉ phép":
+        return "bg-orange-100 text-orange-700 border-orange-300";
+      case "Nghỉ không lương":
+        return "bg-gray-100 text-gray-700 border-gray-300";
+      default:
+        return "bg-gray-100 text-gray-700 border-gray-300";
+    }
+  };
+
   const calculateChecklistCompletion = (checklist) => {
+    // ✅ Nếu nghỉ không lương → 0%
+    if (isUnpaidLeave) return 0;
+    
+    // ✅ Nếu nghỉ (không phải đi làm) → Không tính %
+    if (isOffDayStatus) return null;
+
     let totalPoints = 0;
     let completedPoints = 0;
 
-    // 1. Tính toán cho các mục chính (cac_muc)
     (checklist.cac_muc || []).forEach((muc) => {
       (muc.cong_viec || []).forEach((cv) => {
         if (cv.chi_tiet && cv.chi_tiet.length > 0) {
-          // Nếu có chi tiết, mỗi chi tiết là 1 điểm
           const detailPoints = cv.chi_tiet.length;
           const completedDetailPoints = cv.chi_tiet.filter(
             (d) => d.da_chon
@@ -131,7 +144,6 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
           totalPoints += detailPoints;
           completedPoints += completedDetailPoints;
         } else {
-          // Nếu không có chi tiết, công việc chính là 1 điểm
           totalPoints += 1;
           if (cv.da_chon) {
             completedPoints += 1;
@@ -140,10 +152,8 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
       });
     });
 
-    // 2. Tính toán cho công việc khác (cong_viec_khac)
     (checklist.cong_viec_khac || []).forEach((cv) => {
       if (cv.chi_tiet && cv.chi_tiet.length > 0) {
-        // Nếu có chi tiết, mỗi chi tiết là 1 điểm
         const detailPoints = cv.chi_tiet.length;
         const completedDetailPoints = cv.chi_tiet.filter(
           (d) => d.da_chon
@@ -152,7 +162,6 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
         totalPoints += detailPoints;
         completedPoints += completedDetailPoints;
       } else {
-        // Nếu không có chi tiết, công việc chính là 1 điểm
         totalPoints += 1;
         if (cv.da_chon) {
           completedPoints += 1;
@@ -160,8 +169,7 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
       }
     });
 
-    if (totalPoints === 0) return 0; // Tránh chia cho 0
-
+    if (totalPoints === 0) return 0;
     return Math.round((completedPoints / totalPoints) * 100);
   };
 
@@ -186,279 +194,289 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
         </div>
       </td>
 
-      {/* CỘT TỶ LỆ HOÀN THÀNH TỔNG THỂ */}
+      {/* ✅ CỘT TỶ LỆ HOÀN THÀNH / STATUS */}
       <td className="px-3 py-3 min-w-[100px]">
-        <span
-          className={`px-3 py-1 rounded-full text-sm font-bold w-16 inline-flex justify-center ${getPercentageColor(
-            completionPercentage
-          )}`}
-        >
-          {completionPercentage}%
-        </span>
+        {isUnpaidLeave ? (
+          // Nghỉ không lương → 0%
+          <span className="px-3 py-1 rounded-full text-sm font-bold w-16 inline-flex justify-center bg-gray-100 text-gray-500 border border-gray-200">
+            0%
+          </span>
+        ) : isOffDayStatus ? (
+          // Các loại nghỉ khác → Hiển thị status
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold border inline-flex items-center gap-1 ${getStatusBadgeColor(user.status)}`}>
+            <Coffee className="w-3 h-3" />
+            {user.status}
+          </span>
+        ) : (
+          // Đi làm → Hiển thị %
+          <span
+            className={`px-3 py-1 rounded-full text-sm font-bold w-16 inline-flex justify-center ${getPercentageColor(
+              completionPercentage
+            )}`}
+          >
+            {completionPercentage}%
+          </span>
+        )}
       </td>
 
-      {/* Chi tiết */}
+      {/* ✅ CHI TIẾT / STATUS */}
       <td className="px-3 py-3 min-w-[100px]">
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button
-              variant="default"
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all duration-200"
-            >
-              <FileText className="w-4 h-4 mr-1" /> Chi tiết
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto bg-white p-6 rounded-lg shadow-2xl">
-            <DialogHeader className="border-b pb-3 mb-4">
-              <DialogTitle className="text-2xl font-extrabold text-blue-700 flex items-center">
-                <ClipboardList className="w-6 h-6 mr-2" />
-                BÁO CÁO KIỂM TRA - {user.ho_ten.toUpperCase()}
-              </DialogTitle>
-              
-            </DialogHeader>
+        {isOffDayStatus ? (
+          // Nếu nghỉ → Hiển thị badge status thay vì nút chi tiết
+          <span className={`px-4 py-2 rounded-lg text-sm font-semibold border inline-flex items-center gap-2 ${getStatusBadgeColor(user.status)}`}>
+            <CalendarX className="w-4 h-4" />
+            {user.status}
+          </span>
+        ) : (
+          // Nếu đi làm → Hiển thị nút chi tiết như bình thường
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button
+                variant="default"
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all duration-200"
+              >
+                <FileText className="w-4 h-4 mr-1" /> Chi tiết
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto bg-white p-6 rounded-lg shadow-2xl">
+              <DialogHeader className="border-b pb-3 mb-4">
+                <DialogTitle className="text-2xl font-extrabold text-blue-700 flex items-center">
+                  <ClipboardList className="w-6 h-6 mr-2" />
+                  BÁO CÁO KIỂM TRA - {user.ho_ten.toUpperCase()}
+                </DialogTitle>
+              </DialogHeader>
 
-            {/* Nội dung chi tiết */}
-            <div className="mt-4 divide-y divide-gray-100 space-y-4">
-              {/* Danh sách các Mục/Section */}
-              {(user.cac_muc || []).map((muc, mucIndex) => (
-                <div key={mucIndex} className="py-4 first:pt-0 last:pb-0">
-                  <div className="flex items-center mb-4 p-2 bg-blue-50 rounded-lg border-l-4 border-blue-600 shadow-sm">
-                    <span className="text-2xl mr-2 text-blue-600">
-                      <ClipboardList className="w-6 h-6" />
-                    </span>
-                    <h4 className="text-lg font-bold text-blue-800 uppercase">
-                      {muc.ten_muc}
-                    </h4>
-                  </div>
+              {/* Nội dung chi tiết */}
+              <div className="mt-4 divide-y divide-gray-100 space-y-4">
+                {(user.cac_muc || []).map((muc, mucIndex) => (
+                  <div key={mucIndex} className="py-4 first:pt-0 last:pb-0">
+                    <div className="flex items-center mb-4 p-2 bg-blue-50 rounded-lg border-l-4 border-blue-600 shadow-sm">
+                      <span className="text-2xl mr-2 text-blue-600">
+                        <ClipboardList className="w-6 h-6" />
+                      </span>
+                      <h4 className="text-lg font-bold text-blue-800 uppercase">
+                        {muc.ten_muc}
+                      </h4>
+                    </div>
 
-                  {/* Danh sách Công việc */}
-                  {(muc.cong_viec || []).map((cv, cvIndex) => {
-                    const jobKey = `${mucIndex}-${cvIndex}`;
-                    const isExpanded = expandedJobs[jobKey];
-                    const hasDetails = cv.chi_tiet && cv.chi_tiet.length > 0;
-                    const jobPercentage = calculateJobPercentage(cv);
-                    const detailPercentage = calculateDetailPercentage(cv);
+                    {(muc.cong_viec || []).map((cv, cvIndex) => {
+                      const jobKey = `${mucIndex}-${cvIndex}`;
+                      const isExpanded = expandedJobs[jobKey];
+                      const hasDetails = cv.chi_tiet && cv.chi_tiet.length > 0;
+                      const jobPercentage = calculateJobPercentage(cv);
+                      const detailPercentage = calculateDetailPercentage(cv);
 
-                    return (
-                      <div
-                        key={cvIndex}
-                        className="mb-3 border border-gray-200 rounded-lg overflow-hidden transition-shadow duration-150 hover:shadow-md"
-                      >
-                        {/* Công việc chính */}
+                      return (
                         <div
-                          className={`p-3 flex justify-between items-center text-sm ${
-                            hasDetails
-                              ? "bg-gray-50 cursor-pointer"
-                              : "bg-white"
-                          }`}
-                          onClick={() =>
-                            hasDetails && toggleJobExpand(mucIndex, cvIndex)
-                          }
+                          key={cvIndex}
+                          className="mb-3 border border-gray-200 rounded-lg overflow-hidden transition-shadow duration-150 hover:shadow-md"
                         >
-                          <div className="flex items-center gap-3 flex-1">
-                            {hasDetails && (
-                              <span className="text-gray-500">
-                                {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4" />
-                                )}
-                              </span>
-                            )}
-                            <span className="text-gray-800 font-semibold flex-1 text-left">
-                              {cv.noidung}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {/* Hiển thị số lần nếu có */}
-                            {cv.so_lan !== undefined &&
-                              cv.so_lan !== null &&
-                              cv.so_lan > 0 && (
-                                <span className="bg-sky-100 text-sky-700 px-2 py-1 rounded-full text-xs font-semibold border border-sky-200">
-                                  {cv.so_lan} lần
+                          <div
+                            className={`p-3 flex justify-between items-center text-sm ${
+                              hasDetails
+                                ? "bg-gray-50 cursor-pointer"
+                                : "bg-white"
+                            }`}
+                            onClick={() =>
+                              hasDetails && toggleJobExpand(mucIndex, cvIndex)
+                            }
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              {hasDetails && (
+                                <span className="text-gray-500">
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4" />
+                                  )}
                                 </span>
                               )}
-
-                            {/* Hiển thị phần trăm */}
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-bold w-16 text-center ${getPercentageColor(
-                                jobPercentage
-                              )}`}
-                            >
-                              {jobPercentage}%
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Chi tiết của công việc (Collapse) */}
-                        {hasDetails && isExpanded && (
-                          <div className="p-3 border-t bg-white">
-                            <div className="ml-3 space-y-1">
-                              {cv.chi_tiet.map((detail, detailIdx) => (
-                                <div
-                                  key={detailIdx}
-                                  className="py-1 flex justify-between items-center text-xs border-b border-dashed last:border-b-0"
-                                >
-                                  <span className="text-gray-600 flex items-center text-left">
-                                    <span className="text-blue-400 mr-2 font-bold">
-                                      —
-                                    </span>
-                                    {detail.noi_dung_chi_tiet}
-                                  </span>
-                                  <span
-                                    className={`px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 ${getStatusColor(
-                                      detail.da_chon
-                                    )}`}
-                                  >
-                                    {detail.da_chon ? (
-                                      <CheckCircle className="w-3 h-3" />
-                                    ) : (
-                                      <XCircle className="w-3 h-3" />
-                                    )}
-                                    {detail.da_chon
-                                      ? `${detailPercentage}%`
-                                      : "0%"}
-                                  </span>
-                                </div>
-                              ))}
+                              <span className="text-gray-800 font-semibold flex-1 text-left">
+                                {cv.noidung}
+                              </span>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-
-              {/* Công việc khác */}
-              {user.cong_viec_khac?.length > 0 && (
-                <div className="py-4 first:pt-0 last:pb-0">
-                  <div className="flex items-center mb-4 p-2 bg-purple-50 rounded-lg border-l-4 border-purple-600 shadow-sm">
-                    <span className="text-2xl mr-2 text-purple-600">
-                      <Edit2 className="w-6 h-6" />
-                    </span>
-                    <h4 className="text-lg font-bold text-purple-800 uppercase">
-                      Công việc khác (Thêm/Tùy chỉnh)
-                    </h4>
-                  </div>
-                  {user.cong_viec_khac.map((cv, idx) => {
-                    const customKey = `custom-${idx}`;
-                    const isExpanded = expandedJobs[customKey];
-                    const hasDetails = cv.chi_tiet && cv.chi_tiet.length > 0;
-
-                    return (
-                      <div
-                        key={idx}
-                        className="mb-3 border border-gray-200 rounded-lg overflow-hidden transition-shadow duration-150 hover:shadow-md"
-                      >
-                        {/* Công việc khác chính */}
-                        <div
-                          className={`p-3 flex justify-between items-center text-sm ${
-                            hasDetails
-                              ? "bg-gray-50 cursor-pointer"
-                              : "bg-white"
-                          }`}
-                          onClick={() =>
-                            hasDetails && toggleCustomJobExpand(idx)
-                          }
-                        >
-                          <div className="flex items-center gap-3 flex-1">
-                            {hasDetails && (
-                              <span className="text-gray-500">
-                                {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4" />
+                            <div className="flex items-center gap-2">
+                              {cv.so_lan !== undefined &&
+                                cv.so_lan !== null &&
+                                cv.so_lan > 0 && (
+                                  <span className="bg-sky-100 text-sky-700 px-2 py-1 rounded-full text-xs font-semibold border border-sky-200">
+                                    {cv.so_lan} lần
+                                  </span>
                                 )}
-                              </span>
-                            )}
-                            <span className="text-gray-800 font-semibold flex-1 text-left">
-                              {cv.noidung}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {/* Hiển thị số lần nếu có */}
-                            {cv.so_lan !== undefined &&
-                              cv.so_lan !== null &&
-                              cv.so_lan > 0 && (
-                                <span className="bg-sky-100 text-sky-700 px-2 py-1 rounded-full text-xs font-semibold border border-sky-200">
-                                  {cv.so_lan} lần
-                                </span>
-                              )}
 
-                            {/* Trạng thái đã chọn (Sử dụng icon cho trực quan) */}
-                            {cv.da_chon !== undefined && (
                               <span
-                                className={`px-3 py-1 rounded-full text-xs font-bold w-16 text-center flex items-center justify-center gap-1 ${
-                                  cv.da_chon
-                                    ? "bg-green-50 text-green-600 border border-green-200"
-                                    : "bg-red-50 text-red-600 border border-red-200"
-                                }`}
+                                className={`px-3 py-1 rounded-full text-xs font-bold w-16 text-center ${getPercentageColor(
+                                  jobPercentage
+                                )}`}
                               >
-                                {cv.da_chon ? (
-                                  <CheckCircle className="w-3 h-3" />
-                                ) : (
-                                  <XCircle className="w-3 h-3" />
-                                )}
-                                {cv.da_chon ? "Hoàn thành" : "Chưa làm"}
+                                {jobPercentage}%
                               </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Chi tiết của công việc khác */}
-                        {hasDetails && isExpanded && (
-                          <div className="p-3 border-t bg-white">
-                            <div className="ml-3 space-y-1">
-                              {cv.chi_tiet.map((detail, detailIdx) => (
-                                <div
-                                  key={detailIdx}
-                                  className="py-1 flex justify-between items-center text-xs border-b border-dashed last:border-b-0"
-                                >
-                                  <span className="text-gray-600 flex items-center text-left">
-                                    <span className="text-purple-400 mr-2 font-bold">
-                                      —
-                                    </span>
-                                    {detail.noi_dung_chi_tiet}
-                                  </span>
-                                  <span
-                                    className={`px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 ${getStatusColor(
-                                      detail.da_chon
-                                    )}`}
-                                  >
-                                    {detail.da_chon ? (
-                                      <CheckCircle className="w-3 h-3" />
-                                    ) : (
-                                      <XCircle className="w-3 h-3" />
-                                    )}
-                                    {detail.da_chon ? "Đã chọn" : "Chưa chọn"}
-                                  </span>
-                                </div>
-                              ))}
                             </div>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
 
-              {/* Ghi chú */}
-              {user.ghi_chu && (
-                <div className="mt-6 pt-4 bg-yellow-50 p-4 rounded-xl border border-yellow-200 shadow-inner">
-                  <p className="text-yellow-800 font-bold mb-2 flex items-center gap-1">
-                    <FileText className="w-5 h-5" /> Ghi chú:
-                  </p>
-                  <blockquote className="text-sm text-yellow-700 whitespace-pre-line border-l-4 border-yellow-400 pl-3 italic">
-                    {user.ghi_chu}
-                  </blockquote>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+                          {hasDetails && isExpanded && (
+                            <div className="p-3 border-t bg-white">
+                              <div className="ml-3 space-y-1">
+                                {cv.chi_tiet.map((detail, detailIdx) => (
+                                  <div
+                                    key={detailIdx}
+                                    className="py-1 flex justify-between items-center text-xs border-b border-dashed last:border-b-0"
+                                  >
+                                    <span className="text-gray-600 flex items-center text-left">
+                                      <span className="text-blue-400 mr-2 font-bold">
+                                        —
+                                      </span>
+                                      {detail.noi_dung_chi_tiet}
+                                    </span>
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 ${getStatusColor(
+                                        detail.da_chon
+                                      )}`}
+                                    >
+                                      {detail.da_chon ? (
+                                        <CheckCircle className="w-3 h-3" />
+                                      ) : (
+                                        <XCircle className="w-3 h-3" />
+                                      )}
+                                      {detail.da_chon
+                                        ? `${detailPercentage}%`
+                                        : "0%"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                {user.cong_viec_khac?.length > 0 && (
+                  <div className="py-4 first:pt-0 last:pb-0">
+                    <div className="flex items-center mb-4 p-2 bg-purple-50 rounded-lg border-l-4 border-purple-600 shadow-sm">
+                      <span className="text-2xl mr-2 text-purple-600">
+                        <Edit2 className="w-6 h-6" />
+                      </span>
+                      <h4 className="text-lg font-bold text-purple-800 uppercase">
+                        Công việc khác (Thêm/Tùy chỉnh)
+                      </h4>
+                    </div>
+                    {user.cong_viec_khac.map((cv, idx) => {
+                      const customKey = `custom-${idx}`;
+                      const isExpanded = expandedJobs[customKey];
+                      const hasDetails = cv.chi_tiet && cv.chi_tiet.length > 0;
+
+                      return (
+                        <div
+                          key={idx}
+                          className="mb-3 border border-gray-200 rounded-lg overflow-hidden transition-shadow duration-150 hover:shadow-md"
+                        >
+                          <div
+                            className={`p-3 flex justify-between items-center text-sm ${
+                              hasDetails
+                                ? "bg-gray-50 cursor-pointer"
+                                : "bg-white"
+                            }`}
+                            onClick={() =>
+                              hasDetails && toggleCustomJobExpand(idx)
+                            }
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              {hasDetails && (
+                                <span className="text-gray-500">
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4" />
+                                  )}
+                                </span>
+                              )}
+                              <span className="text-gray-800 font-semibold flex-1 text-left">
+                                {cv.noidung}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {cv.so_lan !== undefined &&
+                                cv.so_lan !== null &&
+                                cv.so_lan > 0 && (
+                                  <span className="bg-sky-100 text-sky-700 px-2 py-1 rounded-full text-xs font-semibold border border-sky-200">
+                                    {cv.so_lan} lần
+                                  </span>
+                                )}
+
+                              {cv.da_chon !== undefined && (
+                                <span
+                                  className={`px-3 py-1 rounded-full text-xs font-bold w-16 text-center flex items-center justify-center gap-1 ${
+                                    cv.da_chon
+                                      ? "bg-green-50 text-green-600 border border-green-200"
+                                      : "bg-red-50 text-red-600 border border-red-200"
+                                  }`}
+                                >
+                                  {cv.da_chon ? (
+                                    <CheckCircle className="w-3 h-3" />
+                                  ) : (
+                                    <XCircle className="w-3 h-3" />
+                                  )}
+                                  {cv.da_chon ? "Hoàn thành" : "Chưa làm"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {hasDetails && isExpanded && (
+                            <div className="p-3 border-t bg-white">
+                              <div className="ml-3 space-y-1">
+                                {cv.chi_tiet.map((detail, detailIdx) => (
+                                  <div
+                                    key={detailIdx}
+                                    className="py-1 flex justify-between items-center text-xs border-b border-dashed last:border-b-0"
+                                  >
+                                    <span className="text-gray-600 flex items-center text-left">
+                                      <span className="text-purple-400 mr-2 font-bold">
+                                        —
+                                      </span>
+                                      {detail.noi_dung_chi_tiet}
+                                    </span>
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 ${getStatusColor(
+                                        detail.da_chon
+                                      )}`}
+                                    >
+                                      {detail.da_chon ? (
+                                        <CheckCircle className="w-3 h-3" />
+                                      ) : (
+                                        <XCircle className="w-3 h-3" />
+                                      )}
+                                      {detail.da_chon ? "Đã chọn" : "Chưa chọn"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {user.ghi_chu && (
+                  <div className="mt-6 pt-4 bg-yellow-50 p-4 rounded-xl border border-yellow-200 shadow-inner">
+                    <p className="text-yellow-800 font-bold mb-2 flex items-center gap-1">
+                      <FileText className="w-5 h-5" /> Ghi chú:
+                    </p>
+                    <blockquote className="text-sm text-yellow-700 whitespace-pre-line border-l-4 border-yellow-400 pl-3 italic">
+                      {user.ghi_chu}
+                    </blockquote>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </td>
 
       {/* Xoá */}

@@ -9,6 +9,18 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  // ✅ State cho status
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [statusError, setStatusError] = useState("");
+
+  // ✅ Danh sách status options
+  const statusOptions = [
+    "Đi làm",
+    "Nghỉ ca",
+    "Nghỉ bù",
+    "Nghỉ phép",
+    "Nghỉ không lương"
+  ];
 
   // Danh sách mã NV được phép truy cập cho từng form
   const FORM_PERMISSIONS = {
@@ -72,6 +84,33 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
     }
   };
 
+  // ✅ Handle xác nhận với status - Tự động submit khi chọn nghỉ
+  const handleConfirm = async () => {
+    if (!selectedStatus) {
+      setStatusError("Vui lòng chọn trạng thái");
+      toast.error("⚠️ Vui lòng chọn trạng thái!");
+      return;
+    }
+
+    // ✅ Nếu chọn status nghỉ → Tự động gửi và chuyển sang Thank You
+    if (selectedStatus !== "Đi làm") {
+      onConfirm({
+        ...userInfo,
+        status: selectedStatus,
+        skipChecklist: true, // Skip checklist
+        autoSubmit: true // Đánh dấu để tự động submit
+      });
+      return;
+    }
+
+    // ✅ Nếu "Đi làm" → Tiếp tục làm checklist bình thường
+    onConfirm({
+      ...userInfo,
+      status: selectedStatus,
+      skipChecklist: false
+    });
+  };
+
   const isReady =
     userInfo.employeeId && userInfo.userName && userInfo.department;
 
@@ -96,6 +135,35 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
             />
           </div>
 
+          {/* ✅ Dropdown chọn status */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Trạng thái nghỉ <span className="text-red-500">*</span>
+            </label>
+            <select
+              className={`w-full border rounded-lg px-4 py-2 text-base focus:outline-none ${
+                statusError
+                  ? "border-red-500 ring-red-400 ring-1"
+                  : "border-gray-300 focus:ring-2 focus:ring-blue-500"
+              }`}
+              value={selectedStatus}
+              onChange={(e) => {
+                setSelectedStatus(e.target.value);
+                setStatusError("");
+              }}
+            >
+              <option value="">-- Chọn trạng thái --</option>
+              {statusOptions.map((status, idx) => (
+                <option key={idx} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+            {statusError && (
+              <p className="text-xs text-red-500 mt-1">{statusError}</p>
+            )}
+          </div>
+
           <button
             onClick={handleCheckEmployee}
             disabled={loading}
@@ -104,7 +172,7 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
             {loading ? "Đang kiểm tra..." : "Kiểm tra mã nhân viên"}
           </button>
 
-          {isReady && (
+          {isReady && selectedStatus && (
             <>
               <div className="bg-green-50 border border-green-300 rounded-lg p-3 text-sm text-gray-700 space-y-1">
                 <p>
@@ -116,13 +184,16 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
                 <p>
                   <strong>Bộ phận:</strong> {userInfo.department}
                 </p>
+                <p>
+                  <strong>Trạng thái:</strong> {selectedStatus}
+                </p>
               </div>
 
               <button
-                onClick={() => onConfirm(userInfo)}
+                onClick={handleConfirm}
                 className="w-full py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700"
               >
-                Bắt đầu checklist
+                {selectedStatus === "Đi làm" ? "Bắt đầu checklist" : "Xác nhận nghỉ"}
               </button>
             </>
           )}
@@ -161,7 +232,6 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
                 onClick={() => {
                   setUserInfo(selectedEmployee);
                   setShowModal(false);
-                  onConfirm(selectedEmployee);
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >

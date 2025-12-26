@@ -24,15 +24,45 @@ const createCheckListBDH = async (formId, payload) => {
   } catch (error) {
     console.error("Lỗi gửi checklist:", error);
     throw error;
-  } 
+  }
 };
 
 const getCheckListsByFormBDHId = async (formId) => {
   try {
-    const result = await requestService.get(`${URL.checklistbdh.list}/form/${formId}`);
+    const result = await requestService.get(
+      `${URL.checklistbdh.list}/form/${formId}`
+    );
     return result;
   } catch (error) {
     console.error("Lỗi khi gọi getCheckListsByFormId:", error);
+    throw error;
+  }
+};
+
+// ✅ Service: Lấy checklist theo status
+const getCheckListsByStatus = async (status) => {
+  try {
+    const result = await requestService.get(
+      `${URL.checklistbdh.list}/status/${status}`
+    );
+    return result;
+  } catch (error) {
+    console.error("Lỗi khi gọi getCheckListsByStatus:", error);
+    throw error;
+  }
+};
+
+// ✅ Service mới: Lấy checklist theo quy định
+const getCheckListsByQuyDinh = async (loai, ngay = null) => {
+  try {
+    let url = `${URL.checklistbdh.list}/quydinh/${loai}`;
+    if (ngay) {
+      url += `?ngay=${ngay}`;
+    }
+    const result = await requestService.get(url);
+    return result;
+  } catch (error) {
+    console.error("Lỗi khi gọi getCheckListsByQuyDinh:", error);
     throw error;
   }
 };
@@ -48,7 +78,7 @@ const getByIdCheckList = async (id) => {
   }
 };
 
-const deleteByIdCheckList = async (id) => { 
+const deleteByIdCheckList = async (id) => {
   try {
     const results = await requestService.del(
       `${URL.checklistbdh.create}/${id}`,
@@ -75,9 +105,35 @@ const updateCheckList = async (id, payload) => {
   }
 };
 
+// === SERVICES CHO QUY ĐỊNH ===
+
+// ✅ Service mới: Cập nhật quy định cho công việc
+const updateQuyDinhCongViec = async (
+  checklistId,
+  mucIndex,
+  congViecIndex,
+  payload
+) => {
+  try {
+    const result = await requestService.put(
+      `${URL.checklistbdh.create}/${checklistId}/muc/${mucIndex}/congviec/${congViecIndex}/quydinh`,
+      payload
+    );
+    return result;
+  } catch (error) {
+    console.error("Lỗi khi cập nhật quy định:", error);
+    throw error;
+  }
+};
+
 // === SERVICES CHO CHI TIẾT ===
 
-const addChiTietToCongViec = async (checklistId, mucIndex, congViecIndex, payload) => {
+const addChiTietToCongViec = async (
+  checklistId,
+  mucIndex,
+  congViecIndex,
+  payload
+) => {
   try {
     const result = await requestService.post(
       `${URL.checklistbdh.create}/${checklistId}/muc/${mucIndex}/congviec/${congViecIndex}/chitiet`,
@@ -90,7 +146,13 @@ const addChiTietToCongViec = async (checklistId, mucIndex, congViecIndex, payloa
   }
 };
 
-const updateChiTietStatus = async (checklistId, mucIndex, congViecIndex, chiTietIndex, payload) => {
+const updateChiTietStatus = async (
+  checklistId,
+  mucIndex,
+  congViecIndex,
+  chiTietIndex,
+  payload
+) => {
   try {
     const result = await requestService.patch(
       `${URL.checklistbdh.create}/${checklistId}/muc/${mucIndex}/congviec/${congViecIndex}/chitiet/${chiTietIndex}`,
@@ -103,7 +165,12 @@ const updateChiTietStatus = async (checklistId, mucIndex, congViecIndex, chiTiet
   }
 };
 
-const deleteChiTiet = async (checklistId, mucIndex, congViecIndex, chiTietIndex) => {
+const deleteChiTiet = async (
+  checklistId,
+  mucIndex,
+  congViecIndex,
+  chiTietIndex
+) => {
   try {
     const result = await requestService.del(
       `${URL.checklistbdh.create}/${checklistId}/muc/${mucIndex}/congviec/${congViecIndex}/chitiet/${chiTietIndex}`,
@@ -122,10 +189,14 @@ export const checkListBDHService = {
   createCheckListBDH,
   getByIdCheckList,
   getCheckListsByFormBDHId,
+  getCheckListsByStatus,
+  getCheckListsByQuyDinh, // ✅ Service mới
   deleteByIdCheckList,
   updateCheckList,
+  // Quy định
+  updateQuyDinhCongViec, // ✅ Service mới
   // Chi tiết
   addChiTietToCongViec,
   updateChiTietStatus,
-  deleteChiTiet
+  deleteChiTiet,
 };

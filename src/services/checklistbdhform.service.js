@@ -1,18 +1,19 @@
 import { ApiServer, URL } from "@/configs/api-request";
 import { requestService } from "./request.service";
 
-// ✅ Lấy danh sách tất cả checklist form (có thể truyền query param nếu cần)
+// ✅ Lấy danh sách tất cả checklist form
 const getCheckListBDHForm = async (params = {}) => {
   try {
     const results = await requestService.get(
-      URL.checklistbdhform.list, // path
-      params, // params
-      undefined, // headers (default)
-      ApiServer // axiosInstance
+      URL.checklistbdhform.list,
+      params,
+      undefined,
+      ApiServer
     );
     return results;
   } catch (error) {
-    console.error("Lỗi getCheckListFormBDH:", error);
+    console.error("Lỗi getCheckListBDHForm:", error);
+    throw error; // Ném lỗi để component xử lý
   }
 };
 
@@ -20,14 +21,15 @@ const getCheckListBDHForm = async (params = {}) => {
 const createCheckListBDHForm = async (payload) => {
   try {
     const results = await requestService.post(
-      URL.checklistbdhform.list, // path
-      payload, // body
-      undefined, // headers (default)
-      ApiServer // axiosInstance
+      URL.checklistbdhform.list,
+      payload,
+      undefined,
+      ApiServer
     );
     return results;
   } catch (error) {
-    console.error("Lỗi createCheckListFormBDH:", error);
+    console.error("Lỗi createCheckListBDHForm:", error);
+    throw error;
   }
 };
 
@@ -35,49 +37,53 @@ const createCheckListBDHForm = async (payload) => {
 const getByIdCheckListBDHForm = async (id) => {
   try {
     const results = await requestService.get(
-      `${URL.checklistbdhform.create}/${id}`, // path
-      {}, // params
-      undefined, // headers
-      ApiServer // axiosInstance
+      `${URL.checklistbdhform.list}/${id}`, // ✅ Sửa từ .create thành .list
+      {},
+      undefined,
+      ApiServer
     );
     return results;
   } catch (error) {
-    console.error("Lỗi getByIdCheckListFormBDH:", error);
+    console.error("Lỗi getByIdCheckListBDHForm:", error);
+    throw error;
   }
 };
 
+// ✅ Cập nhật checklist form theo ID
 const updateCheckListBDHForm = async (id, payload) => {
   try {
     const results = await requestService.put(
       `${URL.checklistbdhform.list}/${id}`,
-      payload, // body
-      undefined, // headers
-      ApiServer // axiosInstance
+      payload,
+      undefined,
+      ApiServer
     );
     return results;
   } catch (error) {
-    console.error("Lỗi updateCheckListFormBDH:", error);
+    console.error("Lỗi updateCheckListBDHForm:", error);
+    throw error;
   }
 };
 
+// ✅ Xóa checklist form theo ID
 const deleteCheckListBDHForm = async (id) => {
   try {
     const results = await requestService.del(
       `${URL.checklistbdhform.list}/${id}`,
-      undefined,  // headers
-      ApiServer   // axiosInstance
+      undefined,
+      ApiServer
     );
     return results;
   } catch (error) {
-    console.error("Lỗi deleteCheckListFormBDH:", error);
+    console.error("Lỗi deleteCheckListBDHForm:", error);
+    throw error;
   }
 };
 
-
 export const checkListFormServiceBDH = {
   getCheckListBDHForm,
-  updateCheckListBDHForm,
-  deleteCheckListBDHForm,
   createCheckListBDHForm,
   getByIdCheckListBDHForm,
+  updateCheckListBDHForm,
+  deleteCheckListBDHForm,
 };

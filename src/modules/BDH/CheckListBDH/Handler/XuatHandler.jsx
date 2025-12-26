@@ -19,6 +19,42 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
   const RESTRICTED_FORM_ID = "687f110132fbc64dbf1c0ac3";
 
+  // ✅ Hàm kiểm tra công việc có hiển thị hôm nay không
+  const shouldShowToday = (quy_dinh) => {
+    if (!quy_dinh) return true;
+
+    const now = new Date();
+    const vietnamTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+    
+    const dayOfWeek = vietnamTime.getDay();
+    const dayOfMonth = vietnamTime.getDate();
+
+    if (quy_dinh.loai === "ngày") {
+      return true;
+    }
+
+    if (quy_dinh.loai === "tuần") {
+      if (!quy_dinh.ngay_trong_tuan || quy_dinh.ngay_trong_tuan.length === 0) {
+        return false;
+      }
+      return quy_dinh.ngay_trong_tuan.includes(dayOfWeek);
+    }
+
+    if (quy_dinh.loai === "tháng") {
+      if (!quy_dinh.ngay_trong_thang || quy_dinh.ngay_trong_thang.length === 0) {
+        return false;
+      }
+      return quy_dinh.ngay_trong_thang.includes(dayOfMonth);
+    }
+
+    return true;
+  };
+
+  // ✅ Kiểm tra có quy định đặc biệt không
+  const hasSpecialSchedule = (quy_dinh) => {
+    return quy_dinh && quy_dinh.loai !== "ngày";
+  };
+
   const isRestrictedForm = () => {
     return formId === RESTRICTED_FORM_ID;
   };
@@ -45,6 +81,11 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return allowedSections.includes(sectionName);
   };
 
+  // ✅ Lọc công việc theo quyền VÀ lịch trình
+  const getFilteredJobs = (section) => {
+    return section.cong_viec.filter(job => shouldShowToday(job.quy_dinh));
+  };
+
   const toggleExpand = (sectionIdx, jobIdx) => {
     const key = `${sectionIdx}-${jobIdx}`;
     setExpandedJobs(prev => ({
@@ -58,12 +99,9 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     const exists = selectedJobs.find((item) => item.key === key);
     
     if (exists) {
-      // Bỏ chọn công việc
       setSelectedJobs(selectedJobs.filter((item) => item.key !== key));
     } else {
-      // Chọn công việc
       setSelectedJobs([...selectedJobs, { key, sectionIdx, jobIdx, noidung: job.noidung }]);
-      // Auto chọn tất cả chi tiết khi chọn công việc cha
       if (job.chi_tiet && job.chi_tiet.length > 0) {
         const allDetailIndexes = job.chi_tiet.map((_, idx) => idx);
         setSelectedDetails(prev => ({
@@ -122,23 +160,29 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       return;
     }
 
-    const transformedMucChecklist = filteredSections.map((section, sectionIdx) => ({
-      ten_muc: section.ten_muc,
-      cong_viec: section.cong_viec.map((job, jobIdx) => {
-        const jobKey = `${sectionIdx}-${jobIdx}`;
-        const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
-        const selectedDetailIndexes = selectedDetails[jobKey] || [];
+    const transformedMucChecklist = filteredSections.map((section, sectionIdx) => {
+      // ✅ Lọc công việc theo lịch trình
+      const filteredJobs = getFilteredJobs(section);
 
-        return {
-          noidung: job.noidung,
-          da_chon: isJobSelected,
-          chi_tiet: (job.chi_tiet || []).map((detail, detailIdx) => ({
-            noi_dung_chi_tiet: detail.noi_dung_chi_tiet,
-            da_chon: selectedDetailIndexes.includes(detailIdx),
-          })),
-        };
-      }),
-    }));
+      return {
+        ten_muc: section.ten_muc,
+        cong_viec: filteredJobs.map((job, jobIdx) => {
+          const jobKey = `${sectionIdx}-${jobIdx}`;
+          const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
+          const selectedDetailIndexes = selectedDetails[jobKey] || [];
+
+          return {
+            noidung: job.noidung,
+            da_chon: isJobSelected,
+            quy_dinh: job.quy_dinh, // ✅ Thêm quy_dinh
+            chi_tiet: (job.chi_tiet || []).map((detail, detailIdx) => ({
+              noi_dung_chi_tiet: detail.noi_dung_chi_tiet,
+              da_chon: selectedDetailIndexes.includes(detailIdx),
+            })),
+          };
+        }),
+      };
+    });
 
     const transformedCustomJobs = customJobs.map((job) => ({
       noidung: job.noidung,
@@ -216,74 +260,104 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
             ⚠️ Không có công việc nào được phân quyền cho bạn.
           </p>
         ) : (
-          visibleSections.map((section, sectionIdx) => (
-            <div key={sectionIdx} className="mb-6">
-              <p className="font-semibold text-gray-900 mb-3 bg-blue-50 p-2 rounded">
-                🔹 {section.ten_muc}
-              </p>
-              <div className="space-y-3">
-                {section.cong_viec.map((job, jobIdx) => {
-                  const jobKey = `${sectionIdx}-${jobIdx}`;
-                  const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
-                  const isExpanded = expandedJobs[jobKey];
-                  const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
-                  
-                  return (
-                    <div key={jobIdx} className="border rounded-lg bg-white shadow">
-                      <div className="flex items-center justify-between p-3 hover:bg-gray-50 transition-all">
-                        <label className="flex items-center gap-3 w-full cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="accent-blue-600 w-4 h-4"
-                            checked={isJobSelected}
-                            onChange={() => toggleJob(sectionIdx, jobIdx, job)}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <span 
-                            className="text-sm font-medium text-gray-800 flex-1"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              if (hasDetails) toggleExpand(sectionIdx, jobIdx);
-                            }}
-                          >
-                            {job.noidung}
-                          </span>
-                        </label>
-                        {hasDetails && (
-                          <button
-                            onClick={() => toggleExpand(sectionIdx, jobIdx)}
-                            className="text-gray-400 hover:text-gray-600 ml-2"
-                          >
-                            {isExpanded ? "▼" : "▶"}
-                          </button>
+          visibleSections.map((section, sectionIdx) => {
+            // ✅ Lọc công việc theo lịch trình
+            const filteredJobs = getFilteredJobs(section);
+            
+            // Chỉ hiển thị section nếu có công việc
+            if (filteredJobs.length === 0) return null;
+
+            return (
+              <div key={sectionIdx} className="mb-6">
+                <p className="font-semibold text-gray-900 mb-3 bg-blue-50 p-2 rounded">
+                  🔹 {section.ten_muc}
+                </p>
+                <div className="space-y-3">
+                  {filteredJobs.map((job, jobIdx) => {
+                    const jobKey = `${sectionIdx}-${jobIdx}`;
+                    const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
+                    const isExpanded = expandedJobs[jobKey];
+                    const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
+                    
+                    // ✅ Kiểm tra có quy định đặc biệt không
+                    const isSpecial = hasSpecialSchedule(job.quy_dinh);
+                    
+                    return (
+                      <div 
+                        key={jobIdx} 
+                        className={`border rounded-lg shadow transition-all duration-300 ${
+                          isSpecial
+                            ? "border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 ring-2 ring-amber-300"
+                            : "border-gray-200 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between p-3 hover:bg-gray-50 transition-all">
+                          <label className="flex items-center gap-3 w-full cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="accent-blue-600 w-4 h-4"
+                              checked={isJobSelected}
+                              onChange={() => toggleJob(sectionIdx, jobIdx, job)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span 
+                              className={`text-sm font-medium flex-1 ${
+                                isSpecial ? "text-amber-900 font-semibold" : "text-gray-800"
+                              }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (hasDetails) toggleExpand(sectionIdx, jobIdx);
+                              }}
+                            >
+                              {isSpecial && "🎯 "}
+                              {job.noidung}
+                            </span>
+                            
+                            {/* ✅ Badge đặc biệt */}
+                            {isSpecial && (
+                              <span className="px-2 py-1 bg-amber-500 text-white text-xs font-bold rounded-full shadow-sm animate-pulse">
+                                HÔM NAY
+                              </span>
+                            )}
+                          </label>
+                          {hasDetails && (
+                            <button
+                              onClick={() => toggleExpand(sectionIdx, jobIdx)}
+                              className="text-gray-400 hover:text-gray-600 ml-2"
+                            >
+                              {isExpanded ? "▼" : "▶"}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Chi tiết */}
+                        {hasDetails && isExpanded && (
+                          <div className={`px-3 pb-3 pl-10 space-y-2 border-t ${
+                            isSpecial ? "bg-amber-50/50" : "bg-gray-50"
+                          }`}>
+                            {job.chi_tiet.map((detail, detailIdx) => (
+                              <label
+                                key={detailIdx}
+                                className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-gray-800 py-1"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="accent-green-600 w-3 h-3"
+                                  checked={(selectedDetails[jobKey] || []).includes(detailIdx)}
+                                  onChange={() => toggleDetail(sectionIdx, jobIdx, detailIdx)}
+                                />
+                                <span className="text-xs">→ {detail.noi_dung_chi_tiet}</span>
+                              </label>
+                            ))}
+                          </div>
                         )}
                       </div>
-
-                      {/* Chi tiết */}
-                      {hasDetails && isExpanded && (
-                        <div className="px-3 pb-3 pl-10 space-y-2 border-t bg-gray-50">
-                          {job.chi_tiet.map((detail, detailIdx) => (
-                            <label
-                              key={detailIdx}
-                              className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-gray-800 py-1"
-                            >
-                              <input
-                                type="checkbox"
-                                className="accent-green-600 w-3 h-3"
-                                checked={(selectedDetails[jobKey] || []).includes(detailIdx)}
-                                onChange={() => toggleDetail(sectionIdx, jobIdx, detailIdx)}
-                              />
-                              <span className="text-xs">→ {detail.noi_dung_chi_tiet}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
