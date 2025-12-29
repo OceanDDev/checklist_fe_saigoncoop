@@ -161,7 +161,7 @@ function App() {
         <Route
           path="/phuxe"
           element={
-            <PrivateRoute allowRoles={[21, 22]}>
+            <PrivateRoute allowRoles={[21, 22, 24]}>
               <MainLayout>
                 {" "}
                 <HomePhuXe />{" "}

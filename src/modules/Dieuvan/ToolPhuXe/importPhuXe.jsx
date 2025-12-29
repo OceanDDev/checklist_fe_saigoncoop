@@ -1,14 +1,22 @@
 /* eslint-disable react/prop-types */
 import { useState } from "react";
-import { Button, Upload, message, Modal, Space } from "antd";
-import { UploadOutlined, FileExcelOutlined } from "@ant-design/icons";
+import { Button, Upload, message, Modal, Space, Table } from "antd";
+import {
+  UploadOutlined,
+  FileExcelOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { phuXeService } from "@/services/dieuvan/phuxe.service";
 
-const ImportPhuXe = ({ onImported }) => {
+const ImportPhuXe = ({ onImported, isRole24 }) => {
   const [visible, setVisible] = useState(false);
   const [fileList, setFileList] = useState([]);
+  const [invalidStoresModal, setInvalidStoresModal] = useState({
+    visible: false,
+    data: [],
+  });
 
   const handleOpen = () => setVisible(true);
   const handleClose = () => {
@@ -22,26 +30,20 @@ const ImportPhuXe = ({ onImported }) => {
 
     let value = cell.value;
 
-    // Date object - XỬ LÝ TRƯỚC TIÊN vì cell.text cũng có thể là Date
     if (value instanceof Date) {
-      // Lấy giờ và phút từ Date object
       const hours = value.getUTCHours();
       const minutes = value.getUTCMinutes();
-      const result = `${hours}:${minutes.toString().padStart(2, "0")}`;
-      return result;
+      return `${hours}:${minutes.toString().padStart(2, "0")}`;
     }
 
-    // Nếu có text sẵn và là STRING (không phải Date), dùng luôn
-    if (cell.text && typeof cell.text === 'string' && cell.text.includes(":")) {
+    if (cell.text && typeof cell.text === "string" && cell.text.includes(":")) {
       return cell.text.trim();
     }
 
-    // Xử lý object (nhưng không phải Date)
-    if (value && typeof value === 'object') {
+    if (value && typeof value === "object") {
       if (value.result !== undefined) value = value.result;
       if (value.text !== undefined) value = value.text;
-      
-      // Sau khi extract, check lại Date
+
       if (value instanceof Date) {
         const hours = value.getUTCHours();
         const minutes = value.getUTCMinutes();
@@ -49,7 +51,6 @@ const ImportPhuXe = ({ onImported }) => {
       }
     }
 
-    // Number < 1 (Excel time format - fraction of day)
     if (typeof value === "number" && value >= 0 && value < 1) {
       const totalMinutes = Math.round(value * 24 * 60);
       const hours = Math.floor(totalMinutes / 60);
@@ -57,74 +58,62 @@ const ImportPhuXe = ({ onImported }) => {
       return `${hours}:${minutes.toString().padStart(2, "0")}`;
     }
 
-    // Nếu là string có dấu ":", return luôn
     if (typeof value === "string" && value.includes(":")) {
       return value.trim();
     }
 
-    // Fallback
     console.warn("Unexpected time value:", value);
     return "";
   };
 
-  // 📤 Convert cell sang string, xử lý đúng Time format từ Excel
+  // 📤 Convert cell sang string
   const cellToString = (cell) => {
-    // Kiểm tra cell rỗng hoặc null
     if (!cell || cell.value === null || cell.value === undefined) return "";
 
-    // Lấy giá trị thực từ cell
     let value = cell.value;
 
-    // Nếu value vẫn là object, thử lấy các property phổ biến
-    if (value && typeof value === 'object') {
-      // Xử lý richText
+    if (value && typeof value === "object") {
       if (value.richText && Array.isArray(value.richText)) {
         return value.richText.map((rt) => rt.text || "").join("");
       }
 
-      // Xử lý formula result
       if (value.result !== undefined && value.result !== null) {
         value = value.result;
       }
 
-      // Xử lý hyperlink
       if (value.text !== undefined) {
         value = value.text;
       }
 
-      // Xử lý Date object
       if (value instanceof Date) {
         const hours = value.getHours().toString().padStart(2, "0");
         const minutes = value.getMinutes().toString().padStart(2, "0");
         return `${hours}:${minutes}`;
       }
 
-      // Nếu vẫn là object và không xử lý được, trả về chuỗi rỗng
-      if (typeof value === 'object' && value !== null) {
+      if (typeof value === "object" && value !== null) {
         console.warn("Unhandled cell object:", value);
         return "";
       }
     }
 
-    // Kiểm tra value null/undefined sau khi xử lý
     if (value === null || value === undefined) return "";
 
-    // Nếu là Date object (trường hợp đã được extract từ object)
     if (value instanceof Date) {
       const hours = value.getHours().toString().padStart(2, "0");
       const minutes = value.getMinutes().toString().padStart(2, "0");
       return `${hours}:${minutes}`;
     }
 
-    // Nếu là Number < 1 => Excel time format (fraction of day)
     if (typeof value === "number" && value > 0 && value < 1) {
       const totalMinutes = Math.round(value * 24 * 60);
-      const hours = Math.floor(totalMinutes / 60).toString().padStart(2, "0");
+      const hours = Math.floor(totalMinutes / 60)
+        .toString()
+        .padStart(2, "0");
       const minutes = (totalMinutes % 60).toString().padStart(2, "0");
       return `${hours}:${minutes}`;
     }
 
-    // Nếu là Number >= 1 => Excel serial date
     if (typeof value === "number" && value >= 1) {
       const date = new Date(Math.round((value - 25569) * 86400 * 1000));
       const hours = date.getUTCHours().toString().padStart(2, "0");
@@ -132,8 +121,17 @@ const ImportPhuXe = ({ onImported }) => {
       return `${hours}:${minutes}`;
     }
 
-    // Convert sang string an toàn
     return String(value).trim();
+  };
+
+  // 🆕 Hàm tách chuỗi có dấu "+" thành nhiều giá trị
+  const splitByPlus = (value) => {
+    if (!value || typeof value !== "string") return [value];
+
+    return value
+      .split("+")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
   };
 
   // 📤 Import Excel
@@ -144,63 +142,114 @@ const ImportPhuXe = ({ onImported }) => {
     }
 
     try {
+      message.loading({ content: "Đang xử lý file Excel...", key: "import" });
+
+      // ✅ Lấy danh sách mã cửa hàng hợp lệ từ CHBX
+      const validStores = await phuXeService.getAllChbx();
+      if (!validStores || !Array.isArray(validStores)) {
+        message.error({
+          content: "Không thể tải danh sách cửa hàng!",
+          key: "import",
+        });
+        return;
+      }
+
+      const validStoreCodesSet = new Set(
+        validStores.map((store) => store.ma_cua_hang)
+      );
+
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await fileList[0].arrayBuffer());
       const worksheet = workbook.worksheets[0];
 
       const dataToImport = [];
-      const skippedRows = []; // Lưu các dòng bị bỏ qua
-      let orderIndex = 0; // Bắt đầu từ 0
+      const skippedRows = [];
+      const invalidStores = []; // ⬅️ Lưu các mã cửa hàng không hợp lệ
+      let orderIndex = 0;
 
+      // ✅ Đọc từng row
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // bỏ header
+        if (rowNumber === 1) return; // Bỏ header
 
-        // Lấy cell objects thay vì values
         const khung_gio_cell = row.getCell(1);
-        const ten_cua_hang_cell = row.getCell(2);
+        const ma_cua_hang_cell = row.getCell(2);
         const dich_vu_cell = row.getCell(3);
         const ten_tai_xe_cell = row.getCell(4);
         const bien_so_xe_cell = row.getCell(5);
 
-        // Xử lý khung giờ với hàm riêng
         const khung_gio = timeToString(khung_gio_cell);
-        const ten_cua_hang = cellToString(ten_cua_hang_cell);
+        const ma_cua_hang_raw = cellToString(ma_cua_hang_cell);
         const dich_vu = cellToString(dich_vu_cell);
-        
-        if (!khung_gio && !ten_cua_hang) return; // Skip dòng trống
+        const ten_tai_xe = cellToString(ten_tai_xe_cell);
+        const bien_so_xe = cellToString(bien_so_xe_cell);
 
-        // Kiểm tra cột dịch vụ
+        if (!khung_gio && !ma_cua_hang_raw) return;
+
         if (!dich_vu || dich_vu.trim() === "") {
           skippedRows.push({
             rowNumber: rowNumber,
             khung_gio: khung_gio,
-            ten_cua_hang: ten_cua_hang,
+            ma_cua_hang: ma_cua_hang_raw,
           });
-          return; // Bỏ qua dòng này, không thêm vào dataToImport
+          return;
         }
 
-        dataToImport.push({
-          khung_gio: khung_gio,
-          ten_cua_hang: ten_cua_hang,
-          dich_vu: dich_vu,
-          ten_tai_xe: cellToString(ten_tai_xe_cell),
-          bien_so_xe: cellToString(bien_so_xe_cell),
-          import_order: orderIndex++, // Thêm thứ tự import
+        // 🆕 Tách mã cửa hàng theo dấu "+"
+        const ma_cua_hang_list = splitByPlus(ma_cua_hang_raw);
+
+        ma_cua_hang_list.forEach((ma_cua_hang) => {
+          // ✅ Kiểm tra mã cửa hàng có trong danh sách hợp lệ không
+          if (!validStoreCodesSet.has(ma_cua_hang)) {
+            invalidStores.push({
+              rowNumber: rowNumber,
+              khung_gio: khung_gio,
+              ma_cua_hang: ma_cua_hang,
+              dich_vu: dich_vu,
+            });
+            return; // Bỏ qua dòng này
+          }
+
+          // ✅ Tìm tên cửa hàng từ danh sách đã tải
+          const storeInfo = validStores.find(
+            (s) => s.ma_cua_hang === ma_cua_hang
+          );
+          const ten_cua_hang = storeInfo?.ten_cua_hang || ma_cua_hang;
+
+          dataToImport.push({
+            khung_gio: khung_gio,
+            ten_cua_hang: ten_cua_hang,
+            ma_cua_hang: ma_cua_hang,
+            dich_vu: dich_vu,
+            ten_tai_xe: ten_tai_xe,
+            bien_so_xe: bien_so_xe,
+            import_order: orderIndex++,
+          });
         });
       });
 
-      // Hiển thị modal thông báo các dòng bị bỏ qua
+      // 🚨 Hiển thị modal các mã cửa hàng không hợp lệ
+      if (invalidStores.length > 0) {
+        setInvalidStoresModal({
+          visible: true,
+          data: invalidStores,
+        });
+      }
+
+      // Hiển thị cảnh báo các dòng bị bỏ qua (không có dịch vụ)
       if (skippedRows.length > 0) {
-        const skippedInfo = skippedRows.map(row => 
-          `Dòng ${row.rowNumber}: ${row.khung_gio} - ${row.ten_cua_hang}`
-        ).join('\n');
-        
+        const skippedInfo = skippedRows
+          .map(
+            (row) =>
+              `Dòng ${row.rowNumber}: ${row.khung_gio} - ${row.ma_cua_hang}`
+          )
+          .join("\n");
+
         Modal.warning({
           title: `Đã bỏ qua ${skippedRows.length} dòng không có dịch vụ`,
           content: (
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            <div style={{ maxHeight: "300px", overflowY: "auto" }}>
               <p>Các dòng sau không có dịch vụ và đã bị bỏ qua:</p>
-              <pre style={{ fontSize: '12px', whiteSpace: 'pre-wrap' }}>
+              <pre style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
                 {skippedInfo}
               </pre>
             </div>
@@ -210,42 +259,57 @@ const ImportPhuXe = ({ onImported }) => {
       }
 
       if (dataToImport.length === 0) {
-        message.warning("File Excel không có dòng hợp lệ nào để import!");
+        message.error({
+          content: "Không có dòng hợp lệ để import!",
+          key: "import",
+          duration: 3,
+        });
         return;
       }
 
-      // Đảo ngược mảng: dòng cuối Excel sẽ lên đầu
+      // Đảo ngược mảng
       const reversedData = dataToImport.reverse();
 
-      console.log("Data to import (reversed):", reversedData); // Debug
+      console.log("Data to import:", reversedData);
 
       await phuXeService.addManyPhuXe(reversedData);
-      message.success(`Import thành công ${reversedData.length} dòng dữ liệu!`);
+      message.success({
+        content: `Import thành công ${reversedData.length} dòng!${
+          invalidStores.length > 0
+            ? ` (Bỏ qua ${invalidStores.length} dòng không hợp lệ)`
+            : ""
+        }`,
+        key: "import",
+        duration: 3,
+      });
+
       handleClose();
       if (onImported) onImported();
     } catch (error) {
       console.error("Lỗi khi import:", error);
-      message.error("Lỗi khi import danh sách phụ xe!");
+      message.error({
+        content: "Lỗi khi import danh sách phụ xe!",
+        key: "import",
+        duration: 3,
+      });
     }
   };
 
-  // 📄 Xuất file template bằng ExcelJS
+  // 📄 Xuất file template
   const handleExportTemplate = async () => {
     try {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Template Phụ Xe");
 
-      // 🌈 Tạo tiêu đề cột
       const headers = [
         { header: "Khung giờ", key: "khung_gio", width: 15 },
-        { header: "Tên cửa hàng", key: "ten_cua_hang", width: 30 },
+        { header: "Mã cửa hàng", key: "ma_cua_hang", width: 20 },
         { header: "Dịch vụ", key: "dich_vu", width: 15 },
         { header: "Tên tài xế", key: "ten_tai_xe", width: 20 },
         { header: "Biển số xe", key: "bien_so_xe", width: 15 },
       ];
       worksheet.columns = headers;
 
-      // 🎨 Style cho header
       worksheet.getRow(1).eachCell((cell) => {
         cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
         cell.alignment = { horizontal: "center", vertical: "middle" };
@@ -262,29 +326,9 @@ const ImportPhuXe = ({ onImported }) => {
         };
       });
 
-      // Thêm các dòng mẫu
-      const sampleData = [
-
-      ];
-
-      sampleData.forEach(item => {
-        const row = worksheet.addRow({
-          khung_gio: item.time / 24, 
-          ten_cua_hang: item.store,
-          dich_vu: item.service,
-          ten_tai_xe: item.driver,
-          bien_so_xe: item.plate,
-        });
-        
-        // Format cell khung giờ
-        row.getCell(1).numFmt = "h:mm";
-      });
-
-      // Format toàn bộ cột Khung giờ
       worksheet.getColumn(1).numFmt = "h:mm";
       worksheet.getColumn(1).alignment = { horizontal: "center" };
 
-      // 📦 Xuất file
       const buffer = await workbook.xlsx.writeBuffer();
       saveAs(new Blob([buffer]), "Template_PhuXe.xlsx");
       message.success("Đã xuất file Template thành công!");
@@ -311,11 +355,46 @@ const ImportPhuXe = ({ onImported }) => {
     fileList,
   };
 
+  // 📋 Columns cho bảng hiển thị mã không hợp lệ
+  const invalidStoresColumns = [
+    {
+      title: "Dòng",
+      dataIndex: "rowNumber",
+      key: "rowNumber",
+      width: 80,
+      align: "center",
+    },
+    {
+      title: "Khung giờ",
+      dataIndex: "khung_gio",
+      key: "khung_gio",
+      width: 100,
+      align: "center",
+    },
+    {
+      title: "Mã cửa hàng",
+      dataIndex: "ma_cua_hang",
+      key: "ma_cua_hang",
+      width: 150,
+      render: (text) => (
+        <span className="font-semibold text-red-600">{text}</span>
+      ),
+    },
+    {
+      title: "Dịch vụ",
+      dataIndex: "dich_vu",
+      key: "dich_vu",
+      width: 120,
+    },
+  ];
+
   return (
     <>
-      <Button type="primary" icon={<UploadOutlined />} onClick={handleOpen}>
-        Import
-      </Button>
+      {!isRole24 && (
+        <Button type="primary" icon={<UploadOutlined />} onClick={handleOpen}>
+          Import
+        </Button>
+      )}
 
       <Modal
         title="Import danh sách phụ xe"
@@ -338,6 +417,54 @@ const ImportPhuXe = ({ onImported }) => {
             Xuất file Template
           </Button>
         </Space>
+      </Modal>
+
+      {/* ⬅️ Modal hiển thị các mã cửa hàng không hợp lệ */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <WarningOutlined className="text-red-500" />
+            <span>Cảnh báo: Mã cửa hàng không hợp lệ</span>
+          </div>
+        }
+        open={invalidStoresModal.visible}
+        onOk={() => setInvalidStoresModal({ visible: false, data: [] })}
+        onCancel={() => setInvalidStoresModal({ visible: false, data: [] })}
+        width={700}
+        footer={[
+          <Button
+            key="ok"
+            type="primary"
+            onClick={() => setInvalidStoresModal({ visible: false, data: [] })}
+          >
+            Đã hiểu
+          </Button>,
+        ]}
+      >
+        <div className="space-y-3">
+          <p className="text-red-600 font-medium">
+            Phát hiện {invalidStoresModal.data.length} dòng có mã cửa hàng không
+            tồn tại trong hệ thống. Các dòng này đã bị bỏ qua và không được
+            import.
+          </p>
+          <Table
+            columns={invalidStoresColumns}
+            dataSource={invalidStoresModal.data}
+            rowKey={(record) => `${record.rowNumber}-${record.ma_cua_hang}`}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: false,
+              showTotal: (total) => `Tổng ${total} dòng không hợp lệ`,
+            }}
+            size="small"
+            bordered
+            scroll={{ y: 400 }}
+          />
+          <p className="text-gray-600 text-sm">
+            💡 Vui lòng kiểm tra và thêm các mã cửa hàng này vào hệ thống CH
+            PX-BX trước khi import lại.
+          </p>
+        </div>
       </Modal>
     </>
   );

@@ -61,6 +61,8 @@ const URL = {
     tenphuxe: ENDPOINT_PREFIX + "/tenphuxe",
     product: ENDPOINT_PREFIX + "/product",
     vendor: ENDPOINT_PREFIX + "/vendor",
+    chbx: ENDPOINT_PREFIX + "/chbx",
+
   },
   phieusoan: {
     dinhvi: ENDPOINT_PREFIX + "/dinhvi",
