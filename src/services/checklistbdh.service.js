@@ -14,6 +14,69 @@ const getCheckListBDH = async (payload) => {
   }
 };
 
+// ✅ Service mới: Kiểm tra nhân viên đã submit checklist hôm nay chưa
+const checkTodaySubmission = async (ma_nhan_vien, form_id) => {
+  try {
+    // Lấy ngày hiện tại theo múi giờ Việt Nam (YYYY-MM-DD)
+    const now = new Date();
+    const vietnamTime = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+    const year = vietnamTime.getFullYear();
+    const month = String(vietnamTime.getMonth() + 1).padStart(2, "0");
+    const day = String(vietnamTime.getDate()).padStart(2, "0");
+    const todayDate = `${year}-${month}-${day}`;
+
+    // ✅ Lấy TẤT CẢ checklist của form này
+    const allResults = await requestService.get(
+      `${URL.checklistbdh.list}/form/${form_id}`
+    );
+
+    if (!allResults || !Array.isArray(allResults) || allResults.length === 0) {
+      return { hasSubmitted: false, todayRecord: null };
+    }
+
+    // ✅ Lọc ra checklist của nhân viên này
+    const employeeResults = allResults.filter(
+      (record) => record.ma_nhan_vien === ma_nhan_vien
+    );
+
+    if (employeeResults.length === 0) {
+      return { hasSubmitted: false, todayRecord: null };
+    }
+
+    // ✅ Kiểm tra xem có bản ghi nào được tạo hôm nay không
+    const todayRecord = employeeResults.find((record) => {
+      // Thử các field có thể có: createdAt, ngay_tao, thoi_gian_tao
+      const recordDate =
+        record.createdAt || record.ngay_tao || record.thoi_gian_tao;
+
+      if (!recordDate) return false;
+
+      // Chuyển đổi sang múi giờ Việt Nam
+      const recordTimestamp = new Date(recordDate);
+      const recordVNTime = new Date(
+        recordTimestamp.toLocaleString("en-US", {
+          timeZone: "Asia/Ho_Chi_Minh",
+        })
+      );
+      const recordDateStr = `${recordVNTime.getFullYear()}-${String(
+        recordVNTime.getMonth() + 1
+      ).padStart(2, "0")}-${String(recordVNTime.getDate()).padStart(2, "0")}`;
+
+      return recordDateStr === todayDate;
+    });
+
+    return {
+      hasSubmitted: !!todayRecord,
+      todayRecord: todayRecord || null,
+    };
+  } catch (error) {
+    console.error("Lỗi khi kiểm tra submission hôm nay:", error);
+    return { hasSubmitted: false, todayRecord: null };
+  }
+};
+
 const createCheckListBDH = async (formId, payload) => {
   try {
     const results = await requestService.post(
@@ -39,7 +102,6 @@ const getCheckListsByFormBDHId = async (formId) => {
   }
 };
 
-// ✅ Service: Lấy checklist theo status
 const getCheckListsByStatus = async (status) => {
   try {
     const result = await requestService.get(
@@ -52,7 +114,6 @@ const getCheckListsByStatus = async (status) => {
   }
 };
 
-// ✅ Service mới: Lấy checklist theo quy định
 const getCheckListsByQuyDinh = async (loai, ngay = null) => {
   try {
     let url = `${URL.checklistbdh.list}/quydinh/${loai}`;
@@ -105,9 +166,6 @@ const updateCheckList = async (id, payload) => {
   }
 };
 
-// === SERVICES CHO QUY ĐỊNH ===
-
-// ✅ Service mới: Cập nhật quy định cho công việc
 const updateQuyDinhCongViec = async (
   checklistId,
   mucIndex,
@@ -125,8 +183,6 @@ const updateQuyDinhCongViec = async (
     throw error;
   }
 };
-
-// === SERVICES CHO CHI TIẾT ===
 
 const addChiTietToCongViec = async (
   checklistId,
@@ -186,16 +242,15 @@ const deleteChiTiet = async (
 
 export const checkListBDHService = {
   getCheckListBDH,
+  checkTodaySubmission, // ✅ Service mới
   createCheckListBDH,
   getByIdCheckList,
   getCheckListsByFormBDHId,
   getCheckListsByStatus,
-  getCheckListsByQuyDinh, // ✅ Service mới
+  getCheckListsByQuyDinh,
   deleteByIdCheckList,
   updateCheckList,
-  // Quy định
-  updateQuyDinhCongViec, // ✅ Service mới
-  // Chi tiết
+  updateQuyDinhCongViec,
   addChiTietToCongViec,
   updateChiTietStatus,
   deleteChiTiet,

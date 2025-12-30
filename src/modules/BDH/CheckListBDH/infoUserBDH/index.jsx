@@ -1,40 +1,42 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
-import { IdCard } from "lucide-react";
+import { IdCard, AlertCircle } from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
 import { staffService } from "@/services/staff.service";
 
-const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
+const UserInfoFormBDH = ({
+  userInfo,
+  setUserInfo,
+  onConfirm,
+  formTitle,
+  hasSubmittedToday,
+  checkingSubmission,
+}) => {
   const [employeeIdInput, setEmployeeIdInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
-  // ✅ State cho status
   const [selectedStatus, setSelectedStatus] = useState("");
   const [statusError, setStatusError] = useState("");
 
-  // ✅ Danh sách status options
   const statusOptions = [
     "Đi làm",
     "Nghỉ ca",
     "Nghỉ bù",
     "Nghỉ phép",
-    "Nghỉ không lương"
+    "Nghỉ không lương",
   ];
 
-  // Danh sách mã NV được phép truy cập cho từng form
   const FORM_PERMISSIONS = {
     "BĐH - NHẬP HÀNG": ["20952", "40303", "23204"],
-    "BĐH - XUẤT HÀNG": ["24373", "30541", "34278"]
+    "BĐH - XUẤT HÀNG": ["24373", "30541", "34278"],
   };
 
-  // Kiểm tra form có áp dụng phân quyền không
   const isRestrictedForm = () => {
     if (!formTitle) return false;
-    return Object.keys(FORM_PERMISSIONS).some(key => formTitle.includes(key));
+    return Object.keys(FORM_PERMISSIONS).some((key) => formTitle.includes(key));
   };
 
-  // Lấy danh sách mã NV được phép cho form hiện tại
   const getAllowedEmployees = () => {
     if (!formTitle) return [];
     for (const [formKey, employees] of Object.entries(FORM_PERMISSIONS)) {
@@ -59,7 +61,6 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
         return;
       }
 
-      // Kiểm tra quyền truy cập nếu là form có phân quyền
       if (isRestrictedForm()) {
         const allowedEmployees = getAllowedEmployees();
         if (!allowedEmployees.includes(id)) {
@@ -84,7 +85,6 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
     }
   };
 
-  // ✅ Handle xác nhận với status - Tự động submit khi chọn nghỉ
   const handleConfirm = async () => {
     if (!selectedStatus) {
       setStatusError("Vui lòng chọn trạng thái");
@@ -92,22 +92,20 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
       return;
     }
 
-    // ✅ Nếu chọn status nghỉ → Tự động gửi và chuyển sang Thank You
     if (selectedStatus !== "Đi làm") {
       onConfirm({
         ...userInfo,
         status: selectedStatus,
-        skipChecklist: true, // Skip checklist
-        autoSubmit: true // Đánh dấu để tự động submit
+        skipChecklist: true,
+        autoSubmit: true,
       });
       return;
     }
 
-    // ✅ Nếu "Đi làm" → Tiếp tục làm checklist bình thường
     onConfirm({
       ...userInfo,
       status: selectedStatus,
-      skipChecklist: false
+      skipChecklist: false,
     });
   };
 
@@ -122,6 +120,25 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
           <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
         </div>
 
+        {/* ✅ Hiển thị thông báo đã submit hôm nay */}
+        {hasSubmittedToday && (
+          <div className="mb-4 bg-red-50 border border-red-300 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle
+              className="text-red-600 mt-0.5 flex-shrink-0"
+              size={20}
+            />
+            <div className="text-sm text-red-800">
+              <p className="font-semibold mb-1">
+                Đã thực hiện checklist hôm nay
+              </p>
+              <p>
+                Bạn chỉ được phép thực hiện checklist 1 lần mỗi ngày. Vui lòng
+                quay lại vào ngày mai.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-5">
           <div className="relative">
             <IdCard className="absolute top-3 left-3 text-gray-400 size-5" />
@@ -132,10 +149,10 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
               value={employeeIdInput}
               onChange={(e) => setEmployeeIdInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCheckEmployee()}
+              disabled={hasSubmittedToday}
             />
           </div>
 
-          {/* ✅ Dropdown chọn status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Trạng thái nghỉ <span className="text-red-500">*</span>
@@ -151,6 +168,7 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
                 setSelectedStatus(e.target.value);
                 setStatusError("");
               }}
+              disabled={hasSubmittedToday}
             >
               <option value="">-- Chọn trạng thái --</option>
               {statusOptions.map((status, idx) => (
@@ -166,13 +184,17 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
 
           <button
             onClick={handleCheckEmployee}
-            disabled={loading}
-            className="w-full py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60"
+            disabled={loading || hasSubmittedToday || checkingSubmission}
+            className="w-full py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {loading ? "Đang kiểm tra..." : "Kiểm tra mã nhân viên"}
+            {checkingSubmission
+              ? "Đang kiểm tra..."
+              : loading
+              ? "Đang kiểm tra..."
+              : "Kiểm tra mã nhân viên"}
           </button>
 
-          {isReady && selectedStatus && (
+          {isReady && selectedStatus && !hasSubmittedToday && (
             <>
               <div className="bg-green-50 border border-green-300 rounded-lg p-3 text-sm text-gray-700 space-y-1">
                 <p>
@@ -193,7 +215,9 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
                 onClick={handleConfirm}
                 className="w-full py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700"
               >
-                {selectedStatus === "Đi làm" ? "Bắt đầu checklist" : "Xác nhận nghỉ"}
+                {selectedStatus === "Đi làm"
+                  ? "Bắt đầu checklist"
+                  : "Xác nhận nghỉ"}
               </button>
             </>
           )}
@@ -204,7 +228,6 @@ const UserInfoFormBDH = ({ userInfo, setUserInfo, onConfirm, formTitle }) => {
         </div>
       </div>
 
-      {/* Modal xác nhận nhân viên */}
       {showModal && selectedEmployee && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-lg w-[90%] max-w-sm">
@@ -250,6 +273,8 @@ UserInfoFormBDH.propTypes = {
   setUserInfo: PropTypes.func.isRequired,
   onConfirm: PropTypes.func.isRequired,
   formTitle: PropTypes.string,
+  hasSubmittedToday: PropTypes.bool,
+  checkingSubmission: PropTypes.bool,
 };
 
 export default UserInfoFormBDH;

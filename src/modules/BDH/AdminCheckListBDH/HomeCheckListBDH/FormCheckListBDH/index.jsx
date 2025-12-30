@@ -17,7 +17,7 @@ const AdminChecklistFormBDH = () => {
         cong_viec: [{ 
           noidung: "", 
           chi_tiet: [{ noi_dung_chi_tiet: "" }],
-          quy_dinh: { loai: "ngày", ngay_trong_tuan: null, ngay_trong_thang: null, tan_suat: 1 }
+          quy_dinh: { loai: "ngày", ngay_trong_tuan: null, ngay_trong_thang: null, tan_suat: 1, phat_sinh: false }
         }],
       },
     ],
@@ -29,7 +29,8 @@ const AdminChecklistFormBDH = () => {
     loai: "ngày",
     ngay_trong_tuan: null,
     ngay_trong_thang: null,
-    tan_suat: 1
+    tan_suat: 1,
+    phat_sinh: false
   });
 
   useEffect(() => {
@@ -73,33 +74,37 @@ const AdminChecklistFormBDH = () => {
       loai: "ngày",
       ngay_trong_tuan: null,
       ngay_trong_thang: null,
-      tan_suat: 1
+      tan_suat: 1,
+      phat_sinh: false
     };
     setSelectedJob({ sectionIdx, jobIdx });
     setTempQuyDinh(currentQuyDinh);
     setShowQuyDinhModal(true);
   };
 
-  // ✅ Hàm thay đổi loại quy định (với logic reset)
+  // ✅ Hàm thay đổi loại quy định (với logic reset và hỗ trợ phát sinh)
   const changeLoaiQuyDinh = (newLoai) => {
     setTempQuyDinh({
       loai: newLoai,
       ngay_trong_tuan: newLoai === "tuần" ? [] : null,
       ngay_trong_thang: newLoai === "tháng" ? [] : null,
-      tan_suat: tempQuyDinh.tan_suat || 1
+      tan_suat: tempQuyDinh.tan_suat || 1,
+      phat_sinh: newLoai === "phát sinh" ? true : false
     });
   };
 
   const saveQuyDinh = () => {
-    // ✅ Validate trước khi lưu
-    if (tempQuyDinh.loai === "tuần" && (!tempQuyDinh.ngay_trong_tuan || tempQuyDinh.ngay_trong_tuan.length === 0)) {
-      toast.warning("⚠️ Vui lòng chọn ít nhất 1 ngày trong tuần!");
-      return;
-    }
-    
-    if (tempQuyDinh.loai === "tháng" && (!tempQuyDinh.ngay_trong_thang || tempQuyDinh.ngay_trong_thang.length === 0)) {
-      toast.warning("⚠️ Vui lòng chọn ít nhất 1 ngày trong tháng!");
-      return;
+    // ✅ Bỏ qua validate nếu là phát sinh
+    if (tempQuyDinh.loai !== "phát sinh") {
+      if (tempQuyDinh.loai === "tuần" && (!tempQuyDinh.ngay_trong_tuan || tempQuyDinh.ngay_trong_tuan.length === 0)) {
+        toast.warning("⚠️ Vui lòng chọn ít nhất 1 ngày trong tuần!");
+        return;
+      }
+      
+      if (tempQuyDinh.loai === "tháng" && (!tempQuyDinh.ngay_trong_thang || tempQuyDinh.ngay_trong_thang.length === 0)) {
+        toast.warning("⚠️ Vui lòng chọn ít nhất 1 ngày trong tháng!");
+        return;
+      }
     }
 
     const updated = [...form.cac_muc];
@@ -139,9 +144,13 @@ const AdminChecklistFormBDH = () => {
     }
   };
 
-  // ✅ Hiển thị quy định với xử lý null
+  // ✅ Hiển thị quy định với hỗ trợ phát sinh
   const displayQuyDinh = (quyDinh) => {
     if (!quyDinh) return "Chưa có quy định";
+    
+    if (quyDinh.loai === "phát sinh" || quyDinh.phat_sinh === true) {
+      return "⚡ Phát sinh";
+    }
     
     if (quyDinh.loai === "ngày") return "📅 Hàng ngày";
     
@@ -167,7 +176,7 @@ const AdminChecklistFormBDH = () => {
         { ten_muc: "", cong_viec: [{ 
           noidung: "", 
           chi_tiet: [{ noi_dung_chi_tiet: "" }],
-          quy_dinh: { loai: "ngày", ngay_trong_tuan: null, ngay_trong_thang: null, tan_suat: 1 }
+          quy_dinh: { loai: "ngày", ngay_trong_tuan: null, ngay_trong_thang: null, tan_suat: 1, phat_sinh: false }
         }] },
       ],
     });
@@ -183,7 +192,7 @@ const AdminChecklistFormBDH = () => {
     updated[sectionIdx].cong_viec.push({ 
       noidung: "", 
       chi_tiet: [{ noi_dung_chi_tiet: "" }],
-      quy_dinh: { loai: "ngày", ngay_trong_tuan: null, ngay_trong_thang: null, tan_suat: 1 }
+      quy_dinh: { loai: "ngày", ngay_trong_tuan: null, ngay_trong_thang: null, tan_suat: 1, phat_sinh: false }
     });
     setForm({ ...form, cac_muc: updated });
   };
@@ -378,16 +387,16 @@ const AdminChecklistFormBDH = () => {
         </div>
       </div>
 
-      {/* ✅ Modal Quy Định với logic reset */}
+      {/* ✅ Modal Quy Định với Phát Sinh */}
       {showQuyDinhModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4 text-purple-700">📅 Cài đặt Quy định</h3>
 
-            {/* ✅ Chọn loại quy định với logic reset */}
+            {/* ✅ Chọn loại quy định với Phát Sinh */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">Loại quy định</label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={() => changeLoaiQuyDinh("ngày")}
                   className={`px-4 py-2 rounded-md transition-colors ${
@@ -418,8 +427,27 @@ const AdminChecklistFormBDH = () => {
                 >
                   Hàng tháng
                 </button>
+                <button
+                  onClick={() => changeLoaiQuyDinh("phát sinh")}
+                  className={`px-4 py-2 rounded-md transition-colors ${
+                    tempQuyDinh.loai === "phát sinh"
+                      ? "bg-orange-600 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  ⚡ Phát sinh
+                </button>
               </div>
             </div>
+
+            {/* Hiển thị thông báo nếu là phát sinh */}
+            {tempQuyDinh.loai === "phát sinh" && (
+              <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-md">
+                <p className="text-sm text-orange-800">
+                  ℹ️ Công việc phát sinh không có lịch trình cố định và sẽ được thực hiện khi cần thiết.
+                </p>
+              </div>
+            )}
 
             {/* Chọn ngày trong tuần */}
             {tempQuyDinh.loai === "tuần" && (

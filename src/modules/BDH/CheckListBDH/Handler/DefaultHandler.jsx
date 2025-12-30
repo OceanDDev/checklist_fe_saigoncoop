@@ -12,17 +12,21 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
   // ✅ Hàm kiểm tra công việc có hiển thị hôm nay không
   const shouldShowToday = (quy_dinh) => {
-    if (!quy_dinh) return true; // Không có quy định → hiển thị luôn
+    if (!quy_dinh) return true;
 
-    // Lấy thời gian hiện tại theo múi giờ Việt Nam (UTC+7)
     const now = new Date();
     const vietnamTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
     
-    const dayOfWeek = vietnamTime.getDay(); // 0=CN, 1=T2, ..., 6=T7
-    const dayOfMonth = vietnamTime.getDate(); // 1-31
+    const dayOfWeek = vietnamTime.getDay();
+    const dayOfMonth = vietnamTime.getDate();
+
+    // ✅ Phát sinh → luôn hiển thị
+    if (quy_dinh.loai === "phát sinh" || quy_dinh.loai === "phat_sinh") {
+      return true;
+    }
 
     if (quy_dinh.loai === "ngày") {
-      return true; // Hàng ngày → luôn hiển thị
+      return true;
     }
 
     if (quy_dinh.loai === "tuần") {
@@ -42,9 +46,40 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return true;
   };
 
-  // ✅ Kiểm tra xem công việc có quy định đặc biệt không (tuần/tháng)
+  // ✅ Kiểm tra loại quy định để hiển thị badge
+  const getScheduleBadge = (quy_dinh) => {
+    if (!quy_dinh) return null;
+
+    const badges = {
+      "phát sinh": {
+        text: "Phát sinh",
+        bgColor: "bg-orange-500",
+        icon: "⚡"
+      },
+      "phat_sinh": {
+        text: "Phát sinh",
+        bgColor: "bg-orange-500",
+        icon: "⚡"
+      },
+      "tuần": {
+        text: "Hàng tuần",
+        bgColor: "bg-blue-500",
+        icon: "📅"
+      },
+      "tháng": {
+        text: "Hàng tháng",
+        bgColor: "bg-purple-500",
+        icon: "📆"
+      }
+    };
+
+    return badges[quy_dinh.loai] || null;
+  };
+
+  // ✅ Kiểm tra xem công việc có quy định đặc biệt không
   const hasSpecialSchedule = (quy_dinh) => {
-    return quy_dinh && quy_dinh.loai !== "ngày";
+    if (!quy_dinh) return false;
+    return ["phát sinh", "phat_sinh", "tuần", "tháng"].includes(quy_dinh.loai);
   };
 
   const toggleExpand = (sectionIdx, jobIdx) => {
@@ -113,7 +148,6 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     const transformedMucChecklist = form.cac_muc.map((section, sectionIdx) => ({
       ten_muc: section.ten_muc,
       cong_viec: section.cong_viec
-        // ✅ Chỉ gửi công việc được hiển thị hôm nay
         .filter(job => shouldShowToday(job.quy_dinh))
         .map((job, jobIdx) => {
           const jobKey = `${sectionIdx}-${jobIdx}`;
@@ -184,10 +218,8 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
             </p>
             <div className="space-y-3">
               {section.cong_viec.map((job, jobIdx) => {
-                // ✅ Kiểm tra xem công việc có được hiển thị hôm nay không
                 const isScheduledToday = shouldShowToday(job.quy_dinh);
                 
-                // ✅ Ẩn công việc không được lên lịch hôm nay
                 if (!isScheduledToday) {
                   return null;
                 }
@@ -197,19 +229,23 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                 const isExpanded = expandedJobs[jobKey];
                 const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
                 
-                // ✅ Kiểm tra có quy định đặc biệt không
+                // ✅ Lấy thông tin badge
+                const badge = getScheduleBadge(job.quy_dinh);
                 const isSpecial = hasSpecialSchedule(job.quy_dinh);
+                const isPhatSinh = job.quy_dinh?.loai === "phát sinh" || job.quy_dinh?.loai === "phat_sinh";
                 
                 return (
                   <div 
                     key={jobIdx} 
                     className={`border rounded-lg shadow transition-all duration-300 ${
-                      isSpecial
-                        ? "border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 ring-2 ring-amber-300"
+                      isPhatSinh
+                        ? "border-orange-400 bg-gradient-to-r from-orange-50 to-red-50 ring-2 ring-orange-300"
+                        : isSpecial
+                        ? "border-blue-400 bg-gradient-to-r from-blue-50 to-indigo-50 ring-2 ring-blue-300"
                         : "border-gray-200 bg-white"
                     }`}
                   >
-                    <div className="flex items-center justify-between p-3 hover:bg-gray-50 transition-all">
+                    <div className="flex items-center justify-between p-3 hover:bg-gray-50/50 transition-all">
                       <label className="flex items-center gap-3 w-full cursor-pointer">
                         <input
                           type="checkbox"
@@ -220,21 +256,27 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                         />
                         <span 
                           className={`text-sm font-medium flex-1 ${
-                            isSpecial ? "text-amber-900 font-semibold" : "text-gray-800"
+                            isPhatSinh 
+                              ? "text-orange-900 font-bold" 
+                              : isSpecial 
+                              ? "text-blue-900 font-semibold" 
+                              : "text-gray-800"
                           }`}
                           onClick={(e) => {
                             e.preventDefault();
                             if (hasDetails) toggleExpand(sectionIdx, jobIdx);
                           }}
                         >
-                          {isSpecial && "🎯 "}
                           {job.noidung}
                         </span>
                         
-                        {/* ✅ Badge đặc biệt */}
-                        {isSpecial && (
-                          <span className="px-2 py-1 bg-amber-500 text-white text-xs font-bold rounded-full shadow-sm animate-pulse">
-                            HÔM NAY
+                        {/* ✅ Badge hiển thị loại công việc */}
+                        {badge && (
+                          <span className={`px-2.5 py-1 ${badge.bgColor} text-white text-xs font-bold rounded-full shadow-sm flex items-center gap-1 ${
+                            isPhatSinh ? "animate-pulse" : ""
+                          }`}>
+                            <span>{badge.icon}</span>
+                            <span>{badge.text}</span>
                           </span>
                         )}
                       </label>
@@ -251,7 +293,11 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                     {/* Chi tiết */}
                     {hasDetails && isExpanded && (
                       <div className={`px-3 pb-3 pl-10 space-y-2 border-t ${
-                        isSpecial ? "bg-amber-50/50" : "bg-gray-50"
+                        isPhatSinh 
+                          ? "bg-orange-50/50" 
+                          : isSpecial 
+                          ? "bg-blue-50/50" 
+                          : "bg-gray-50"
                       }`}>
                         {job.chi_tiet.map((detail, detailIdx) => (
                           <label

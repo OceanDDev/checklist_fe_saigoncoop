@@ -12,9 +12,14 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
   // Định nghĩa quyền truy cập cho từng mã nhân viên
   const EMPLOYEE_PERMISSIONS = {
-    "24373": ["QUẢN LÝ NHÂN SỰ", "XUẤT HÀNG", "KIỂM TRA VÀ QUẢN LÝ SỰ CỐ", "BÁO CÁO"],
-    "30541": ["XLĐH", "SOẠN HÀNG", "KIỂM TRA VÀ QUẢN LÝ SỰ CỐ", "BÁO CÁO"],
-    "34278": ["XUẤT HÀNG SLL"]
+    24373: [
+      "QUẢN LÝ NHÂN SỰ",
+      "XUẤT HÀNG",
+      "KIỂM TRA VÀ QUẢN LÝ SỰ CỐ",
+      "BÁO CÁO",
+    ],
+    30541: ["XLĐH", "SOẠN HÀNG", "KIỂM TRA VÀ QUẢN LÝ SỰ CỐ", "BÁO CÁO"],
+    34278: ["XUẤT HÀNG SLL"],
   };
 
   const RESTRICTED_FORM_ID = "687f110132fbc64dbf1c0ac3";
@@ -24,10 +29,17 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     if (!quy_dinh) return true;
 
     const now = new Date();
-    const vietnamTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-    
+    const vietnamTime = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+
     const dayOfWeek = vietnamTime.getDay();
     const dayOfMonth = vietnamTime.getDate();
+
+    // ✅ Phát sinh → luôn hiển thị
+    if (quy_dinh.loai === "phát sinh" || quy_dinh.loai === "phat_sinh") {
+      return true;
+    }
 
     if (quy_dinh.loai === "ngày") {
       return true;
@@ -41,7 +53,10 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     }
 
     if (quy_dinh.loai === "tháng") {
-      if (!quy_dinh.ngay_trong_thang || quy_dinh.ngay_trong_thang.length === 0) {
+      if (
+        !quy_dinh.ngay_trong_thang ||
+        quy_dinh.ngay_trong_thang.length === 0
+      ) {
         return false;
       }
       return quy_dinh.ngay_trong_thang.includes(dayOfMonth);
@@ -50,9 +65,40 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return true;
   };
 
+  // ✅ Kiểm tra loại quy định để hiển thị badge
+  const getScheduleBadge = (quy_dinh) => {
+    if (!quy_dinh) return null;
+
+    const badges = {
+      "phát sinh": {
+        text: "Phát sinh",
+        bgColor: "bg-orange-500",
+        icon: "⚡",
+      },
+      phat_sinh: {
+        text: "Phát sinh",
+        bgColor: "bg-orange-500",
+        icon: "⚡",
+      },
+      tuần: {
+        text: "Hàng tuần",
+        bgColor: "bg-blue-500",
+        icon: "📅",
+      },
+      tháng: {
+        text: "Hàng tháng",
+        bgColor: "bg-purple-500",
+        icon: "📆",
+      },
+    };
+
+    return badges[quy_dinh.loai] || null;
+  };
+
   // ✅ Kiểm tra có quy định đặc biệt không
   const hasSpecialSchedule = (quy_dinh) => {
-    return quy_dinh && quy_dinh.loai !== "ngày";
+    if (!quy_dinh) return false;
+    return ["phát sinh", "phat_sinh", "tuần", "tháng"].includes(quy_dinh.loai);
   };
 
   const isRestrictedForm = () => {
@@ -61,14 +107,17 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
   const hasPermission = () => {
     if (!isRestrictedForm()) return true;
-    return Object.prototype.hasOwnProperty.call(EMPLOYEE_PERMISSIONS, userInfo.employeeId);
+    return Object.prototype.hasOwnProperty.call(
+      EMPLOYEE_PERMISSIONS,
+      userInfo.employeeId
+    );
   };
 
   const getAllowedSections = () => {
     if (!isRestrictedForm()) {
-      return form.cac_muc?.map(section => section.ten_muc) || [];
+      return form.cac_muc?.map((section) => section.ten_muc) || [];
     }
-    
+
     const permissions = EMPLOYEE_PERMISSIONS[userInfo.employeeId];
     if (!permissions) {
       return [];
@@ -83,30 +132,33 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
   // ✅ Lọc công việc theo quyền VÀ lịch trình
   const getFilteredJobs = (section) => {
-    return section.cong_viec.filter(job => shouldShowToday(job.quy_dinh));
+    return section.cong_viec.filter((job) => shouldShowToday(job.quy_dinh));
   };
 
   const toggleExpand = (sectionIdx, jobIdx) => {
     const key = `${sectionIdx}-${jobIdx}`;
-    setExpandedJobs(prev => ({
+    setExpandedJobs((prev) => ({
       ...prev,
-      [key]: !prev[key]
+      [key]: !prev[key],
     }));
   };
 
   const toggleJob = (sectionIdx, jobIdx, job) => {
     const key = `${sectionIdx}-${jobIdx}`;
     const exists = selectedJobs.find((item) => item.key === key);
-    
+
     if (exists) {
       setSelectedJobs(selectedJobs.filter((item) => item.key !== key));
     } else {
-      setSelectedJobs([...selectedJobs, { key, sectionIdx, jobIdx, noidung: job.noidung }]);
+      setSelectedJobs([
+        ...selectedJobs,
+        { key, sectionIdx, jobIdx, noidung: job.noidung },
+      ]);
       if (job.chi_tiet && job.chi_tiet.length > 0) {
         const allDetailIndexes = job.chi_tiet.map((_, idx) => idx);
-        setSelectedDetails(prev => ({
+        setSelectedDetails((prev) => ({
           ...prev,
-          [key]: allDetailIndexes
+          [key]: allDetailIndexes,
         }));
       }
     }
@@ -114,18 +166,18 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
   const toggleDetail = (sectionIdx, jobIdx, detailIdx) => {
     const jobKey = `${sectionIdx}-${jobIdx}`;
-      
-    setSelectedDetails(prev => {
+
+    setSelectedDetails((prev) => {
       const current = prev[jobKey] || [];
       if (current.includes(detailIdx)) {
         return {
           ...prev,
-          [jobKey]: current.filter(idx => idx !== detailIdx)
+          [jobKey]: current.filter((idx) => idx !== detailIdx),
         };
       } else {
         return {
           ...prev,
-          [jobKey]: [...current, detailIdx]
+          [jobKey]: [...current, detailIdx],
         };
       }
     });
@@ -134,7 +186,7 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   const addCustomJob = () => {
     const jobText = newJob.trim();
     if (!jobText) return;
-    
+
     const newJobObj = { noidung: jobText, chi_tiet: [] };
     setCustomJobs([...customJobs, newJobObj]);
     setNewJob("");
@@ -151,7 +203,7 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       return;
     }
 
-    const filteredSections = form.cac_muc.filter(section => 
+    const filteredSections = form.cac_muc.filter((section) =>
       canAccessSection(section.ten_muc)
     );
 
@@ -160,29 +212,30 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       return;
     }
 
-    const transformedMucChecklist = filteredSections.map((section, sectionIdx) => {
-      // ✅ Lọc công việc theo lịch trình
-      const filteredJobs = getFilteredJobs(section);
+    const transformedMucChecklist = filteredSections.map(
+      (section, sectionIdx) => {
+        const filteredJobs = getFilteredJobs(section);
 
-      return {
-        ten_muc: section.ten_muc,
-        cong_viec: filteredJobs.map((job, jobIdx) => {
-          const jobKey = `${sectionIdx}-${jobIdx}`;
-          const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
-          const selectedDetailIndexes = selectedDetails[jobKey] || [];
+        return {
+          ten_muc: section.ten_muc,
+          cong_viec: filteredJobs.map((job, jobIdx) => {
+            const jobKey = `${sectionIdx}-${jobIdx}`;
+            const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
+            const selectedDetailIndexes = selectedDetails[jobKey] || [];
 
-          return {
-            noidung: job.noidung,
-            da_chon: isJobSelected,
-            quy_dinh: job.quy_dinh, // ✅ Thêm quy_dinh
-            chi_tiet: (job.chi_tiet || []).map((detail, detailIdx) => ({
-              noi_dung_chi_tiet: detail.noi_dung_chi_tiet,
-              da_chon: selectedDetailIndexes.includes(detailIdx),
-            })),
-          };
-        }),
-      };
-    });
+            return {
+              noidung: job.noidung,
+              da_chon: isJobSelected,
+              quy_dinh: job.quy_dinh,
+              chi_tiet: (job.chi_tiet || []).map((detail, detailIdx) => ({
+                noi_dung_chi_tiet: detail.noi_dung_chi_tiet,
+                da_chon: selectedDetailIndexes.includes(detailIdx),
+              })),
+            };
+          }),
+        };
+      }
+    );
 
     const transformedCustomJobs = customJobs.map((job) => ({
       noidung: job.noidung,
@@ -208,9 +261,8 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     }
   };
 
-  const visibleSections = form.cac_muc?.filter(section => 
-    canAccessSection(section.ten_muc)
-  ) || [];
+  const visibleSections =
+    form.cac_muc?.filter((section) => canAccessSection(section.ten_muc)) || [];
 
   if (isRestrictedForm() && !hasPermission()) {
     return (
@@ -218,13 +270,14 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
         <h2 className="text-center text-xl font-bold text-blue-700 mb-6 uppercase tracking-wide">
           {form.tieu_de}
         </h2>
-        
+
         <div className="bg-red-50 border border-red-300 rounded-lg p-6 text-center">
           <p className="text-red-700 text-lg font-semibold mb-2">
             ⛔ Không có quyền truy cập
           </p>
           <p className="text-red-600">
-            Mã nhân viên <strong>{userInfo.employeeId}</strong> không có quyền truy cập form này.
+            Mã nhân viên <strong>{userInfo.employeeId}</strong> không có quyền
+            truy cập form này.
           </p>
           <p className="text-sm text-gray-600 mt-3">
             Vui lòng liên hệ bộ phận IT nếu bạn cần được cấp quyền.
@@ -241,13 +294,24 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       </h2>
 
       {form.mo_ta && (
-        <p className="text-gray-600 mb-6 text-sm text-center italic">{form.mo_ta}</p>
+        <p className="text-gray-600 mb-6 text-sm text-center italic">
+          {form.mo_ta}
+        </p>
       )}
 
       <div className="mb-6 text-sm text-gray-800 space-y-1 bg-white p-4 rounded-lg border shadow">
-        <p><strong className="text-gray-500">Mã nhân viên:</strong> {userInfo.employeeId}</p>
-        <p><strong className="text-gray-500">Họ và tên:</strong> {userInfo.userName}</p>
-        <p><strong className="text-gray-500">Bộ phận:</strong> {userInfo.department}</p>
+        <p>
+          <strong className="text-gray-500">Mã nhân viên:</strong>{" "}
+          {userInfo.employeeId}
+        </p>
+        <p>
+          <strong className="text-gray-500">Họ và tên:</strong>{" "}
+          {userInfo.userName}
+        </p>
+        <p>
+          <strong className="text-gray-500">Bộ phận:</strong>{" "}
+          {userInfo.department}
+        </p>
       </div>
 
       <div className="mt-6">
@@ -261,10 +325,8 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
           </p>
         ) : (
           visibleSections.map((section, sectionIdx) => {
-            // ✅ Lọc công việc theo lịch trình
             const filteredJobs = getFilteredJobs(section);
-            
-            // Chỉ hiển thị section nếu có công việc
+
             if (filteredJobs.length === 0) return null;
 
             return (
@@ -275,48 +337,69 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                 <div className="space-y-3">
                   {filteredJobs.map((job, jobIdx) => {
                     const jobKey = `${sectionIdx}-${jobIdx}`;
-                    const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
+                    const isJobSelected = selectedJobs.some(
+                      (j) => j.key === jobKey
+                    );
                     const isExpanded = expandedJobs[jobKey];
                     const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
-                    
-                    // ✅ Kiểm tra có quy định đặc biệt không
+
+                    // ✅ Lấy thông tin badge
+                    const badge = getScheduleBadge(job.quy_dinh);
                     const isSpecial = hasSpecialSchedule(job.quy_dinh);
-                    
+                    const isPhatSinh =
+                      job.quy_dinh?.loai === "phát sinh" ||
+                      job.quy_dinh?.loai === "phat_sinh";
+
                     return (
-                      <div 
-                        key={jobIdx} 
+                      <div
+                        key={jobIdx}
                         className={`border rounded-lg shadow transition-all duration-300 ${
-                          isSpecial
-                            ? "border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 ring-2 ring-amber-300"
+                          isPhatSinh
+                            ? "border-orange-400 bg-gradient-to-r from-orange-50 to-red-50 ring-2 ring-orange-300"
+                            : isSpecial
+                            ? "border-blue-400 bg-gradient-to-r from-blue-50 to-indigo-50 ring-2 ring-blue-300"
                             : "border-gray-200 bg-white"
                         }`}
                       >
-                        <div className="flex items-center justify-between p-3 hover:bg-gray-50 transition-all">
+                        <div className="flex items-center justify-between p-3 hover:bg-gray-50/50 transition-all">
                           <label className="flex items-center gap-3 w-full cursor-pointer">
                             <input
                               type="checkbox"
                               className="accent-blue-600 w-4 h-4"
                               checked={isJobSelected}
-                              onChange={() => toggleJob(sectionIdx, jobIdx, job)}
+                              onChange={() =>
+                                toggleJob(sectionIdx, jobIdx, job)
+                              }
                               onClick={(e) => e.stopPropagation()}
                             />
-                            <span 
+                            <span
                               className={`text-sm font-medium flex-1 ${
-                                isSpecial ? "text-amber-900 font-semibold" : "text-gray-800"
+                                isPhatSinh
+                                  ? "text-orange-900 font-bold"
+                                  : isSpecial
+                                  ? "text-blue-900 font-semibold"
+                                  : "text-gray-800"
                               }`}
                               onClick={(e) => {
                                 e.preventDefault();
-                                if (hasDetails) toggleExpand(sectionIdx, jobIdx);
+                                if (hasDetails)
+                                  toggleExpand(sectionIdx, jobIdx);
                               }}
                             >
-                              {isSpecial && "🎯 "}
                               {job.noidung}
                             </span>
-                            
-                            {/* ✅ Badge đặc biệt */}
-                            {isSpecial && (
-                              <span className="px-2 py-1 bg-amber-500 text-white text-xs font-bold rounded-full shadow-sm animate-pulse">
-                                HÔM NAY
+
+                            {/* ✅ Badge hiển thị loại công việc */}
+                            {badge && (
+                              <span
+                                className={`px-2.5 py-1 ${
+                                  badge.bgColor
+                                } text-white text-xs font-bold rounded-full shadow-sm flex items-center gap-1 ${
+                                  isPhatSinh ? "animate-pulse" : ""
+                                }`}
+                              >
+                                <span>{badge.icon}</span>
+                                <span>{badge.text}</span>
                               </span>
                             )}
                           </label>
@@ -332,9 +415,15 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
                         {/* Chi tiết */}
                         {hasDetails && isExpanded && (
-                          <div className={`px-3 pb-3 pl-10 space-y-2 border-t ${
-                            isSpecial ? "bg-amber-50/50" : "bg-gray-50"
-                          }`}>
+                          <div
+                            className={`px-3 pb-3 pl-10 space-y-2 border-t ${
+                              isPhatSinh
+                                ? "bg-orange-50/50"
+                                : isSpecial
+                                ? "bg-blue-50/50"
+                                : "bg-gray-50"
+                            }`}
+                          >
                             {job.chi_tiet.map((detail, detailIdx) => (
                               <label
                                 key={detailIdx}
@@ -343,10 +432,16 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                                 <input
                                   type="checkbox"
                                   className="accent-green-600 w-3 h-3"
-                                  checked={(selectedDetails[jobKey] || []).includes(detailIdx)}
-                                  onChange={() => toggleDetail(sectionIdx, jobIdx, detailIdx)}
+                                  checked={(
+                                    selectedDetails[jobKey] || []
+                                  ).includes(detailIdx)}
+                                  onChange={() =>
+                                    toggleDetail(sectionIdx, jobIdx, detailIdx)
+                                  }
                                 />
-                                <span className="text-xs">→ {detail.noi_dung_chi_tiet}</span>
+                                <span className="text-xs">
+                                  → {detail.noi_dung_chi_tiet}
+                                </span>
                               </label>
                             ))}
                           </div>
@@ -374,7 +469,9 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
             >
               <span className="text-sm text-gray-700">• {job.noidung}</span>
               <button
-                onClick={() => setCustomJobs(customJobs.filter((_, i) => i !== idx))}
+                onClick={() =>
+                  setCustomJobs(customJobs.filter((_, i) => i !== idx))
+                }
                 className="text-red-500 hover:text-red-700 text-xs"
               >
                 ✕

@@ -21,6 +21,31 @@ const ChecklistBDHMobile = () => {
     department: "",
   });
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
+  const [checkingSubmission, setCheckingSubmission] = useState(false);
+
+  // ✅ Hàm lấy ngày hiện tại theo múi giờ Việt Nam (format: YYYY-MM-DD)
+  // Không còn cần thiết vì đã chuyển logic vào service
+
+  // ✅ Kiểm tra xem nhân viên đã submit checklist hôm nay chưa
+  const checkTodaySubmission = async (employeeId) => {
+    try {
+      setCheckingSubmission(true);
+
+      // Gọi service mới để kiểm tra
+      const result = await checkListBDHService.checkTodaySubmission(
+        employeeId,
+        formId
+      );
+
+      return result.hasSubmitted;
+    } catch (error) {
+      console.error("Lỗi khi kiểm tra submission:", error);
+      return false;
+    } finally {
+      setCheckingSubmission(false);
+    }
+  };
 
   // ✅ Hàm kiểm tra công việc có hiển thị hôm nay không
   const shouldShowToday = (quy_dinh) => {
@@ -28,10 +53,17 @@ const ChecklistBDHMobile = () => {
 
     // Lấy thời gian hiện tại theo múi giờ Việt Nam (UTC+7)
     const now = new Date();
-    const vietnamTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-    
+    const vietnamTime = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+
     const dayOfWeek = vietnamTime.getDay(); // 0=CN, 1=T2, ..., 6=T7
     const dayOfMonth = vietnamTime.getDate(); // 1-31
+
+    // ✅ Phát sinh → luôn hiển thị
+    if (quy_dinh.loai === "phát sinh" || quy_dinh.loai === "phat_sinh") {
+      return true;
+    }
 
     if (quy_dinh.loai === "ngày") {
       return true; // Hàng ngày → luôn hiển thị
@@ -45,7 +77,10 @@ const ChecklistBDHMobile = () => {
     }
 
     if (quy_dinh.loai === "tháng") {
-      if (!quy_dinh.ngay_trong_thang || quy_dinh.ngay_trong_thang.length === 0) {
+      if (
+        !quy_dinh.ngay_trong_thang ||
+        quy_dinh.ngay_trong_thang.length === 0
+      ) {
         return false; // Không có ngày nào được chọn
       }
       return quy_dinh.ngay_trong_thang.includes(dayOfMonth);
@@ -60,13 +95,13 @@ const ChecklistBDHMobile = () => {
 
     const filteredForm = {
       ...originalForm,
-      cac_muc: originalForm.cac_muc.map(muc => ({
+      cac_muc: originalForm.cac_muc.map((muc) => ({
         ...muc,
-        cong_viec: muc.cong_viec.map(cv => ({
+        cong_viec: muc.cong_viec.map((cv) => ({
           ...cv,
           isScheduledToday: shouldShowToday(cv.quy_dinh), // ✅ Đánh dấu công việc hôm nay
-        }))
-      }))
+        })),
+      })),
     };
 
     return filteredForm;
@@ -76,9 +111,11 @@ const ChecklistBDHMobile = () => {
     const fetchForm = async () => {
       try {
         setLoading(true);
-        const result = await checkListFormServiceBDH.getByIdCheckListBDHForm(formId);
+        const result = await checkListFormServiceBDH.getByIdCheckListBDHForm(
+          formId
+        );
         console.log("Dữ liệu form:", result);
-        
+
         // ✅ Lọc form theo lịch trình
         const filteredResult = filterFormBySchedule(result);
         setForm(filteredResult);
@@ -95,15 +132,15 @@ const ChecklistBDHMobile = () => {
   // Determine which handler to use based on form title
   const getFormHandler = () => {
     if (!form?.tieu_de) return DefaultHandler;
-    
+
     if (form.tieu_de.includes("XUẤT HÀNG")) {
       return XuatHandler;
     }
-    
+
     if (form.tieu_de.includes("NHẬP HÀNG")) {
       return NhapHandler;
     }
-    
+
     return DefaultHandler;
   };
 
@@ -118,6 +155,15 @@ const ChecklistBDHMobile = () => {
   };
 
   const handleUserConfirm = async (info) => {
+    // ✅ Kiểm tra xem đã submit hôm nay chưa
+    const submitted = await checkTodaySubmission(info.employeeId);
+
+    if (submitted) {
+      setHasSubmittedToday(true);
+      toast.error("❌ Bạn đã thực hiện checklist hôm nay rồi!");
+      return;
+    }
+
     if (info.autoSubmit && info.skipChecklist) {
       try {
         await checkListBDHService.createCheckListBDH(formId, {
@@ -129,7 +175,7 @@ const ChecklistBDHMobile = () => {
           cong_viec_khac: [],
           ghi_chu: `Trạng thái: ${info.status}`,
         });
-        
+
         toast.success(`✅ Đã ghi nhận trạng thái: ${info.status}`);
         navigate("/thank-you");
       } catch (error) {
@@ -151,6 +197,8 @@ const ChecklistBDHMobile = () => {
         onConfirm={handleUserConfirm}
         formId={formId}
         formTitle={form?.tieu_de}
+        hasSubmittedToday={hasSubmittedToday}
+        checkingSubmission={checkingSubmission}
       />
     );
   }
@@ -182,7 +230,7 @@ const ChecklistBDHMobile = () => {
     );
   }
 
-  const FormHandler = getFormHandler(); 
+  const FormHandler = getFormHandler();
 
   return (
     <FormHandler

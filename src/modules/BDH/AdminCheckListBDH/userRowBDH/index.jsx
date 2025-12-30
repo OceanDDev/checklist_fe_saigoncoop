@@ -6,7 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  } from "@/components/ui/dialog";
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { checkListBDHService } from "@/services/checklistbdh.service";
 import { toast } from "react-toastify";
@@ -126,15 +126,43 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
   const calculateChecklistCompletion = (checklist) => {
     // ✅ Nếu nghỉ không lương → 0%
     if (isUnpaidLeave) return 0;
-    
+
     // ✅ Nếu nghỉ (không phải đi làm) → Không tính %
     if (isOffDayStatus) return null;
 
     let totalPoints = 0;
     let completedPoints = 0;
 
+    // ✅ Hàm kiểm tra công việc có phải phát sinh không
+    const isPhatSinh = (congViec) => {
+      return (
+        congViec.quy_dinh?.loai === "phát sinh" ||
+        congViec.quy_dinh?.loai === "phat_sinh"
+      );
+    };
+
+    // ✅ Hàm kiểm tra công việc phát sinh có được chấm không
+    const isPhatSinhChecked = (cv) => {
+      if (cv.chi_tiet && cv.chi_tiet.length > 0) {
+        // Có chi tiết → kiểm tra có ít nhất 1 chi tiết được chọn
+        return cv.chi_tiet.some((d) => d.da_chon);
+      }
+      // Không có chi tiết → kiểm tra da_chon của chính công việc
+      return cv.da_chon;
+    };
+
+    // ✅ Xử lý các mục công việc
     (checklist.cac_muc || []).forEach((muc) => {
       (muc.cong_viec || []).forEach((cv) => {
+        const isPS = isPhatSinh(cv);
+        const isPSChecked = isPhatSinhChecked(cv);
+
+        // ✅ Nếu là phát sinh và KHÔNG được chấm → bỏ qua, không tính vào tổng
+        if (isPS && !isPSChecked) {
+          return; // skip công việc này
+        }
+
+        // ✅ Công việc thường HOẶC công việc phát sinh đã được chấm
         if (cv.chi_tiet && cv.chi_tiet.length > 0) {
           const detailPoints = cv.chi_tiet.length;
           const completedDetailPoints = cv.chi_tiet.filter(
@@ -152,7 +180,17 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
       });
     });
 
+    // ✅ Xử lý công việc khác
     (checklist.cong_viec_khac || []).forEach((cv) => {
+      const isPS = isPhatSinh(cv);
+      const isPSChecked = isPhatSinhChecked(cv);
+
+      // ✅ Nếu là phát sinh và KHÔNG được chấm → bỏ qua
+      if (isPS && !isPSChecked) {
+        return;
+      }
+
+      // ✅ Công việc thường HOẶC công việc phát sinh đã được chấm
       if (cv.chi_tiet && cv.chi_tiet.length > 0) {
         const detailPoints = cv.chi_tiet.length;
         const completedDetailPoints = cv.chi_tiet.filter(
@@ -203,7 +241,11 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
           </span>
         ) : isOffDayStatus ? (
           // Các loại nghỉ khác → Hiển thị status
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold border inline-flex items-center gap-1 ${getStatusBadgeColor(user.status)}`}>
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-semibold border inline-flex items-center gap-1 ${getStatusBadgeColor(
+              user.status
+            )}`}
+          >
             <Coffee className="w-3 h-3" />
             {user.status}
           </span>
@@ -223,7 +265,11 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
       <td className="px-3 py-3 min-w-[100px]">
         {isOffDayStatus ? (
           // Nếu nghỉ → Hiển thị badge status thay vì nút chi tiết
-          <span className={`px-4 py-2 rounded-lg text-sm font-semibold border inline-flex items-center gap-2 ${getStatusBadgeColor(user.status)}`}>
+          <span
+            className={`px-4 py-2 rounded-lg text-sm font-semibold border inline-flex items-center gap-2 ${getStatusBadgeColor(
+              user.status
+            )}`}
+          >
             <CalendarX className="w-4 h-4" />
             {user.status}
           </span>
