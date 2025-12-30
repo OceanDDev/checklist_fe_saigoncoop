@@ -351,8 +351,8 @@ const ToolXuatTra = () => {
               onChange={(e) => setStatusMode(e.target.value)}
               className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="chua">Chưa hoàn thành ({filteredDataChuaHT.length})</option>
-              <option value="da">Đã hoàn thành ({filteredDataDaHT.length})</option>
+              <option value="chua">Chưa hoàn thành</option>
+              <option value="da">Đã hoàn thành</option>
             </select>
           </div>
 

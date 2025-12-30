@@ -20,6 +20,7 @@ const TTBExportExcel = ({ thietBiList }) => {
       });
 
       // 1. Lấy TẤT CẢ dữ liệu từ API
+      // eslint-disable-next-line no-unused-vars
       const [ttbResponse, cuaHangResponse] = await Promise.all([
         ttbService.getAllTtb({ page: 1, limit: 999999 }),
         cuaHangService.getAllCuaHang(),
