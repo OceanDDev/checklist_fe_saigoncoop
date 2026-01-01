@@ -27,29 +27,23 @@ const ExportExcelPhuXe = ({
       const dataToExport = filteredData
         .filter((item) => item.dieu_van_xac_nhan && item.thoi_gian_xong_chuyen)
         .map((item, index) => {
-          // Format thời gian đi
           const thoiGianDi = item.thoi_gian_di
             ? dayjs(item.thoi_gian_di).tz(VN_TIMEZONE).format("HH:mm:ss")
             : "";
 
-          // Format thời gian xong chuyến (chỉ lấy giờ)
           const thoiGianXongChuyen = item.thoi_gian_xong_chuyen
-            ? dayjs(item.thoi_gian_xong_chuyen)
-                .tz(VN_TIMEZONE)
-                .format("HH:mm:ss")
+            ? dayjs(item.thoi_gian_xong_chuyen).tz(VN_TIMEZONE).format("HH:mm:ss")
             : "";
 
-          // Lấy ngày từ thoi_gian_xong_chuyen
           const ngay = item.thoi_gian_xong_chuyen
-            ? dayjs(item.thoi_gian_xong_chuyen)
-                .tz(VN_TIMEZONE)
-                .format("DD/MM/YYYY")
+            ? dayjs(item.thoi_gian_xong_chuyen).tz(VN_TIMEZONE).format("DD/MM/YYYY")
             : "";
 
           return {
             stt: index + 1,
             hoTen: item.dieu_van_xac_nhan || "",
             thoiGianDi: thoiGianDi,
+            maCuaHang: item.ma_cua_hang || "", // ✅ Thêm Mã cửa hàng vào đây
             diaDiemDen: item.ten_cua_hang || "",
             thoiGianXongChuyen: thoiGianXongChuyen,
             ngay: ngay,
@@ -57,27 +51,21 @@ const ExportExcelPhuXe = ({
         });
 
       if (dataToExport.length === 0) {
-        message.warning(
-          "Không có dữ liệu hợp lệ để xuất! (Cần có: Tên phụ xe và Thời gian xong chuyến)"
-        );
+        message.warning("Không có dữ liệu hợp lệ để xuất!");
         return;
       }
 
-      // Tạo workbook và worksheet
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Danh Sách Phụ Xe");
 
-      // Định nghĩa các cột với style
+      // Định nghĩa lại các cột (Thêm cột Mã Cửa Hàng)
       worksheet.columns = [
         { header: "STT", key: "stt", width: 8 },
         { header: "Họ Tên", key: "hoTen", width: 25 },
         { header: "Thời Gian Đi", key: "thoiGianDi", width: 18 },
+        { header: "Mã Cửa Hàng", key: "maCuaHang", width: 15 }, // ✅ Cột mới
         { header: "Địa Điểm Đến", key: "diaDiemDen", width: 35 },
-        {
-          header: "Thời Gian Xong Chuyến",
-          key: "thoiGianXongChuyen",
-          width: 25,
-        },
+        { header: "Thời Gian Xong Chuyến", key: "thoiGianXongChuyen", width: 25 },
         { header: "Ngày", key: "ngay", width: 15 },
       ];
 
@@ -98,11 +86,9 @@ const ExportExcelPhuXe = ({
         };
       });
 
-      // Thêm dữ liệu
+      // Thêm dữ liệu và style cho từng dòng
       dataToExport.forEach((data) => {
         const row = worksheet.addRow(data);
-
-        // Style cho từng cell
         row.eachCell((cell, colNumber) => {
           cell.border = {
             top: { style: "thin" },
@@ -111,8 +97,8 @@ const ExportExcelPhuXe = ({
             right: { style: "thin" },
           };
 
-          // Căn giữa cột STT và Ngày
-          if (colNumber === 1 || colNumber === 6) {
+          // Căn giữa cột STT (1), Mã Cửa Hàng (4) và Ngày (7)
+          if ([1, 4, 7].includes(colNumber)) {
             cell.alignment = { vertical: "middle", horizontal: "center" };
           } else {
             cell.alignment = { vertical: "middle", horizontal: "left" };
@@ -120,10 +106,8 @@ const ExportExcelPhuXe = ({
         });
       });
 
-      // Đóng băng dòng header
       worksheet.views = [{ state: "frozen", xSplit: 0, ySplit: 1 }];
 
-      // Xuất file
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -131,12 +115,8 @@ const ExportExcelPhuXe = ({
 
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `${fileName}_${dayjs()
-        .tz(VN_TIMEZONE)
-        .format("YYYYMMDD_HHmmss")}.xlsx`;
+      link.download = `${fileName}_${dayjs().tz(VN_TIMEZONE).format("YYYYMMDD_HHmmss")}.xlsx`;
       link.click();
-
-      // Cleanup
       URL.revokeObjectURL(link.href);
 
       message.success(`Đã xuất ${dataToExport.length} bản ghi thành công!`);
@@ -146,10 +126,7 @@ const ExportExcelPhuXe = ({
     }
   };
 
-  // ✅ Nếu là role 24 thì không hiển thị button
-  if (isRole24) {
-    return null;
-  }
+  if (isRole24) return null;
 
   return (
     <Button

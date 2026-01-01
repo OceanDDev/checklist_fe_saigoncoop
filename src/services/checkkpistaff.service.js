@@ -3,19 +3,18 @@ import { ApiServer, URL, DEF_HEADERS } from "@/configs/api-request";
 import { requestService } from "./request.service";
 
 /**
- * Lấy tất cả Check KPI (lọc theo tháng/năm/nhân viên/đơn vị ...)
- * @param {{ ma_nhan_vien?: string, thang?: number, nam?: number, don_vi?: string }} payload
+ * Lấy tất cả Check KPI (lọc theo quý/năm/nhân viên/đơn vị)
+ * @param {{ ma_nhan_vien?: string, quy?: number, nam?: number, don_vi?: string }} payload
  */
 const getAllCheckKPI = async (payload = {}) => {
   try {
-    // ĐÚNG THỨ TỰ: path, params, headers, axiosInstance
     const results = await requestService.get(
       URL.checkkpistaff.list,
       payload,
       DEF_HEADERS,
       ApiServer
     );
-    return results; // requestService đã .data
+    return results;
   } catch (error) {
     console.error("Lỗi khi lấy danh sách check KPI:", error);
     throw error;
@@ -24,7 +23,7 @@ const getAllCheckKPI = async (payload = {}) => {
 
 /**
  * Tạo check KPI từ form_kpi_id
- * payload: { form_kpi_id, thang, nam, kpis? }
+ * payload: { form_kpi_id, quy, nam, kpis?, ty_trong_quy?, ghi_chu? }
  */
 const createCheckKPI = async (payload) => {
   try {
@@ -43,14 +42,12 @@ const createCheckKPI = async (payload) => {
 
 /**
  * Tạo check KPI từ mã nhân viên (không cần form_kpi_id)
- * payload: { ma_nhan_vien, thang, nam, kpis? }
- * Nếu BE có route riêng /from-staff thì thay URL ở dưới cho đúng:
- *   `${URL.checkkpistaff.create}/from-staff`
+ * payload: { ma_nhan_vien, quy, nam, kpis?, ty_trong_quy?, ghi_chu? }
  */
 const createCheckKPIFromStaff = async (payload) => {
   try {
     const results = await requestService.post(
-      URL.checkkpistaff.create, // hoặc `${URL.checkkpistaff.create}/from-staff`
+      `${URL.checkkpistaff.create}/from-staff`,
       payload,
       DEF_HEADERS,
       ApiServer
@@ -81,7 +78,10 @@ const getCheckKPIById = async (id) => {
 };
 
 /**
- * Lấy check KPI theo mã nhân viên + tháng/năm
+ * Lấy check KPI theo mã nhân viên + năm (trả về tất cả các quý trong năm)
+ * @param {string} ma_nhan_vien - Mã nhân viên
+ * @param {number} nam - Năm
+ * @returns {Promise} - Danh sách check KPI của nhân viên trong năm
  */
 const getCheckKPIByStaff = async (ma_nhan_vien, nam) => {
   try {
@@ -99,7 +99,29 @@ const getCheckKPIByStaff = async (ma_nhan_vien, nam) => {
 };
 
 /**
+ * Lấy check KPI theo mã nhân viên + quý + năm (lấy 1 quý cụ thể)
+ * @param {string} ma_nhan_vien - Mã nhân viên
+ * @param {number} quy - Quý (1-4)
+ * @param {number} nam - Năm
+ */
+const getCheckKPIByStaffQuarter = async (ma_nhan_vien, quy, nam) => {
+  try {
+    const result = await requestService.get(
+      URL.checkkpistaff.list,
+      { ma_nhan_vien, quy, nam },
+      DEF_HEADERS,
+      ApiServer
+    );
+    return result;
+  } catch (error) {
+    console.error("Lỗi khi lấy check KPI theo nhân viên và quý:", error);
+    throw error;
+  }
+};
+
+/**
  * Cập nhật check KPI
+ * payload: { danh_sach_check?, ghi_chu?, ty_trong_quy?, update_note? }
  */
 const updateCheckKPI = async (id, payload) => {
   try {
@@ -135,6 +157,7 @@ const deleteCheckKPI = async (id) => {
 
 /**
  * Thống kê check KPI
+ * payload: { quy?, nam? }
  */
 const getCheckKPIStats = async (payload = {}) => {
   try {
@@ -151,13 +174,42 @@ const getCheckKPIStats = async (payload = {}) => {
   }
 };
 
+/**
+ * Helper: Chuyển đổi quý sang tháng
+ * @param {number} quy - Quý (1-4)
+ * @returns {{ start: number, end: number }} - Tháng bắt đầu và kết thúc
+ */
+const getMonthsFromQuarter = (quy) => {
+  const quarterMap = {
+    1: { start: 1, end: 3 },
+    2: { start: 4, end: 6 },
+    3: { start: 7, end: 9 },
+    4: { start: 10, end: 12 },
+  };
+  return quarterMap[quy] || { start: 1, end: 3 };
+};
+
+/**
+ * Helper: Lấy quý từ tháng
+ * @param {number} thang - Tháng (1-12)
+ * @returns {number} - Quý (1-4)
+ */
+const getQuarterFromMonth = (thang) => {
+  return Math.ceil(thang / 3);
+};
+
 export const checkKPIService = {
   getAllCheckKPI,
   createCheckKPI,
   createCheckKPIFromStaff,
   getCheckKPIById,
   getCheckKPIByStaff,
+  getCheckKPIByStaffQuarter,
   updateCheckKPI,
   deleteCheckKPI,
   getCheckKPIStats,
+
+  // Helper functions
+  getMonthsFromQuarter,
+  getQuarterFromMonth,
 };

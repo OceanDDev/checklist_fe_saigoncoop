@@ -22,12 +22,14 @@ import {
   EditOutlined,
   CheckOutlined,
   CloseOutlined,
+  PrinterOutlined,
 } from "@ant-design/icons";
 import { phuXeService } from "@/services/dieuvan/phuxe.service";
 import XacNhanHinhAnh from "./XacNhanHinhAnh";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import InPhuXe from "./InPhuXe";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -56,6 +58,8 @@ const PhuXeTableView = ({
   const [currentDieuVanRecordId, setCurrentDieuVanRecordId] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [editValue, setEditValue] = useState("");
+  const [printModalVisible, setPrintModalVisible] = useState(false);
+  const [selectedPrintRecord, setSelectedPrintRecord] = useState(null);
 
   // Color functions
   const getColorForPhuXeName = (tenPhuXe) => {
@@ -163,6 +167,17 @@ const PhuXeTableView = ({
     }
   };
 
+  // Print handlers
+  const handleOpenPrintModal = (record) => {
+    setSelectedPrintRecord(record);
+    setPrintModalVisible(true);
+  };
+
+  const handleClosePrintModal = () => {
+    setPrintModalVisible(false);
+    setSelectedPrintRecord(null);
+  };
+
   // Modal handlers
   const handleOpenSelectNameModal = (recordId) => {
     if (!canEditPhuXeName) {
@@ -211,7 +226,6 @@ const PhuXeTableView = ({
       return;
     }
     try {
-      // ✅ Sử dụng updatePhuXe thay vì xacNhanDieuVan
       const result = await phuXeService.updatePhuXe(currentDieuVanRecordId, {
         dieu_van_xac_nhan: name,
       });
@@ -300,7 +314,7 @@ const PhuXeTableView = ({
     return (
       <div className="group flex items-center justify-between gap-2">
         <span className="flex-1">{text || "-"}</span>
-        {!isRole24 && ( // ✅ Thêm điều kiện này
+        {!isRole24 && (
           <Button
             type="text"
             size="small"
@@ -395,7 +409,7 @@ const PhuXeTableView = ({
         style: { backgroundColor: getColorForKhungGio(record.khung_gio) },
       }),
       render: (text, record) =>
-        renderEditableCell(text, record, "ten_tai_xe", isRole24), // ✅ Thêm isRole24
+        renderEditableCell(text, record, "ten_tai_xe", isRole24),
     },
     {
       title: "Biển Số Xe",
@@ -406,7 +420,7 @@ const PhuXeTableView = ({
         style: { backgroundColor: getColorForKhungGio(record.khung_gio) },
       }),
       render: (text, record) =>
-        renderEditableCell(text, record, "bien_so_xe", isRole24), // ✅ Thêm isRole24
+        renderEditableCell(text, record, "bien_so_xe", isRole24),
     },
     !isRole24 && {
       title: "Tên Phụ Xe",
@@ -483,7 +497,6 @@ const PhuXeTableView = ({
       },
     },
     (!canEditDieuVan || canEditPhuXeName) && {
-      // ✅ Thêm điều kiện || canEditPhuXeName
       title: "Hình Ảnh",
       key: "hinh_anh",
       width: 100,
@@ -493,6 +506,27 @@ const PhuXeTableView = ({
       }),
       render: (_, record) => (
         <XacNhanHinhAnh record={record} onSuccess={onRefresh} />
+      ),
+    },
+    !isRole24 && {
+      title: "IN PX",
+      key: "in_px",
+      width: 80,
+      align: "center",
+      onCell: (record) => ({
+        style: { backgroundColor: getColorForKhungGio(record.khung_gio) },
+      }),
+      render: (_, record) => (
+        <Tooltip title="In phiếu phụ xe" placement="top">
+          <Button
+            type="primary"
+            icon={<PrinterOutlined />}
+            onClick={() => handleOpenPrintModal(record)}
+            size="small"
+          >
+            In
+          </Button>
+        </Tooltip>
       ),
     },
     {
@@ -506,29 +540,30 @@ const PhuXeTableView = ({
       render: (text) =>
         text ? dayjs(text).tz(VN_TIMEZONE).format("DD/MM/YYYY HH:mm") : "-",
     },
-    !isRole24 && {
-      title: "Chức Năng",
-      key: "action",
-      align: "center",
-      width: 90,
-      onCell: (record) => ({
-        style: { backgroundColor: getColorForKhungGio(record.khung_gio) },
-      }),
-      render: (_, record) => (
-        <Popconfirm
-          title="Xác nhận xóa?"
-          description="Bạn có chắc chắn muốn xóa không?"
-          onConfirm={() => onDelete(record._id)}
-          okText="Xóa"
-          cancelText="Hủy"
-          okButtonProps={{ danger: true }}
-        >
-          <Button danger icon={<DeleteOutlined />} size="small">
-            Xóa
-          </Button>
-        </Popconfirm>
-      ),
-    },
+    !isRole24 &&
+      canEditPhuXeName && {
+        title: "Chức Năng",
+        key: "action",
+        align: "center",
+        width: 90,
+        onCell: (record) => ({
+          style: { backgroundColor: getColorForKhungGio(record.khung_gio) },
+        }),
+        render: (_, record) => (
+          <Popconfirm
+            title="Xác nhận xóa?"
+            description="Bạn có chắc chắn muốn xóa không?"
+            onConfirm={() => onDelete(record._id)}
+            okText="Xóa"
+            cancelText="Hủy"
+            okButtonProps={{ danger: true }}
+          >
+            <Button danger icon={<DeleteOutlined />} size="small">
+              Xóa
+            </Button>
+          </Popconfirm>
+        ),
+      },
   ].filter(Boolean);
 
   return (
@@ -553,6 +588,23 @@ const PhuXeTableView = ({
           sticky
         />
       </div>
+
+      {/* Modal In Phụ Xe */}
+      <Modal
+        title="In Phiếu Phụ Xe"
+        open={printModalVisible}
+        onCancel={handleClosePrintModal}
+        footer={null}
+        width={800}
+        centered
+      >
+        {selectedPrintRecord && (
+          <InPhuXe
+            record={selectedPrintRecord}
+            onClose={handleClosePrintModal}
+          />
+        )}
+      </Modal>
 
       {/* Modal chọn tên phụ xe */}
       <Modal

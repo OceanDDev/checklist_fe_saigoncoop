@@ -24,22 +24,65 @@ const ImportPhuXe = ({ onImported, isRole24 }) => {
     setFileList([]);
   };
 
-  // 📤 Convert time cell thành string "HH:MM"
+  // 📤 Convert cell thành string thuần túy (cho mã cửa hàng, text fields)
+  const cellToPlainString = (cell) => {
+    if (!cell) return "";
+
+    if (cell.value === null || cell.value === undefined) return "";
+
+    let value = cell.value;
+
+    // Xử lý rich text
+    if (value && typeof value === "object") {
+      if (value.richText && Array.isArray(value.richText)) {
+        return value.richText.map((rt) => rt.text || "").join("");
+      }
+
+      // Unwrap formula results
+      if (value.result !== undefined && value.result !== null) {
+        value = value.result;
+      }
+
+      if (value.text !== undefined) {
+        value = value.text;
+      }
+
+      // Nếu vẫn là object sau khi unwrap
+      if (typeof value === "object" && value !== null) {
+        console.warn("Unhandled cell object:", value);
+        return "";
+      }
+    }
+
+    if (value === null || value === undefined) return "";
+
+    // ✅ Convert trực tiếp thành string - KHÔNG xử lý Date hay time format
+    // Điều này đảm bảo:
+    // - Số 0, 1234, 5678 -> "0", "1234", "5678"
+    // - Text "CH010", "ABC" -> "CH010", "ABC"
+    // - Ngay cả "00:00" cũng giữ nguyên là "00:00"
+    return String(value).trim();
+  };
+
+  // 📤 Convert time cell thành string "HH:MM" (chỉ dùng cho cột Khung giờ)
   const timeToString = (cell) => {
     if (!cell || cell.value === null || cell.value === undefined) return "";
 
     let value = cell.value;
 
+    // Xử lý Date object
     if (value instanceof Date) {
       const hours = value.getUTCHours();
       const minutes = value.getUTCMinutes();
       return `${hours}:${minutes.toString().padStart(2, "0")}`;
     }
 
+    // Ưu tiên lấy text hiển thị nếu có dạng time
     if (cell.text && typeof cell.text === "string" && cell.text.includes(":")) {
       return cell.text.trim();
     }
 
+    // Unwrap object
     if (value && typeof value === "object") {
       if (value.result !== undefined) value = value.result;
       if (value.text !== undefined) value = value.text;
@@ -51,6 +94,7 @@ const ImportPhuXe = ({ onImported, isRole24 }) => {
       }
     }
 
+    // Số thập phân 0-1 (Excel time format)
     if (typeof value === "number" && value >= 0 && value < 1) {
       const totalMinutes = Math.round(value * 24 * 60);
       const hours = Math.floor(totalMinutes / 60);
@@ -58,70 +102,13 @@ const ImportPhuXe = ({ onImported, isRole24 }) => {
       return `${hours}:${minutes.toString().padStart(2, "0")}`;
     }
 
+    // String có dấu ":"
     if (typeof value === "string" && value.includes(":")) {
       return value.trim();
     }
 
     console.warn("Unexpected time value:", value);
     return "";
-  };
-
-  // 📤 Convert cell sang string
-  const cellToString = (cell) => {
-    if (!cell || cell.value === null || cell.value === undefined) return "";
-
-    let value = cell.value;
-
-    if (value && typeof value === "object") {
-      if (value.richText && Array.isArray(value.richText)) {
-        return value.richText.map((rt) => rt.text || "").join("");
-      }
-
-      if (value.result !== undefined && value.result !== null) {
-        value = value.result;
-      }
-
-      if (value.text !== undefined) {
-        value = value.text;
-      }
-
-      if (value instanceof Date) {
-        const hours = value.getHours().toString().padStart(2, "0");
-        const minutes = value.getMinutes().toString().padStart(2, "0");
-        return `${hours}:${minutes}`;
-      }
-
-      if (typeof value === "object" && value !== null) {
-        console.warn("Unhandled cell object:", value);
-        return "";
-      }
-    }
-
-    if (value === null || value === undefined) return "";
-
-    if (value instanceof Date) {
-      const hours = value.getHours().toString().padStart(2, "0");
-      const minutes = value.getMinutes().toString().padStart(2, "0");
-      return `${hours}:${minutes}`;
-    }
-
-    if (typeof value === "number" && value > 0 && value < 1) {
-      const totalMinutes = Math.round(value * 24 * 60);
-      const hours = Math.floor(totalMinutes / 60)
-        .toString()
-        .padStart(2, "0");
-      const minutes = (totalMinutes % 60).toString().padStart(2, "0");
-      return `${hours}:${minutes}`;
-    }
-
-    if (typeof value === "number" && value >= 1) {
-      const date = new Date(Math.round((value - 25569) * 86400 * 1000));
-      const hours = date.getUTCHours().toString().padStart(2, "0");
-      const minutes = date.getUTCMinutes().toString().padStart(2, "0");
-      return `${hours}:${minutes}`;
-    }
-
-    return String(value).trim();
   };
 
   // 🆕 Hàm tách chuỗi có dấu "+" thành nhiều giá trị
@@ -164,7 +151,7 @@ const ImportPhuXe = ({ onImported, isRole24 }) => {
 
       const dataToImport = [];
       const skippedRows = [];
-      const invalidStores = []; // ⬅️ Lưu các mã cửa hàng không hợp lệ
+      const invalidStores = [];
       let orderIndex = 0;
 
       // ✅ Đọc từng row
@@ -178,10 +165,10 @@ const ImportPhuXe = ({ onImported, isRole24 }) => {
         const bien_so_xe_cell = row.getCell(5);
 
         const khung_gio = timeToString(khung_gio_cell);
-        const ma_cua_hang_raw = cellToString(ma_cua_hang_cell);
-        const dich_vu = cellToString(dich_vu_cell);
-        const ten_tai_xe = cellToString(ten_tai_xe_cell);
-        const bien_so_xe = cellToString(bien_so_xe_cell);
+        const ma_cua_hang_raw = cellToPlainString(ma_cua_hang_cell);
+        const dich_vu = cellToPlainString(dich_vu_cell);
+        const ten_tai_xe = cellToPlainString(ten_tai_xe_cell);
+        const bien_so_xe = cellToPlainString(bien_so_xe_cell);
 
         if (!khung_gio && !ma_cua_hang_raw) return;
 

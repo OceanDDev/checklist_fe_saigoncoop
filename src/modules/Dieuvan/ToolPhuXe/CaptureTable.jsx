@@ -13,97 +13,87 @@ const CaptureTable = ({ tableRef, fileName = "bang-phu-xe", isRole24 }) => {
     try {
       message.loading({ content: "Đang chụp ảnh...", key: "capture" });
 
-      // Đợi một chút để UI render xong
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Đợi UI ổn định
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // Tìm element table wrapper
       const tableWrapper = tableRef.current;
-
-      // Tìm table thực sự bên trong (Ant Design Table)
       const antTable = tableWrapper.querySelector(".ant-table");
-      const tableBody = tableWrapper.querySelector(".ant-table-body");
 
       if (!antTable) {
         message.error({ content: "Không tìm thấy table!", key: "capture" });
         return;
       }
 
-      // Lưu lại overflow style ban đầu
-      const originalOverflow = tableBody ? tableBody.style.overflow : null;
-      const originalMaxHeight = tableBody ? tableBody.style.maxHeight : null;
-
-      // Tạm thời bỏ scroll để capture full content
-      if (tableBody) {
-        tableBody.style.overflow = "visible";
-        tableBody.style.maxHeight = "none";
-      }
-
-      // Tính toán kích thước thực tế của table
-      const tableContent = tableWrapper.querySelector(".ant-table-content");
-      const actualWidth = tableContent
-        ? tableContent.scrollWidth
-        : antTable.scrollWidth;
-      const actualHeight = tableContent
-        ? tableContent.scrollHeight
-        : antTable.scrollHeight;
-
-      // Cấu hình html2canvas để capture full table
+      // Cấu hình html2canvas tập trung vào việc xử lý Clone
       const canvas = await html2canvas(antTable, {
-        scale: 2,
+        scale: 2, // Tăng chất lượng ảnh
         useCORS: true,
         logging: false,
         backgroundColor: "#ffffff",
-        width: actualWidth,
-        height: actualHeight,
-        scrollX: 0,
-        scrollY: -window.scrollY,
-        windowWidth: actualWidth,
-        windowHeight: actualHeight,
+        // QUAN TRỌNG: Để html2canvas tự tính toán kích thước từ Element clone
+        width: null,
+        height: null,
         onclone: (clonedDoc) => {
-          const clonedTable = clonedDoc.querySelector(".ant-table-body");
-          if (clonedTable) {
-            clonedTable.style.overflow = "visible";
-            clonedTable.style.maxHeight = "none";
+          // Tìm table trong bản clone
+          const tableInClone = clonedDoc.querySelector(".ant-table");
+          const tableBody = clonedDoc.querySelector(".ant-table-body");
+          const tableContent = clonedDoc.querySelector(".ant-table-content");
+
+          // 1. Hiển thị toàn bộ nội dung (bỏ scroll)
+          if (tableBody) {
+            tableBody.style.overflow = "visible";
+            tableBody.style.maxHeight = "none";
+            tableBody.style.height = "auto";
+          }
+          if (tableContent) {
+            tableContent.style.overflow = "visible";
           }
 
-          const clonedContent = clonedDoc.querySelector(".ant-table-content");
-          if (clonedContent) {
-            clonedContent.style.overflow = "visible";
-          }
-
-          // ẨN CỘT CHỨC NĂNG
-          const headerCells = clonedDoc.querySelectorAll(
-            ".ant-table-thead th:last-child"
-          );
-          headerCells.forEach((cell) => (cell.style.display = "none"));
-
-          const bodyCells = clonedDoc.querySelectorAll(
-            ".ant-table-tbody td:last-child"
-          );
-          bodyCells.forEach((cell) => (cell.style.display = "none"));
-
-          // ẨN ICON TRONG BUTTON TÊN PHỤ XE
-          const phuXeIcons = clonedDoc.querySelectorAll(".phu-xe-icon");
-          phuXeIcons.forEach((icon) => (icon.style.display = "none"));
-
-          // CHỈNH CENTER CHO BUTTON TÊN PHỤ XE
-          const phuXeButtons = clonedDoc.querySelectorAll(".phu-xe-name-button");
-          phuXeButtons.forEach((button) => {
-            button.style.justifyContent = "center";
-            button.style.textAlign = "center";
+          // 2. ẨN CÁC CỘT SAU "BIỂN SỐ XE" (Index >= 6)
+          const allRows = clonedDoc.querySelectorAll("tr");
+          allRows.forEach((row) => {
+            const cells = Array.from(row.children);
+            cells.forEach((cell, index) => {
+              if (index >= 6) {
+                cell.style.display = "none";
+                cell.style.width = "0px";
+                cell.style.minWidth = "0px";
+              }
+            });
           });
+
+          // 3. FIX LỆCH: Xử lý colgroup để trình duyệt tính lại chiều rộng
+          const colGroups = clonedDoc.querySelectorAll("colgroup");
+          colGroups.forEach((group) => {
+            const cols = Array.from(group.children);
+            cols.forEach((col, index) => {
+              if (index >= 6) {
+                col.style.display = "none";
+                col.setAttribute("width", "0");
+              }
+            });
+          });
+
+          // 4. TRIỆT TIÊU FIXED COLUMNS (Nguyên nhân chính gây lệch ảnh)
+          const stickyCells = clonedDoc.querySelectorAll(
+            ".ant-table-cell-fix-left, .ant-table-cell-fix-right"
+          );
+          stickyCells.forEach((el) => {
+            el.style.position = "static"; // Bỏ chế độ ghim cột
+            el.style.left = "auto";
+            el.style.right = "auto";
+            el.style.backgroundColor = "transparent"; // Tránh đè màu
+          });
+
+          // 5. Ép table co lại theo đúng các cột còn lại
+          if (tableInClone) {
+            tableInClone.style.width = "max-content";
+            tableInClone.style.display = "block";
+          }
         },
       });
 
-      // Khôi phục lại style ban đầu
-      if (tableBody) {
-        if (originalOverflow !== null)
-          tableBody.style.overflow = originalOverflow;
-        if (originalMaxHeight !== null)
-          tableBody.style.maxHeight = originalMaxHeight;
-      }
-
-      // Convert canvas thành blob
+      // Xuất ảnh
       canvas.toBlob((blob) => {
         if (!blob) {
           message.error({ content: "Không thể tạo ảnh!", key: "capture" });
@@ -112,25 +102,23 @@ const CaptureTable = ({ tableRef, fileName = "bang-phu-xe", isRole24 }) => {
 
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        const timestamp = new Date().toISOString().slice(0, 10);
+        const timestamp = new Date()
+          .toLocaleDateString("vi-VN")
+          .replace(/\//g, "-");
         link.download = `${fileName}_${timestamp}.png`;
         link.href = url;
         link.click();
-
         URL.revokeObjectURL(url);
 
         message.success({ content: "Đã chụp ảnh thành công!", key: "capture" });
       }, "image/png");
     } catch (error) {
       console.error("Lỗi khi chụp ảnh:", error);
-      message.error({ content: "Không thể chụp ảnh bảng!", key: "capture" });
+      message.error({ content: "Lỗi kỹ thuật khi chụp!", key: "capture" });
     }
   };
 
-  // Nếu là role 24 thì không hiển thị gì
-  if (isRole24) {
-    return null;
-  }
+  if (isRole24) return null;
 
   return (
     <Button
