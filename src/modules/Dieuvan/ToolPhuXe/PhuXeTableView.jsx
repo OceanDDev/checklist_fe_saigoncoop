@@ -458,6 +458,8 @@ const PhuXeTableView = ({
         </Tooltip>
       ),
     },
+    // Replace the "Xác Nhận" column render function with this:
+
     {
       title: "Xác Nhận",
       key: "dieu_van_xac_nhan",
@@ -485,12 +487,19 @@ const PhuXeTableView = ({
                 width: "100%",
                 cursor: !canEditDieuVan ? "not-allowed" : "pointer",
                 opacity: !canEditDieuVan ? 0.6 : 1,
+                height: "auto",
+                minHeight: "32px",
+                whiteSpace: "normal",
+                padding: "4px 8px",
               }}
               disabled={!canEditDieuVan}
               size="small"
+              className="min-w-[80px] max-w-full text-xs sm:text-sm leading-tight"
             >
-              {record.dieu_van_xac_nhan || "Chọn"}
-              {record.thoi_gian_di && " 🕐"}
+              <span className="break-words text-center block w-full">
+                {record.dieu_van_xac_nhan || "Chọn"}
+                {record.thoi_gian_di && " 🕐"}
+              </span>
             </Button>
           </Tooltip>
         );

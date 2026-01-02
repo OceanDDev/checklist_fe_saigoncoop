@@ -27,7 +27,8 @@ const SearchFilter = ({ data, onFilterChange, isRole24 }) => {
   const [search, setSearch] = useState("");
   const [selectedTaiXe, setSelectedTaiXe] = useState(null);
   const [selectedPhuXe, setSelectedPhuXe] = useState(null);
-  const [selectedDieuVan, setSelectedDieuVan] = useState(null); // 🆕 Filter cho điều vận
+  const [selectedDieuVan, setSelectedDieuVan] = useState(null);
+  const [showThoiGianDi, setShowThoiGianDi] = useState(null); // 🆕 Filter thời gian đi
   const [dateRange, setDateRange] = useState([
     {
       startDate: getTodayVN(),
@@ -53,7 +54,7 @@ const SearchFilter = ({ data, onFilterChange, isRole24 }) => {
     return names.sort((a, b) => a.localeCompare(b, "vi"));
   }, [data]);
 
-  // 🆕 Lấy danh sách unique điều vận xác nhận từ data
+  // Lấy danh sách unique điều vận xác nhận từ data
   const uniqueDieuVan = useMemo(() => {
     const names = [
       ...new Set(data.map((item) => item.dieu_van_xac_nhan).filter(Boolean)),
@@ -61,11 +62,17 @@ const SearchFilter = ({ data, onFilterChange, isRole24 }) => {
     return names.sort((a, b) => a.localeCompare(b, "vi"));
   }, [data]);
 
+  // 🆕 Options cho filter thời gian đi
+  const thoiGianDiOptions = [
+    { label: "Đã đi (có thời gian)", value: "has_time" },
+    { label: "Chưa đi (chưa có thời gian)", value: "no_time" },
+  ];
+
   // Hàm filter dữ liệu
-  const applyFilters = (searchText, taiXe, phuXe, dieuVan, range) => {
+  const applyFilters = (searchText, taiXe, phuXe, dieuVan, thoiGianDi, range) => {
     let filtered = [...data];
     const hasFilter =
-      searchText || taiXe || phuXe || dieuVan || (range[0].startDate && range[0].endDate);
+      searchText || taiXe || phuXe || dieuVan || thoiGianDi || (range[0].startDate && range[0].endDate);
 
     // Filter theo text search
     if (searchText) {
@@ -89,9 +96,16 @@ const SearchFilter = ({ data, onFilterChange, isRole24 }) => {
       filtered = filtered.filter((item) => item.ten_phu_xe === phuXe);
     }
 
-    // 🆕 Filter theo điều vận xác nhận
+    // Filter theo điều vận xác nhận
     if (dieuVan) {
       filtered = filtered.filter((item) => item.dieu_van_xac_nhan === dieuVan);
+    }
+
+    // 🆕 Filter theo thời gian đi
+    if (thoiGianDi === "has_time") {
+      filtered = filtered.filter((item) => item.thoi_gian_di);
+    } else if (thoiGianDi === "no_time") {
+      filtered = filtered.filter((item) => !item.thoi_gian_di);
     }
 
     // Filter theo khoảng ngày (múi giờ Việt Nam)
@@ -104,62 +118,81 @@ const SearchFilter = ({ data, onFilterChange, isRole24 }) => {
         .format("YYYY-MM-DD");
 
       filtered = filtered.filter((item) => {
-        const createdDateVN = dayjs(item.createdAt)
-          .tz(VN_TIMEZONE)
-          .format("YYYY-MM-DD");
-        return createdDateVN >= startVN && createdDateVN <= endVN;
+        // 🆕 Role 24 filter theo thoi_gian_di, các role khác filter theo createdAt
+        const dateToCompare = isRole24 && item.thoi_gian_di 
+          ? dayjs(item.thoi_gian_di).tz(VN_TIMEZONE).format("YYYY-MM-DD")
+          : dayjs(item.createdAt).tz(VN_TIMEZONE).format("YYYY-MM-DD");
+        
+        return dateToCompare >= startVN && dateToCompare <= endVN;
       });
     }
 
     onFilterChange(filtered, hasFilter, range);
   };
 
+  // 🆕 Set filter mặc định cho role 24
+  useEffect(() => {
+    if (isRole24 && showThoiGianDi === null) {
+      setShowThoiGianDi("has_time");
+    }
+  }, [isRole24, showThoiGianDi]);
+
   // Apply filter mặc định khi component mount hoặc data thay đổi
   useEffect(() => {
-    applyFilters(search, selectedTaiXe, selectedPhuXe, selectedDieuVan, dateRange);
-  }, [data]);
+    // Đảm bảo filter đúng theo role
+    const defaultThoiGianDi = isRole24 ? "has_time" : null;
+    applyFilters(search, selectedTaiXe, selectedPhuXe, selectedDieuVan, defaultThoiGianDi, dateRange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, isRole24]);
 
   const handleSearch = (value) => {
     setSearch(value);
-    applyFilters(value, selectedTaiXe, selectedPhuXe, selectedDieuVan, dateRange);
+    applyFilters(value, selectedTaiXe, selectedPhuXe, selectedDieuVan, showThoiGianDi, dateRange);
   };
 
   const handleTaiXeChange = (value) => {
     setSelectedTaiXe(value);
-    applyFilters(search, value, selectedPhuXe, selectedDieuVan, dateRange);
+    applyFilters(search, value, selectedPhuXe, selectedDieuVan, showThoiGianDi, dateRange);
   };
 
   const handlePhuXeChange = (value) => {
     setSelectedPhuXe(value);
-    applyFilters(search, selectedTaiXe, value, selectedDieuVan, dateRange);
+    applyFilters(search, selectedTaiXe, value, selectedDieuVan, showThoiGianDi, dateRange);
   };
 
-  // 🆕 Handler cho filter điều vận
   const handleDieuVanChange = (value) => {
     setSelectedDieuVan(value);
-    applyFilters(search, selectedTaiXe, selectedPhuXe, value, dateRange);
+    applyFilters(search, selectedTaiXe, selectedPhuXe, value, showThoiGianDi, dateRange);
+  };
+
+  // 🆕 Handler cho filter thời gian đi
+  const handleThoiGianDiChange = (value) => {
+    setShowThoiGianDi(value);
+    applyFilters(search, selectedTaiXe, selectedPhuXe, selectedDieuVan, value, dateRange);
   };
 
   const handleDateRangeChange = (item) => {
     const newRange = [item.selection];
     setDateRange(newRange);
-    applyFilters(search, selectedTaiXe, selectedPhuXe, selectedDieuVan, newRange);
+    applyFilters(search, selectedTaiXe, selectedPhuXe, selectedDieuVan, showThoiGianDi, newRange);
   };
 
   const handleClearFilters = () => {
     setSearch("");
     setSelectedTaiXe(null);
     setSelectedPhuXe(null);
-    setSelectedDieuVan(null); // 🆕 Clear điều vận
+    setSelectedDieuVan(null);
+    setShowThoiGianDi(isRole24 ? "has_time" : null); // 🆕 Reset về mặc định theo role
     const todayRange = [
       { startDate: getTodayVN(), endDate: getTodayVN(), key: "selection" },
     ];
     setDateRange(todayRange);
-    applyFilters("", null, null, null, todayRange);
+    const defaultThoiGianDi = isRole24 ? "has_time" : null;
+    applyFilters("", null, null, null, defaultThoiGianDi, todayRange);
   };
 
   const hasActiveFilters =
-    search || selectedTaiXe || selectedPhuXe || selectedDieuVan || dateRange[0].startDate;
+    search || selectedTaiXe || selectedPhuXe || selectedDieuVan || showThoiGianDi || dateRange[0].startDate;
 
   // Format ngày theo giờ Việt Nam
   const formatDateRange = () => {
@@ -222,7 +255,7 @@ const SearchFilter = ({ data, onFilterChange, isRole24 }) => {
           <span className="text-sm font-medium">Bộ lọc:</span>
         </div>
 
-        {/* 🆕 Filter Điều vận xác nhận - luôn hiển thị */}
+        {/* Filter Điều vận xác nhận - luôn hiển thị */}
         <Select
           placeholder="-- Chọn xác nhận --"
           value={selectedDieuVan}
@@ -242,6 +275,24 @@ const SearchFilter = ({ data, onFilterChange, isRole24 }) => {
             </Select.Option>
           ))}
         </Select>
+
+        {/* 🆕 Filter Thời Gian Đi - chỉ hiển thị cho role 24 */}
+        {isRole24 && (
+          <Select
+            placeholder="-- Trạng thái đi --"
+            value={showThoiGianDi}
+            onChange={handleThoiGianDiChange}
+            allowClear
+            className="w-full sm:w-48"
+            size="middle"
+          >
+            {thoiGianDiOptions.map((opt) => (
+              <Select.Option key={opt.value} value={opt.value}>
+                {opt.label}
+              </Select.Option>
+            ))}
+          </Select>
+        )}
 
         {/* Filter Tài xế và Phụ xe - chỉ hiển thị khi KHÔNG phải role 24 */}
         {!isRole24 && (

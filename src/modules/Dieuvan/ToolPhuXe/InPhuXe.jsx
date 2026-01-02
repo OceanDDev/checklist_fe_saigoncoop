@@ -152,7 +152,7 @@ const InPhuXe = ({ record, onClose }) => {
                 NGÀY:
               </td>
               <td style={{ border: "1px solid #000", padding: "8px 12px" }}>
-                {formatVietnameseDate(record.thoi_gian_xong_chuyen)}
+                {formatVietnameseDate(record.thoi_gian_di)}
               </td>
             </tr>
           </tbody>
