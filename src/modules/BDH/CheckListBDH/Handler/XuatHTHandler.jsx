@@ -3,61 +3,34 @@ import { useState } from "react";
 import { toast } from "react-toastify";
 import { checkListBDHService } from "@/services/checklistbdh.service";
 
-const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
+const XuatHTHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   const [selectedJobs, setSelectedJobs] = useState([]);
   const [selectedDetails, setSelectedDetails] = useState({});
   const [expandedJobs, setExpandedJobs] = useState({});
   const [customJobs, setCustomJobs] = useState([]);
   const [newJob, setNewJob] = useState("");
 
-  // Định nghĩa quyền truy cập chi tiết cho từng mã nhân viên
+  // ✅ Định nghĩa quyền truy cập cho form XUẤT HÀNG (HT)
   const EMPLOYEE_PERMISSIONS = {
-    24373: {
+    23657: {
       sections: {
         "QUẢN LÝ NHÂN SỰ": { type: "all" },
-        "XUẤT HÀNG": {
-          type: "exclude",
-          excludedJobs: ["CHUẨN BỊ XUẤT HÀNG", "KIỂM TRA VÀ XUẤT HÀNG"],
-        },
-        "SOẠN HÀNG": { type: "all" },
-        "KIỂM TRA VÀ QUẢN LÝ SỰ CỐ": { type: "all" },
+        "ĐÀO TẠO VÀ AN TOÀN VỆ SINH LAO ĐỘNG": { type: "all" },
+        "XLBB VÀ PHÁT SINH": { type: "all" },
         "BÁO CÁO VÀ CÔNG VIỆC KHÁC": { type: "all" },
       },
     },
-    37993: {
+    30541: {
       sections: {
-        "XUẤT HÀNG": {
-          type: "include",
-          includedJobs: ["CHUẨN BỊ XUẤT HÀNG", "KIỂM TRA VÀ XUẤT HÀNG"],
-        },
-        "KIỂM TRA VÀ QUẢN LÝ SỰ CỐ": {
-          type: "include",
-          includedJobs: ["KIỂM TRA DỌN DẸP VỆ SINH 14H00"],
-        },
-        "BÁO CÁO VÀ CÔNG VIỆC KHÁC": {
-          type: "include",
-          includedJobs: ["KIỂM TRA CUỐI NGÀY"],
-        },
-      },
-    },
-    34278: {
-      sections: {
-        "QUẢN LÝ NHÂN SỰ": {
-          type: "exclude",
-          excludedJobs: ["SẮP XẾP NHÂN SỰ XUẤT HÀNG"],
-        },
-        "XUẤT HÀNG SLL": { type: "all" },
+        "QUẢN LÝ NHÂN SỰ": { type: "all" },
+        "ĐIỀU VẬN": { type: "all" },
+        "ĐÀO TẠO VÀ AN TOÀN VỆ SINH LAO ĐỘNG": { type: "all" },
         "BÁO CÁO VÀ CÔNG VIỆC KHÁC": { type: "all" },
-      },
-    },
-    37616: {
-      sections: {
-        XLĐH: { type: "all" },
       },
     },
   };
 
-  const RESTRICTED_FORM_ID = "687f110132fbc64dbf1c0ac3";
+  const RESTRICTED_FORM_ID = "687f12a132fbc64dbf1c0b48";
 
   // ✅ Hàm kiểm tra công việc có được mở khóa hôm nay không
   const isUnlockedToday = (quy_dinh) => {
@@ -71,7 +44,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     const dayOfWeek = vietnamTime.getDay();
     const dayOfMonth = vietnamTime.getDate();
 
-    // ✅ Phát sinh và ngày → luôn mở khóa
     if (
       quy_dinh.loai === "phát sinh" ||
       quy_dinh.loai === "phat_sinh" ||
@@ -84,7 +56,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       if (!quy_dinh.ngay_trong_tuan || quy_dinh.ngay_trong_tuan.length === 0) {
         return false;
       }
-
       const sortedDays = [...quy_dinh.ngay_trong_tuan].sort((a, b) => a - b);
       return dayOfWeek >= sortedDays[0];
     }
@@ -96,7 +67,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       ) {
         return false;
       }
-
       const sortedDays = [...quy_dinh.ngay_trong_thang].sort((a, b) => a - b);
       return dayOfMonth >= sortedDays[0];
     }
@@ -104,7 +74,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return true;
   };
 
-  // ✅ Tạo thông báo lịch cho công việc bị khóa
   const getScheduleNote = (quy_dinh) => {
     if (!quy_dinh || isUnlockedToday(quy_dinh)) return null;
 
@@ -131,7 +100,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return null;
   };
 
-  // ✅ Kiểm tra loại quy định để hiển thị badge
   const getScheduleBadge = (quy_dinh) => {
     if (!quy_dinh) return null;
 
@@ -161,12 +129,12 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return badges[quy_dinh.loai] || null;
   };
 
-  // ✅ Kiểm tra có quy định đặc biệt không
   const hasSpecialSchedule = (quy_dinh) => {
     if (!quy_dinh) return false;
     return ["phát sinh", "phat_sinh", "tuần", "tháng"].includes(quy_dinh.loai);
   };
 
+  // ✅ Logic phân quyền
   const isRestrictedForm = () => {
     return formId === RESTRICTED_FORM_ID;
   };
@@ -179,7 +147,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     );
   };
 
-  // ✅ Kiểm tra xem nhân viên có quyền truy cập section không
   const canAccessSection = (sectionName) => {
     if (!isRestrictedForm()) return true;
 
@@ -192,7 +159,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     );
   };
 
-  // ✅ Kiểm tra xem công việc có được phép không
   const isJobAllowed = (sectionName, jobName) => {
     if (!isRestrictedForm()) return true;
 
@@ -202,15 +168,12 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     const sectionPermission = permissions.sections[sectionName];
     if (!sectionPermission) return false;
 
-    // Nếu type = "all", cho phép tất cả
     if (sectionPermission.type === "all") return true;
 
-    // Nếu type = "exclude", loại trừ các job trong danh sách
     if (sectionPermission.type === "exclude") {
       return !sectionPermission.excludedJobs?.includes(jobName);
     }
 
-    // Nếu type = "include", chỉ cho phép các job trong danh sách
     if (sectionPermission.type === "include") {
       return sectionPermission.includedJobs?.includes(jobName);
     }
@@ -218,7 +181,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return false;
   };
 
-  // ✅ Lọc công việc theo quyền
   const getFilteredJobs = (section) => {
     if (!isRestrictedForm()) return section.cong_viec;
 
@@ -357,10 +319,11 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   const visibleSections =
     form.cac_muc?.filter((section) => canAccessSection(section.ten_muc)) || [];
 
+  // ✅ Hiển thị màn hình không có quyền
   if (isRestrictedForm() && !hasPermission()) {
     return (
       <div className="p-4 bg-gradient-to-br from-gray-50 to-white min-h-screen max-w-3xl mx-auto shadow-sm">
-        <h2 className="text-center text-xl font-bold text-blue-700 mb-6 uppercase tracking-wide">
+        <h2 className="text-center text-xl font-bold text-green-700 mb-6 uppercase tracking-wide">
           {form.tieu_de}
         </h2>
 
@@ -381,8 +344,8 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   }
 
   return (
-    <div className="p-4 bg-gradient-to-br from-gray-50 to-white min-h-screen max-w-3xl mx-auto shadow-sm">
-      <h2 className="text-center text-xl font-bold text-blue-700 mb-6 uppercase tracking-wide">
+    <div className="p-4 bg-gradient-to-br from-green-50 to-white min-h-screen max-w-3xl mx-auto shadow-sm">
+      <h2 className="text-center text-xl font-bold text-green-700 mb-6 uppercase tracking-wide">
         {form.tieu_de}
       </h2>
 
@@ -408,7 +371,7 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       </div>
 
       <div className="mt-6">
-        <h3 className="text-base font-semibold text-blue-700 mb-4 border-b pb-2 border-blue-100">
+        <h3 className="text-base font-semibold text-green-700 mb-4 border-b pb-2 border-green-100">
           📋 Danh sách công việc
         </h3>
 
@@ -424,7 +387,7 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
             return (
               <div key={sectionIdx} className="mb-6">
-                <p className="font-semibold text-gray-900 mb-3 bg-blue-50 p-2 rounded">
+                <p className="font-semibold text-gray-900 mb-3 bg-green-50 p-2 rounded">
                   🔹 {section.ten_muc}
                 </p>
                 <div className="space-y-3">
@@ -436,11 +399,9 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                     const isExpanded = expandedJobs[jobKey];
                     const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
 
-                    // ✅ Kiểm tra công việc có được mở khóa không
                     const isUnlocked = isUnlockedToday(job.quy_dinh);
                     const scheduleNote = getScheduleNote(job.quy_dinh);
 
-                    // ✅ Lấy thông tin badge
                     const badge = getScheduleBadge(job.quy_dinh);
                     const isSpecial = hasSpecialSchedule(job.quy_dinh);
                     const isPhatSinh =
@@ -470,7 +431,7 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                           >
                             <input
                               type="checkbox"
-                              className="accent-blue-600 w-4 h-4"
+                              className="accent-green-600 w-4 h-4"
                               checked={isJobSelected}
                               onChange={() =>
                                 toggleJob(sectionIdx, jobIdx, job)
@@ -497,7 +458,6 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                               {job.noidung}
                             </span>
 
-                            {/* ✅ Badge hiển thị loại công việc */}
                             {badge && (
                               <span
                                 className={`px-2.5 py-1 ${
@@ -521,14 +481,12 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                           )}
                         </div>
 
-                        {/* ✅ Hiển thị thông báo lịch cho công việc bị khóa */}
                         {!isUnlocked && scheduleNote && (
                           <div className="px-3 pb-3 text-xs text-gray-600 italic border-t border-gray-300 bg-gray-50 py-2">
                             {scheduleNote}
                           </div>
                         )}
 
-                        {/* Chi tiết */}
                         {hasDetails && isExpanded && isUnlocked && (
                           <div
                             className={`px-3 pb-3 pl-10 space-y-2 border-t ${
@@ -576,7 +534,7 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       </div>
 
       <div className="mt-8">
-        <h3 className="text-base font-semibold text-blue-700 mb-3 border-b pb-2 border-blue-100">
+        <h3 className="text-base font-semibold text-green-700 mb-3 border-b pb-2 border-green-100">
           ✏️ Công việc khác
         </h3>
 
@@ -606,11 +564,11 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
             value={newJob}
             onChange={(e) => setNewJob(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && addCustomJob()}
-            className="border border-gray-300 rounded-md px-3 py-2 flex-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+            className="border border-gray-300 rounded-md px-3 py-2 flex-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 shadow-sm"
           />
           <button
             onClick={addCustomJob}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 shadow transition"
+            className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 shadow transition"
           >
             Thêm
           </button>
@@ -632,4 +590,4 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   );
 };
 
-export default XuatHandler;
+export default XuatHTHandler;

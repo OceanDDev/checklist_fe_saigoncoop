@@ -9,6 +9,7 @@ import UserInfoFormBDH from "./infoUserBDH";
 import DefaultHandler from "./Handler/DefaultHandler";
 import XuatHandler from "./Handler/XuatHandler";
 import NhapHandler from "./Handler/NhapHandler";
+import XuatHTHandler from "./Handler/XuatHTHandler"; // ✅ THÊM MỚI
 
 const ChecklistBDHMobile = () => {
   const { id: formId } = useParams();
@@ -25,7 +26,6 @@ const ChecklistBDHMobile = () => {
   const [checkingSubmission, setCheckingSubmission] = useState(false);
 
   // ✅ Định nghĩa các form đặc biệt
-  const XUAT_HANG_HT_FORM_ID = "687f12a132fbc64dbf1c0b48"; // BĐH - XUẤT HÀNG (HT) - Không cần phân quyền
 
   // ✅ Kiểm tra xem nhân viên đã submit checklist hôm nay chưa
   const checkTodaySubmission = async (employeeId) => {
@@ -134,8 +134,8 @@ const ChecklistBDHMobile = () => {
     if (!form?.tieu_de) return DefaultHandler;
 
     // ✅ Form XUẤT HÀNG (HT) - Trả về DefaultHandler ngay lập tức
-    if (formId === XUAT_HANG_HT_FORM_ID) {
-      return DefaultHandler;
+    if (form.tieu_de.includes("BĐH - XUẤT HÀNG (HT)")) {
+      return XuatHTHandler;
     }
 
     // ✅ Các form XUẤT HÀNG khác (có phân quyền)

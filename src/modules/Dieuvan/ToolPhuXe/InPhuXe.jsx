@@ -138,7 +138,9 @@ const InPhuXe = ({ record, onClose }) => {
                 TÊN PHỤ XE:
               </td>
               <td style={{ border: "1px solid #000", padding: "8px 12px" }}>
-                {record.dieu_van_xac_nhan || ""}
+                {`${record.dieu_van_xac_nhan || ""}${
+                  record.ghi_chu ? " - " + record.ghi_chu : ""
+                }`}
               </td>
             </tr>
             <tr>

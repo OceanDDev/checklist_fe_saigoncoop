@@ -29,7 +29,7 @@ const UserInfoFormBDH = ({
 
   const FORM_PERMISSIONS = {
     "BĐH - NHẬP HÀNG": ["20952", "40303", "23204"],
-    "BĐH - XUẤT HÀNG": ["24373", "30541", "34278"],
+    "BĐH - XUẤT HÀNG": ["24373", "30541", "34278","37616", "37993"],
   };
 
   const isRestrictedForm = () => {
