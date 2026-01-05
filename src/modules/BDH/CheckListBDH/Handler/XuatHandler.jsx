@@ -24,8 +24,8 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
 
   const RESTRICTED_FORM_ID = "687f110132fbc64dbf1c0ac3";
 
-  // ✅ Hàm kiểm tra công việc có hiển thị hôm nay không
-  const shouldShowToday = (quy_dinh) => {
+  // ✅ Hàm kiểm tra công việc có được mở khóa hôm nay không
+  const isUnlockedToday = (quy_dinh) => {
     if (!quy_dinh) return true;
 
     const now = new Date();
@@ -36,12 +36,8 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     const dayOfWeek = vietnamTime.getDay();
     const dayOfMonth = vietnamTime.getDate();
 
-    // ✅ Phát sinh → luôn hiển thị
-    if (quy_dinh.loai === "phát sinh" || quy_dinh.loai === "phat_sinh") {
-      return true;
-    }
-
-    if (quy_dinh.loai === "ngày") {
+    // ✅ Phát sinh và ngày → luôn mở khóa
+    if (quy_dinh.loai === "phát sinh" || quy_dinh.loai === "phat_sinh" || quy_dinh.loai === "ngày") {
       return true;
     }
 
@@ -49,20 +45,46 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       if (!quy_dinh.ngay_trong_tuan || quy_dinh.ngay_trong_tuan.length === 0) {
         return false;
       }
-      return quy_dinh.ngay_trong_tuan.includes(dayOfWeek);
+
+      // Sắp xếp các ngày trong tuần
+      const sortedDays = [...quy_dinh.ngay_trong_tuan].sort((a, b) => a - b);
+
+      // Chỉ khóa khi chưa đến ngày đầu tiên
+      return dayOfWeek >= sortedDays[0];
     }
 
     if (quy_dinh.loai === "tháng") {
-      if (
-        !quy_dinh.ngay_trong_thang ||
-        quy_dinh.ngay_trong_thang.length === 0
-      ) {
+      if (!quy_dinh.ngay_trong_thang || quy_dinh.ngay_trong_thang.length === 0) {
         return false;
       }
-      return quy_dinh.ngay_trong_thang.includes(dayOfMonth);
+
+      // Sắp xếp các ngày trong tháng
+      const sortedDays = [...quy_dinh.ngay_trong_thang].sort((a, b) => a - b);
+
+      // Chỉ khóa khi chưa đến ngày đầu tiên
+      return dayOfMonth >= sortedDays[0];
     }
 
     return true;
+  };
+
+  // ✅ Tạo thông báo lịch cho công việc bị khóa
+  const getScheduleNote = (quy_dinh) => {
+    if (!quy_dinh || isUnlockedToday(quy_dinh)) return null;
+
+    const daysOfWeek = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+
+    if (quy_dinh.loai === "tuần" && quy_dinh.ngay_trong_tuan) {
+      const sortedDays = [...quy_dinh.ngay_trong_tuan].sort((a, b) => a - b);
+      return `🔒 Công việc này chỉ mở từ: ${daysOfWeek[sortedDays[0]]}`;
+    }
+
+    if (quy_dinh.loai === "tháng" && quy_dinh.ngay_trong_thang) {
+      const sortedDays = [...quy_dinh.ngay_trong_thang].sort((a, b) => a - b);
+      return `🔒 Công việc này chỉ mở từ ngày: ${sortedDays[0]} hàng tháng`;
+    }
+
+    return null;
   };
 
   // ✅ Kiểm tra loại quy định để hiển thị badge
@@ -130,9 +152,9 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     return allowedSections.includes(sectionName);
   };
 
-  // ✅ Lọc công việc theo quyền VÀ lịch trình
+  // ✅ Không lọc theo lịch trình nữa, chỉ trả về tất cả công việc
   const getFilteredJobs = (section) => {
-    return section.cong_viec.filter((job) => shouldShowToday(job.quy_dinh));
+    return section.cong_viec;
   };
 
   const toggleExpand = (sectionIdx, jobIdx) => {
@@ -229,7 +251,7 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
               quy_dinh: job.quy_dinh,
               chi_tiet: (job.chi_tiet || []).map((detail, detailIdx) => ({
                 noi_dung_chi_tiet: detail.noi_dung_chi_tiet,
-                da_chon: selectedDetailIndexes.includes(detailIdx),
+                da_chon: isJobSelected && selectedDetailIndexes.includes(detailIdx),
               })),
             };
           }),
@@ -343,6 +365,10 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                     const isExpanded = expandedJobs[jobKey];
                     const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
 
+                    // ✅ Kiểm tra công việc có được mở khóa không
+                    const isUnlocked = isUnlockedToday(job.quy_dinh);
+                    const scheduleNote = getScheduleNote(job.quy_dinh);
+
                     // ✅ Lấy thông tin badge
                     const badge = getScheduleBadge(job.quy_dinh);
                     const isSpecial = hasSpecialSchedule(job.quy_dinh);
@@ -354,7 +380,9 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                       <div
                         key={jobIdx}
                         className={`border rounded-lg shadow transition-all duration-300 ${
-                          isPhatSinh
+                          !isUnlocked
+                            ? "border-gray-300 bg-gray-100 opacity-60"
+                            : isPhatSinh
                             ? "border-orange-400 bg-gradient-to-r from-orange-50 to-red-50 ring-2 ring-orange-300"
                             : isSpecial
                             ? "border-blue-400 bg-gradient-to-r from-blue-50 to-indigo-50 ring-2 ring-blue-300"
@@ -362,7 +390,7 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                         }`}
                       >
                         <div className="flex items-center justify-between p-3 hover:bg-gray-50/50 transition-all">
-                          <label className="flex items-center gap-3 w-full cursor-pointer">
+                          <label className={`flex items-center gap-3 w-full ${isUnlocked ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                             <input
                               type="checkbox"
                               className="accent-blue-600 w-4 h-4"
@@ -371,10 +399,13 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                                 toggleJob(sectionIdx, jobIdx, job)
                               }
                               onClick={(e) => e.stopPropagation()}
+                              disabled={!isUnlocked}
                             />
                             <span
                               className={`text-sm font-medium flex-1 ${
-                                isPhatSinh
+                                !isUnlocked
+                                  ? "text-gray-500"
+                                  : isPhatSinh
                                   ? "text-orange-900 font-bold"
                                   : isSpecial
                                   ? "text-blue-900 font-semibold"
@@ -382,7 +413,7 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                               }`}
                               onClick={(e) => {
                                 e.preventDefault();
-                                if (hasDetails)
+                                if (hasDetails && isUnlocked)
                                   toggleExpand(sectionIdx, jobIdx);
                               }}
                             >
@@ -396,14 +427,14 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                                   badge.bgColor
                                 } text-white text-xs font-bold rounded-full shadow-sm flex items-center gap-1 ${
                                   isPhatSinh ? "animate-pulse" : ""
-                                }`}
+                                } ${!isUnlocked ? "opacity-50" : ""}`}
                               >
                                 <span>{badge.icon}</span>
                                 <span>{badge.text}</span>
                               </span>
                             )}
                           </label>
-                          {hasDetails && (
+                          {hasDetails && isUnlocked && (
                             <button
                               onClick={() => toggleExpand(sectionIdx, jobIdx)}
                               className="text-gray-400 hover:text-gray-600 ml-2"
@@ -413,8 +444,15 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                           )}
                         </div>
 
+                        {/* ✅ Hiển thị thông báo lịch cho công việc bị khóa */}
+                        {!isUnlocked && scheduleNote && (
+                          <div className="px-3 pb-3 text-xs text-gray-600 italic border-t border-gray-300 bg-gray-50 py-2">
+                            {scheduleNote}
+                          </div>
+                        )}
+
                         {/* Chi tiết */}
-                        {hasDetails && isExpanded && (
+                        {hasDetails && isExpanded && isUnlocked && (
                           <div
                             className={`px-3 pb-3 pl-10 space-y-2 border-t ${
                               isPhatSinh
@@ -432,12 +470,13 @@ const XuatHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                                 <input
                                   type="checkbox"
                                   className="accent-green-600 w-3 h-3"
-                                  checked={(
+                                  checked={isJobSelected && (
                                     selectedDetails[jobKey] || []
                                   ).includes(detailIdx)}
                                   onChange={() =>
                                     toggleDetail(sectionIdx, jobIdx, detailIdx)
                                   }
+                                  disabled={!isJobSelected}
                                 />
                                 <span className="text-xs">
                                   → {detail.noi_dung_chi_tiet}

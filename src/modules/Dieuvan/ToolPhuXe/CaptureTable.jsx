@@ -13,7 +13,6 @@ const CaptureTable = ({ tableRef, fileName = "bang-phu-xe", isRole24 }) => {
     try {
       message.loading({ content: "Đang chụp ảnh...", key: "capture" });
 
-      // Đợi UI ổn định
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       const tableWrapper = tableRef.current;
@@ -24,22 +23,18 @@ const CaptureTable = ({ tableRef, fileName = "bang-phu-xe", isRole24 }) => {
         return;
       }
 
-      // Cấu hình html2canvas tập trung vào việc xử lý Clone
       const canvas = await html2canvas(antTable, {
-        scale: 2, // Tăng chất lượng ảnh
+        scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: "#ffffff",
-        // QUAN TRỌNG: Để html2canvas tự tính toán kích thước từ Element clone
         width: null,
         height: null,
         onclone: (clonedDoc) => {
-          // Tìm table trong bản clone
           const tableInClone = clonedDoc.querySelector(".ant-table");
           const tableBody = clonedDoc.querySelector(".ant-table-body");
           const tableContent = clonedDoc.querySelector(".ant-table-content");
 
-          // 1. Hiển thị toàn bộ nội dung (bỏ scroll)
           if (tableBody) {
             tableBody.style.overflow = "visible";
             tableBody.style.maxHeight = "none";
@@ -49,12 +44,14 @@ const CaptureTable = ({ tableRef, fileName = "bang-phu-xe", isRole24 }) => {
             tableContent.style.overflow = "visible";
           }
 
-          // 2. ẨN CÁC CỘT SAU "BIỂN SỐ XE" (Index >= 6)
+          // 2. ẨN CÁC CỘT SAU "TÊN PHỤ XE" (Thay đổi index >= 6 thành index >= 7)
           const allRows = clonedDoc.querySelectorAll("tr");
           allRows.forEach((row) => {
             const cells = Array.from(row.children);
             cells.forEach((cell, index) => {
-              if (index >= 6) {
+              // Cột: STT(0), KhungGiờ(1), TênCH(2), DịchVụ(3), TàiXế(4), BiểnSố(5), TênPhụXe(6)
+              // Ta ẩn từ index 7 trở đi (Xác nhận, Hình ảnh, In, Xóa...)
+              if (index >= 7) { 
                 cell.style.display = "none";
                 cell.style.width = "0px";
                 cell.style.minWidth = "0px";
@@ -62,30 +59,28 @@ const CaptureTable = ({ tableRef, fileName = "bang-phu-xe", isRole24 }) => {
             });
           });
 
-          // 3. FIX LỆCH: Xử lý colgroup để trình duyệt tính lại chiều rộng
+          // 3. Cập nhật colgroup (Thay đổi index >= 6 thành index >= 7)
           const colGroups = clonedDoc.querySelectorAll("colgroup");
           colGroups.forEach((group) => {
             const cols = Array.from(group.children);
             cols.forEach((col, index) => {
-              if (index >= 6) {
+              if (index >= 7) {
                 col.style.display = "none";
                 col.setAttribute("width", "0");
               }
             });
           });
 
-          // 4. TRIỆT TIÊU FIXED COLUMNS (Nguyên nhân chính gây lệch ảnh)
           const stickyCells = clonedDoc.querySelectorAll(
             ".ant-table-cell-fix-left, .ant-table-cell-fix-right"
           );
           stickyCells.forEach((el) => {
-            el.style.position = "static"; // Bỏ chế độ ghim cột
+            el.style.position = "static";
             el.style.left = "auto";
             el.style.right = "auto";
-            el.style.backgroundColor = "transparent"; // Tránh đè màu
+            el.style.backgroundColor = "transparent";
           });
 
-          // 5. Ép table co lại theo đúng các cột còn lại
           if (tableInClone) {
             tableInClone.style.width = "max-content";
             tableInClone.style.display = "block";
@@ -93,7 +88,6 @@ const CaptureTable = ({ tableRef, fileName = "bang-phu-xe", isRole24 }) => {
         },
       });
 
-      // Xuất ảnh
       canvas.toBlob((blob) => {
         if (!blob) {
           message.error({ content: "Không thể tạo ảnh!", key: "capture" });

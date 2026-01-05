@@ -123,6 +123,53 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
     }
   };
 
+  // ✅ HÀM MỚI: Kiểm tra công việc có được mở khóa vào ngày tạo checklist không
+  const isUnlockedOnChecklistDate = (quy_dinh, checklistDate) => {
+    if (!quy_dinh) return true;
+
+    const createdDate = new Date(checklistDate);
+    const vietnamTime = new Date(
+      createdDate.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+
+    const dayOfWeek = vietnamTime.getDay();
+    const dayOfMonth = vietnamTime.getDate();
+
+    // ✅ Phát sinh và ngày → luôn mở khóa
+    if (
+      quy_dinh.loai === "phát sinh" ||
+      quy_dinh.loai === "phat_sinh" ||
+      quy_dinh.loai === "ngày"
+    ) {
+      return true;
+    }
+
+    if (quy_dinh.loai === "tuần") {
+      if (!quy_dinh.ngay_trong_tuan || quy_dinh.ngay_trong_tuan.length === 0) {
+        return false;
+      }
+      // Sắp xếp các ngày trong tuần
+      const sortedDays = [...quy_dinh.ngay_trong_tuan].sort((a, b) => a - b);
+      // Chỉ mở khóa nếu đã đến ngày đầu tiên
+      return dayOfWeek >= sortedDays[0];
+    }
+
+    if (quy_dinh.loai === "tháng") {
+      if (
+        !quy_dinh.ngay_trong_thang ||
+        quy_dinh.ngay_trong_thang.length === 0
+      ) {
+        return false;
+      }
+      // Sắp xếp các ngày trong tháng
+      const sortedDays = [...quy_dinh.ngay_trong_thang].sort((a, b) => a - b);
+      // Chỉ mở khóa nếu đã đến ngày đầu tiên
+      return dayOfMonth >= sortedDays[0];
+    }
+
+    return true;
+  };
+
   const calculateChecklistCompletion = (checklist) => {
     // ✅ Nếu nghỉ không lương → 0%
     if (isUnpaidLeave) return 0;
@@ -144,10 +191,8 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
     // ✅ Hàm kiểm tra công việc phát sinh có được chấm không
     const isPhatSinhChecked = (cv) => {
       if (cv.chi_tiet && cv.chi_tiet.length > 0) {
-        // Có chi tiết → kiểm tra có ít nhất 1 chi tiết được chọn
         return cv.chi_tiet.some((d) => d.da_chon);
       }
-      // Không có chi tiết → kiểm tra da_chon của chính công việc
       return cv.da_chon;
     };
 
@@ -159,7 +204,16 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
 
         // ✅ Nếu là phát sinh và KHÔNG được chấm → bỏ qua, không tính vào tổng
         if (isPS && !isPSChecked) {
-          return; // skip công việc này
+          return;
+        }
+
+        // ✅ LOGIC MỚI: Bỏ qua công việc chưa mở khóa vào ngày tạo checklist
+        const isUnlocked = isUnlockedOnChecklistDate(
+          cv.quy_dinh,
+          checklist.ngay_tao
+        );
+        if (!isUnlocked) {
+          return; // Không tính vào tổng điểm
         }
 
         // ✅ Công việc thường HOẶC công việc phát sinh đã được chấm
@@ -187,6 +241,15 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
 
       // ✅ Nếu là phát sinh và KHÔNG được chấm → bỏ qua
       if (isPS && !isPSChecked) {
+        return;
+      }
+
+      // ✅ LOGIC MỚI: Bỏ qua công việc chưa mở khóa
+      const isUnlocked = isUnlockedOnChecklistDate(
+        cv.quy_dinh,
+        checklist.ngay_tao
+      );
+      if (!isUnlocked) {
         return;
       }
 
@@ -235,12 +298,10 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
       {/* ✅ CỘT TỶ LỆ HOÀN THÀNH / STATUS */}
       <td className="px-3 py-3 min-w-[100px]">
         {isUnpaidLeave ? (
-          // Nghỉ không lương → 0%
           <span className="px-3 py-1 rounded-full text-sm font-bold w-16 inline-flex justify-center bg-gray-100 text-gray-500 border border-gray-200">
             0%
           </span>
         ) : isOffDayStatus ? (
-          // Các loại nghỉ khác → Hiển thị status
           <span
             className={`px-3 py-1 rounded-full text-xs font-semibold border inline-flex items-center gap-1 ${getStatusBadgeColor(
               user.status
@@ -250,7 +311,6 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
             {user.status}
           </span>
         ) : (
-          // Đi làm → Hiển thị %
           <span
             className={`px-3 py-1 rounded-full text-sm font-bold w-16 inline-flex justify-center ${getPercentageColor(
               completionPercentage
@@ -264,7 +324,6 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
       {/* ✅ CHI TIẾT / STATUS */}
       <td className="px-3 py-3 min-w-[100px]">
         {isOffDayStatus ? (
-          // Nếu nghỉ → Hiển thị badge status thay vì nút chi tiết
           <span
             className={`px-4 py-2 rounded-lg text-sm font-semibold border inline-flex items-center gap-2 ${getStatusBadgeColor(
               user.status
@@ -274,7 +333,6 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
             {user.status}
           </span>
         ) : (
-          // Nếu đi làm → Hiển thị nút chi tiết như bình thường
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button
@@ -293,7 +351,6 @@ const UserRowCheckListBDH = ({ user, index, fetchChecklists }) => {
                 </DialogTitle>
               </DialogHeader>
 
-              {/* Nội dung chi tiết */}
               <div className="mt-4 divide-y divide-gray-100 space-y-4">
                 {(user.cac_muc || []).map((muc, mucIndex) => (
                   <div key={mucIndex} className="py-4 first:pt-0 last:pb-0">

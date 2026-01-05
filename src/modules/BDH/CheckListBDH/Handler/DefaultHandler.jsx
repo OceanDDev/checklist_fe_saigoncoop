@@ -10,8 +10,8 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   const [newJob, setNewJob] = useState("");
   const [expandedJobs, setExpandedJobs] = useState({});
 
-  // ✅ Hàm kiểm tra công việc có hiển thị hôm nay không
-  const shouldShowToday = (quy_dinh) => {
+  // ✅ Hàm kiểm tra công việc có được mở khóa hôm nay không
+  const isUnlockedToday = (quy_dinh) => {
     if (!quy_dinh) return true;
 
     const now = new Date();
@@ -20,12 +20,8 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     const dayOfWeek = vietnamTime.getDay();
     const dayOfMonth = vietnamTime.getDate();
 
-    // ✅ Phát sinh → luôn hiển thị
-    if (quy_dinh.loai === "phát sinh" || quy_dinh.loai === "phat_sinh") {
-      return true;
-    }
-
-    if (quy_dinh.loai === "ngày") {
+    // ✅ Phát sinh và ngày → luôn mở khóa
+    if (quy_dinh.loai === "phát sinh" || quy_dinh.loai === "phat_sinh" || quy_dinh.loai === "ngày") {
       return true;
     }
 
@@ -44,6 +40,25 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     }
 
     return true;
+  };
+
+  // ✅ Tạo thông báo lịch cho công việc bị khóa
+  const getScheduleNote = (quy_dinh) => {
+    if (!quy_dinh || isUnlockedToday(quy_dinh)) return null;
+
+    const daysOfWeek = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+
+    if (quy_dinh.loai === "tuần" && quy_dinh.ngay_trong_tuan) {
+      const days = quy_dinh.ngay_trong_tuan.map(d => daysOfWeek[d]).join(", ");
+      return `🔒 Công việc này chỉ mở vào: ${days}`;
+    }
+
+    if (quy_dinh.loai === "tháng" && quy_dinh.ngay_trong_thang) {
+      const days = quy_dinh.ngay_trong_thang.sort((a, b) => a - b).join(", ");
+      return `🔒 Công việc này chỉ mở vào ngày: ${days} hàng tháng`;
+    }
+
+    return null;
   };
 
   // ✅ Kiểm tra loại quy định để hiển thị badge
@@ -148,7 +163,6 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     const transformedMucChecklist = form.cac_muc.map((section, sectionIdx) => ({
       ten_muc: section.ten_muc,
       cong_viec: section.cong_viec
-        .filter(job => shouldShowToday(job.quy_dinh))
         .map((job, jobIdx) => {
           const jobKey = `${sectionIdx}-${jobIdx}`;
           const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
@@ -218,16 +232,14 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
             </p>
             <div className="space-y-3">
               {section.cong_viec.map((job, jobIdx) => {
-                const isScheduledToday = shouldShowToday(job.quy_dinh);
-                
-                if (!isScheduledToday) {
-                  return null;
-                }
-
                 const jobKey = `${sectionIdx}-${jobIdx}`;
                 const isJobSelected = selectedJobs.some((j) => j.key === jobKey);
                 const isExpanded = expandedJobs[jobKey];
                 const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
+                
+                // ✅ Kiểm tra công việc có được mở khóa không
+                const isUnlocked = isUnlockedToday(job.quy_dinh);
+                const scheduleNote = getScheduleNote(job.quy_dinh);
                 
                 // ✅ Lấy thông tin badge
                 const badge = getScheduleBadge(job.quy_dinh);
@@ -238,7 +250,9 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                   <div 
                     key={jobIdx} 
                     className={`border rounded-lg shadow transition-all duration-300 ${
-                      isPhatSinh
+                      !isUnlocked
+                        ? "border-gray-300 bg-gray-100 opacity-60"
+                        : isPhatSinh
                         ? "border-orange-400 bg-gradient-to-r from-orange-50 to-red-50 ring-2 ring-orange-300"
                         : isSpecial
                         ? "border-blue-400 bg-gradient-to-r from-blue-50 to-indigo-50 ring-2 ring-blue-300"
@@ -246,17 +260,20 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                     }`}
                   >
                     <div className="flex items-center justify-between p-3 hover:bg-gray-50/50 transition-all">
-                      <label className="flex items-center gap-3 w-full cursor-pointer">
+                      <label className={`flex items-center gap-3 w-full ${isUnlocked ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                         <input
                           type="checkbox"
                           className="accent-blue-600 w-4 h-4"
                           checked={isJobSelected}
                           onChange={() => toggleJob(sectionIdx, jobIdx, job)}
                           onClick={(e) => e.stopPropagation()}
+                          disabled={!isUnlocked}
                         />
                         <span 
                           className={`text-sm font-medium flex-1 ${
-                            isPhatSinh 
+                            !isUnlocked
+                              ? "text-gray-500"
+                              : isPhatSinh 
                               ? "text-orange-900 font-bold" 
                               : isSpecial 
                               ? "text-blue-900 font-semibold" 
@@ -264,7 +281,7 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                           }`}
                           onClick={(e) => {
                             e.preventDefault();
-                            if (hasDetails) toggleExpand(sectionIdx, jobIdx);
+                            if (hasDetails && isUnlocked) toggleExpand(sectionIdx, jobIdx);
                           }}
                         >
                           {job.noidung}
@@ -274,13 +291,13 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                         {badge && (
                           <span className={`px-2.5 py-1 ${badge.bgColor} text-white text-xs font-bold rounded-full shadow-sm flex items-center gap-1 ${
                             isPhatSinh ? "animate-pulse" : ""
-                          }`}>
+                          } ${!isUnlocked ? "opacity-50" : ""}`}>
                             <span>{badge.icon}</span>
                             <span>{badge.text}</span>
                           </span>
                         )}
                       </label>
-                      {hasDetails && (
+                      {hasDetails && isUnlocked && (
                         <button
                           onClick={() => toggleExpand(sectionIdx, jobIdx)}
                           className="text-gray-400 hover:text-gray-600 ml-2"
@@ -290,8 +307,15 @@ const DefaultHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                       )}
                     </div>
 
+                    {/* ✅ Hiển thị thông báo lịch cho công việc bị khóa */}
+                    {!isUnlocked && scheduleNote && (
+                      <div className="px-3 pb-3 text-xs text-gray-600 italic border-t border-gray-300 bg-gray-50 py-2">
+                        {scheduleNote}
+                      </div>
+                    )}
+
                     {/* Chi tiết */}
-                    {hasDetails && isExpanded && (
+                    {hasDetails && isExpanded && isUnlocked && (
                       <div className={`px-3 pb-3 pl-10 space-y-2 border-t ${
                         isPhatSinh 
                           ? "bg-orange-50/50" 

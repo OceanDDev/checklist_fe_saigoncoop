@@ -24,8 +24,8 @@ const ChecklistBDHMobile = () => {
   const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
   const [checkingSubmission, setCheckingSubmission] = useState(false);
 
-  // ✅ Hàm lấy ngày hiện tại theo múi giờ Việt Nam (format: YYYY-MM-DD)
-  // Không còn cần thiết vì đã chuyển logic vào service
+  // ✅ Định nghĩa các form đặc biệt
+  const XUAT_HANG_HT_FORM_ID = "687f12a132fbc64dbf1c0b48"; // BĐH - XUẤT HÀNG (HT) - Không cần phân quyền
 
   // ✅ Kiểm tra xem nhân viên đã submit checklist hôm nay chưa
   const checkTodaySubmission = async (employeeId) => {
@@ -129,21 +129,28 @@ const ChecklistBDHMobile = () => {
     if (formId) fetchForm();
   }, [formId]);
 
-  // Determine which handler to use based on form title
+  // ✅ Determine which handler to use based on formId and form title
   const getFormHandler = () => {
     if (!form?.tieu_de) return DefaultHandler;
 
+    // ✅ Form XUẤT HÀNG (HT) - Trả về DefaultHandler ngay lập tức
+    if (formId === XUAT_HANG_HT_FORM_ID) {
+      return DefaultHandler;
+    }
+
+    // ✅ Các form XUẤT HÀNG khác (có phân quyền)
     if (form.tieu_de.includes("XUẤT HÀNG")) {
       return XuatHandler;
     }
 
+    // ✅ Form NHẬP HÀNG (có phân quyền)
     if (form.tieu_de.includes("NHẬP HÀNG")) {
       return NhapHandler;
     }
 
+    // ✅ Mặc định
     return DefaultHandler;
   };
-
   const handleSuccess = () => {
     toast.success("✅ Gửi checklist thành công!");
     navigate("/thank-you");

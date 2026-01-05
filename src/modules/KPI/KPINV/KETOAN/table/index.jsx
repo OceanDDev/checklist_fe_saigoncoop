@@ -1,28 +1,29 @@
+/* eslint-disable no-unused-vars */
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useParams } from "react-router-dom"; // Import useParams
+import { useParams } from "react-router-dom";
 import { formkpistaffService } from "@/services/formkpistaff.service";
 import { checkKPIService } from "@/services/checkkpistaff.service";
 import StaffKPIDetailModal from "./StaffKPIDetailModal";
 import CheckKPISimpleModal from "./CheckKPISimpleModal";
 import ExportExcelModal from "./excel";
-import AddStaffWithKPIModal from "./AddStaffWithKPIModal"; // ← NEW
+import AddStaffWithKPIModal from "./AddStaffWithKPIModal";
 import { ROLE_KPI } from "@/configs/constants";
 
 const TableKeToan = () => {
-  const { year } = useParams(); // Lấy năm từ URL parameter
-  const selectedYear = parseInt(year) || new Date().getFullYear(); // Parse năm hoặc dùng năm hiện tại
+  const { year } = useParams();
+  const selectedYear = parseInt(year) || new Date().getFullYear();
 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [kpiStatusMap, setKpiStatusMap] = useState(new Map()); // Map để lưu trạng thái KPI
-  const [yearlyWeightMap, setYearlyWeightMap] = useState(new Map()); // Map để lưu tỷ trọng năm
+  const [kpiStatusMap, setKpiStatusMap] = useState(new Map());
+  const [yearlyWeightMap, setYearlyWeightMap] = useState(new Map());
 
   // Modal states
   const [detailOpen, setDetailOpen] = useState(false);
   const [checkOpen, setCheckOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false); // State cho Export Excel Modal
+  const [exportOpen, setExportOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState(null);
-  const [addOpen, setAddOpen] = useState(false); // ← NEW
+  const [addOpen, setAddOpen] = useState(false);
   const [userRoles, setUserRoles] = useState([]);
 
   // Phân quyền
@@ -44,7 +45,6 @@ const TableKeToan = () => {
           break;
         }
       }
-      // gom role về dạng mảng số
       const roles = new Set();
       if (user) {
         if (typeof user.role === "number") roles.add(user.role);
@@ -63,7 +63,6 @@ const TableKeToan = () => {
       setUserRoles([...roles]);
     } catch (e) {
       setUserRoles([]);
-      e;
     }
   }, []);
 
@@ -80,35 +79,30 @@ const TableKeToan = () => {
       const list = await formkpistaffService.getAllFormKPI();
       let staffList = Array.isArray(list) ? list : [];
 
-      // chỉ giữ nhân viên có đơn vị là "Kế Toán"
       staffList = staffList.filter(
         (staff) => (staff.don_vi || "").trim().toLowerCase() === "kế toán"
       );
 
       setData(staffList);
 
-      // Sau khi có danh sách nhân viên, check trạng thái KPI cho từng người theo năm được chọn
       await checkAllKPIStatus(staffList);
-      // Và tính tỷ trọng năm cho từng người theo năm được chọn
       await calculateYearlyWeights(staffList);
     } catch (err) {
       console.error("Lỗi khi load KPI:", err);
     } finally {
       setLoading(false);
     }
-  }, [selectedYear]); // Thêm selectedYear vào dependencies
+  }, [selectedYear]);
 
-  // Tính tỷ trọng năm cho tất cả nhân viên theo năm được chọn
+  // Tính tỷ trọng năm theo QUÝ
   const calculateYearlyWeights = async (staffList) => {
     const weightMap = new Map();
 
     try {
-      // Lấy tất cả check KPI của năm được chọn
       const response = await checkKPIService.getAllCheckKPI({
         nam: selectedYear,
       });
 
-      // Xử lý response data
       let allCheckKPI = [];
       if (response && response.data && Array.isArray(response.data)) {
         allCheckKPI = response.data;
@@ -119,13 +113,13 @@ const TableKeToan = () => {
       // Nhóm theo mã nhân viên
       const kpiByStaff = new Map();
       allCheckKPI.forEach((checkKPI) => {
-        if (checkKPI.ma_nhan_vien && checkKPI.ty_trong_thang !== undefined) {
+        if (checkKPI.ma_nhan_vien && checkKPI.ty_trong_quy !== undefined) {
           if (!kpiByStaff.has(checkKPI.ma_nhan_vien)) {
             kpiByStaff.set(checkKPI.ma_nhan_vien, []);
           }
           kpiByStaff.get(checkKPI.ma_nhan_vien).push({
-            thang: checkKPI.thang,
-            ty_trong_thang: Number(checkKPI.ty_trong_thang) || 0,
+            quy: checkKPI.quy,
+            ty_trong_quy: Number(checkKPI.ty_trong_quy) || 0,
           });
         }
       });
@@ -135,25 +129,23 @@ const TableKeToan = () => {
         const staffKPIs = kpiByStaff.get(staff.ma_nhan_vien) || [];
 
         if (staffKPIs.length > 0) {
-          // Tính trung bình tỷ trọng các tháng
           const totalWeight = staffKPIs.reduce(
-            (sum, kpi) => sum + kpi.ty_trong_thang,
+            (sum, kpi) => sum + kpi.ty_trong_quy,
             0
           );
           const averageWeight =
-            Math.round((totalWeight / staffKPIs.length) * 100) / 100; // Làm tròn 2 chữ số thập phân
+            Math.round((totalWeight / staffKPIs.length) * 100) / 100;
 
           weightMap.set(staff.ma_nhan_vien, {
             averageWeight,
-            monthCount: staffKPIs.length,
-            months: staffKPIs.map((kpi) => kpi.thang).sort((a, b) => a - b),
+            quarterCount: staffKPIs.length,
+            quarters: staffKPIs.map((kpi) => kpi.quy).sort((a, b) => a - b),
           });
         } else {
-          // Chưa có dữ liệu KPI nào
           weightMap.set(staff.ma_nhan_vien, {
             averageWeight: null,
-            monthCount: 0,
-            months: [],
+            quarterCount: 0,
+            quarters: [],
           });
         }
       });
@@ -162,45 +154,40 @@ const TableKeToan = () => {
     } catch (error) {
       console.error("❌ Lỗi khi tính tỷ trọng năm:", error);
 
-      // Nếu lỗi, set tất cả về null
       staffList.forEach((staff) => {
         weightMap.set(staff.ma_nhan_vien, {
           averageWeight: null,
-          monthCount: 0,
-          months: [],
+          quarterCount: 0,
+          quarters: [],
         });
       });
       setYearlyWeightMap(weightMap);
     }
   };
 
-  // Check trạng thái KPI cho tất cả nhân viên theo tháng hiện tại của năm được chọn
+  // Check trạng thái KPI theo QUÝ hiện tại
   const checkAllKPIStatus = async (staffList) => {
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1;
     const currentYear = currentDate.getFullYear();
     const statusMap = new Map();
 
-    // Nếu năm được chọn là năm tương lai, sử dụng tháng 1
-    // Nếu là năm hiện tại, dùng tháng hiện tại
-    // Nếu là năm quá khứ, dùng tháng 12
-    let targetMonth;
+    // Xác định quý hiện tại hoặc target
+    let targetQuarter;
     if (selectedYear > currentYear) {
-      targetMonth = 1; // Tháng đầu năm cho năm tương lai
+      targetQuarter = 1; // Quý đầu năm cho năm tương lai
     } else if (selectedYear === currentYear) {
-      targetMonth = currentMonth; // Tháng hiện tại
+      targetQuarter = checkKPIService.getQuarterFromMonth(currentMonth);
     } else {
-      targetMonth = 12; // Tháng cuối năm cho năm quá khứ
+      targetQuarter = 4; // Quý cuối năm cho năm quá khứ
     }
 
     try {
-      // Lấy tất cả check KPI của tháng target trong năm được chọn
       const response = await checkKPIService.getAllCheckKPI({
-        thang: targetMonth,
+        quy: targetQuarter,
         nam: selectedYear,
       });
 
-      // Xử lý response data - API trả về object có structure {success, count, data}
       let allCheckKPI = [];
       if (response && response.data && Array.isArray(response.data)) {
         allCheckKPI = response.data;
@@ -208,7 +195,6 @@ const TableKeToan = () => {
         allCheckKPI = response;
       }
 
-      // Tạo Set các mã nhân viên đã chấm KPI trong tháng
       const checkedStaffSet = new Set();
       allCheckKPI.forEach((checkKPI) => {
         if (checkKPI.ma_nhan_vien) {
@@ -216,14 +202,13 @@ const TableKeToan = () => {
         }
       });
 
-      // Check trạng thái cho từng nhân viên
       staffList.forEach((staff) => {
         const hasKPI = checkedStaffSet.has(staff.ma_nhan_vien);
         const status = hasKPI ? "completed" : "pending";
 
         statusMap.set(staff.ma_nhan_vien, {
           status: status,
-          monthYear: `${targetMonth}/${selectedYear}`,
+          quarterYear: `Q${targetQuarter}/${selectedYear}`,
         });
       });
 
@@ -231,11 +216,10 @@ const TableKeToan = () => {
     } catch (error) {
       console.error("❌ Lỗi khi check trạng thái KPI:", error);
 
-      // Nếu lỗi, set tất cả về pending
       staffList.forEach((staff) => {
         statusMap.set(staff.ma_nhan_vien, {
           status: "pending",
-          monthYear: `${targetMonth}/${selectedYear}`,
+          quarterYear: `Q${targetQuarter}/${selectedYear}`,
         });
       });
       setKpiStatusMap(statusMap);
@@ -248,23 +232,22 @@ const TableKeToan = () => {
 
   // Lock body scroll when modal is open
   useEffect(() => {
-    const hasOpenModal = detailOpen || checkOpen || exportOpen || addOpen; // Thêm exportOpen
+    const hasOpenModal = detailOpen || checkOpen || exportOpen || addOpen;
     if (!hasOpenModal) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => (document.body.style.overflow = previousOverflow);
-  }, [detailOpen, checkOpen, exportOpen, addOpen]); // Thêm exportOpen vào dependencies
+  }, [detailOpen, checkOpen, exportOpen, addOpen]);
 
   const openDetail = (staff) => {
     setSelectedStaff({
       ...staff,
-      selectedYear: selectedYear, // Truyền thêm năm được chọn
+      selectedYear: selectedYear,
     });
     setDetailOpen(true);
   };
 
-  // Function để mở Export Excel Modal
   const openExportModal = (staff) => {
     setSelectedStaff({
       ma_nhan_vien: staff.ma_nhan_vien,
@@ -274,44 +257,40 @@ const TableKeToan = () => {
     setExportOpen(true);
   };
 
-  // Helper function để get trạng thái chấm KPI từ Map
   const getKPIStatus = (ma_nhan_vien) => {
     const status = kpiStatusMap.get(ma_nhan_vien);
     if (status) {
       return status;
     }
 
-    // Default nếu chưa có trong map
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1;
 
-    let targetMonth;
+    let targetQuarter;
     if (selectedYear > currentDate.getFullYear()) {
-      targetMonth = 1;
+      targetQuarter = 1;
     } else if (selectedYear === currentDate.getFullYear()) {
-      targetMonth = currentMonth;
+      targetQuarter = checkKPIService.getQuarterFromMonth(currentMonth);
     } else {
-      targetMonth = 12;
+      targetQuarter = 4;
     }
 
     return {
       status: "pending",
-      monthYear: `${targetMonth}/${selectedYear}`,
+      quarterYear: `Q${targetQuarter}/${selectedYear}`,
     };
   };
 
-  // Helper function để get tỷ trọng năm từ Map
   const getYearlyWeight = (ma_nhan_vien) => {
     return (
       yearlyWeightMap.get(ma_nhan_vien) || {
         averageWeight: null,
-        monthCount: 0,
-        months: [],
+        quarterCount: 0,
+        quarters: [],
       }
     );
   };
 
-  // Helper function để xác định trạng thái năm
   const getYearStatus = () => {
     const currentYear = new Date().getFullYear();
     if (selectedYear > currentYear) return "future";
@@ -326,7 +305,6 @@ const TableKeToan = () => {
       {/* Header Card */}
       <div className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-md">
         <div className="grid gap-4 p-5 md:p-6 md:grid-cols-2 md:items-center">
-          {/* Left: Title + meta */}
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 bg-clip-text text-transparent">
@@ -370,7 +348,6 @@ const TableKeToan = () => {
             </p>
           </div>
 
-          {/* Right: Actions */}
           <div className="flex flex-wrap justify-start md:justify-end gap-2">
             {canManageKPI && (
               <>
@@ -405,7 +382,6 @@ const TableKeToan = () => {
       <div className="rounded-2xl border border-slate-200 bg-white shadow-md">
         <div className="overflow-x-auto">
           <table className="min-w-[960px] w-full">
-            {/* Table Header (sticky) */}
             <thead className="sticky top-0 z-10 bg-slate-50/90 backdrop-blur border-b border-slate-200">
               <tr>
                 {[
@@ -429,7 +405,6 @@ const TableKeToan = () => {
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {/* Loading Skeleton */}
               {loading &&
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={`skeleton-${i}`} className="animate-pulse">
@@ -454,7 +429,6 @@ const TableKeToan = () => {
                   </tr>
                 ))}
 
-              {/* Data Rows */}
               {!loading &&
                 data.length > 0 &&
                 data.map((item, index) => {
@@ -466,7 +440,6 @@ const TableKeToan = () => {
                       key={item._id}
                       className="odd:bg-white even:bg-slate-50 hover:bg-blue-50/60 transition-colors"
                     >
-                      {/* Mã NV */}
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-bold grid place-items-center">
@@ -478,7 +451,6 @@ const TableKeToan = () => {
                         </div>
                       </td>
 
-                      {/* Họ tên */}
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-white font-bold text-sm grid place-items-center">
@@ -490,29 +462,26 @@ const TableKeToan = () => {
                         </div>
                       </td>
 
-                      {/* Bộ phận */}
                       <td className="px-5 py-3">
                         <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
                           {item.don_vi}
                         </span>
                       </td>
 
-                      {/* Trạng thái KPI */}
                       <td className="px-5 py-3 text-center">
                         {kpiStatus.status === "completed" ? (
                           <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-sm font-semibold text-emerald-700">
                             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                            Đã chấm {kpiStatus.monthYear} ✅
+                            Đã chấm {kpiStatus.quarterYear} ✅
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1.5 text-sm font-semibold text-amber-700">
                             <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                            Chưa chấm {kpiStatus.monthYear} ⏳
+                            Chưa chấm {kpiStatus.quarterYear} ⏳
                           </span>
                         )}
                       </td>
 
-                      {/* Tỷ trọng */}
                       <td className="px-5 py-3 text-center">
                         {yearlyWeight.averageWeight !== null ? (
                           <div className="inline-flex flex-col items-center gap-1">
@@ -532,14 +501,14 @@ const TableKeToan = () => {
                               ]
                                 .filter(Boolean)
                                 .join(" ")}
-                              title={`Các tháng đã chấm: ${yearlyWeight.months.join(
-                                ", "
+                              title={`Các quý đã chấm: Q${yearlyWeight.quarters.join(
+                                ", Q"
                               )}`}
                             >
                               {yearlyWeight.averageWeight}%
                             </span>
                             <span className="text-xs text-slate-500">
-                              ({yearlyWeight.monthCount} tháng)
+                              ({yearlyWeight.quarterCount} quý)
                             </span>
                           </div>
                         ) : (
@@ -551,7 +520,6 @@ const TableKeToan = () => {
                         )}
                       </td>
 
-                      {/* Thao tác */}
                       <td className="px-5 py-3">
                         <div className="flex flex-wrap items-center justify-center gap-2">
                           <button
@@ -581,7 +549,6 @@ const TableKeToan = () => {
                   );
                 })}
 
-              {/* Empty State */}
               {!loading && data.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-5 py-16">

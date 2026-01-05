@@ -16,7 +16,7 @@ const mapFormToEditable = (rec) =>
       String(it?.don_vi_tinh || "").includes("%") ||
       ["F1", "F2"].includes(String(it?.ky_hieu || "").toUpperCase());
 
-    const so_loi_default = isPercentRow ? "100" : "0"; // Mặc định 100% cho %, 0 cho còn lại
+    const so_loi_default = isPercentRow ? "100" : "0";
 
     // TÍNH NV đánh giá dựa trên da_thuc_hien
     const nv_danh_gia_calc = calculateNVDanhGia({
@@ -43,18 +43,18 @@ const mapFormToEditable = (rec) =>
       da_thuc_hien,
       ke_hoach_quy: it?.ke_hoach_quy ?? "",
       chu_ki: it?.chu_ki ?? "",
-      nv_danh_gia: nv_danh_gia_calc, // dựa trên da_thuc_hien
-      nv_danh_gia_goc: it?.ty_trong ?? 0, // giá trị gốc
+      nv_danh_gia: nv_danh_gia_calc,
+      nv_danh_gia_goc: it?.ty_trong ?? 0,
       cac_do_luong: it?.cac_do_luong ?? "",
       bp_theo_doi: it?.bp_theo_doi ?? "",
-      so_loi: so_loi_default, // CBQL đánh giá - mặc định theo đơn vị tính
-      ty_trong_cuoi: ty_trong_cuoi_calc, // tỷ trọng cuối dựa trên CBQL đánh giá
-      ty_trong_cuoi_goc: it?.ty_trong ?? 0, // giá trị gốc cho ty_trong_cuoi
-      noi_dung_loi: it?.noi_dung_loi ?? "", // Field mới: Nội dung lỗi
+      so_loi: so_loi_default,
+      ty_trong_cuoi: ty_trong_cuoi_calc,
+      ty_trong_cuoi_goc: it?.ty_trong ?? 0,
+      noi_dung_loi: it?.noi_dung_loi ?? "",
     };
   });
 
-// Function tính ty_trong_cuoi dựa trên CBQL đánh giá - LOGIC GIỐNG NV đánh giá
+// Function tính ty_trong_cuoi dựa trên CBQL đánh giá
 const calculateTyTrongCuoi = ({ cbqlDanhGia, tyTrong, donViTinh, kyHieu }) => {
   const w = Number(tyTrong || 0);
   const cbql = Number(cbqlDanhGia || 0);
@@ -68,16 +68,12 @@ const calculateTyTrongCuoi = ({ cbqlDanhGia, tyTrong, donViTinh, kyHieu }) => {
     .includes("lỗi");
 
   if (isErrorRow) {
-    // Với hàng "Lỗi": logic trừ điểm dựa trên số lỗi trong CBQL đánh giá
-    if (cbql === 0) return w; // 0 lỗi = giữ nguyên tỷ trọng gốc
+    if (cbql === 0) return w;
 
-    // Logic trừ điểm theo số lỗi
     if (w >= 1 && w <= 9) {
-      // Tỷ trọng 1-9%: mỗi lỗi trừ 1%
       const deduction = cbql * 1;
       return Math.max(0, w - deduction);
     } else if (w >= 10) {
-      // Tỷ trọng ≥10%: mỗi lỗi trừ một nửa tỷ trọng
       const deductionPerError = w / 2;
       const totalDeduction = cbql * deductionPerError;
       return Math.max(0, w - totalDeduction);
@@ -85,18 +81,15 @@ const calculateTyTrongCuoi = ({ cbqlDanhGia, tyTrong, donViTinh, kyHieu }) => {
 
     return w;
   } else if (isPercentRow) {
-    // Với hàng %, tính theo % CBQL đánh giá
-    const pct = Math.max(0, Math.min(100, cbql)); // clamp 0..100
+    const pct = Math.max(0, Math.min(100, cbql));
     return Math.round(((w * pct) / 100) * 100) / 100;
   }
 
-  // Các hàng khác: giữ nguyên logic cũ hoặc tỷ lệ theo %
-  const pct = Math.max(0, Math.min(100, cbql)); // clamp 0..100
+  const pct = Math.max(0, Math.min(100, cbql));
   return Math.round(((w * pct) / 100) * 100) / 100;
 };
 
-// Function tính NV đánh giá - LOGIC MỚI: trừ từ giá trị gốc
-// NEW: tính NV đánh giá theo % đã thực hiện (chỉ áp cho hàng % như F1/F2)
+// Function tính NV đánh giá
 const calculateNVDanhGia = ({ daThucHien, tyTrong, donViTinh, kyHieu }) => {
   const w = Number(tyTrong || 0);
   const th = Number(daThucHien || 0);
@@ -106,16 +99,12 @@ const calculateNVDanhGia = ({ daThucHien, tyTrong, donViTinh, kyHieu }) => {
     ["F1", "F2"].includes(String(kyHieu || "").toUpperCase());
 
   if (!isPercentRow) {
-    // Với hàng "Lỗi": áp dụng logic trừ điểm dựa trên đã thực hiện
-    if (th === 0) return w; // 0 lỗi = giữ nguyên tỷ trọng gốc
+    if (th === 0) return w;
 
-    // Logic trừ điểm theo số lỗi thực hiện
     if (w >= 1 && w <= 9) {
-      // Tỷ trọng 1-9%: mỗi lỗi trừ 1%
       const deduction = th * 1;
       return Math.max(0, w - deduction);
     } else if (w >= 10) {
-      // Tỷ trọng ≥10%: mỗi lỗi trừ một nửa tỷ trọng
       const deductionPerError = w / 2;
       const totalDeduction = th * deductionPerError;
       return Math.max(0, w - totalDeduction);
@@ -124,8 +113,7 @@ const calculateNVDanhGia = ({ daThucHien, tyTrong, donViTinh, kyHieu }) => {
     return w;
   }
 
-  // Với hàng %, tính theo % thực hiện
-  const pct = Math.max(0, Math.min(100, th)); // clamp 0..100
+  const pct = Math.max(0, Math.min(100, th));
   return Math.round(((w * pct) / 100) * 100) / 100;
 };
 
@@ -138,21 +126,20 @@ const pickNewestIndex = (arr) => {
       b = arr[i];
     const an = Number(a?.nam || 0),
       bn = Number(b?.nam || 0);
-    const at = Number(a?.thang || 0),
-      bt = Number(b?.thang || 0);
-    if (bn > an || (bn === an && bt > at)) best = i;
+    const aq = Number(a?.quy || 0),
+      bq = Number(b?.quy || 0);
+    if (bn > an || (bn === an && bq > aq)) best = i;
   }
   return best;
 };
 
-// Unwrap mọi dạng response từ service
+// Unwrap response
 const unwrapForms = (res) => {
   console.log("Raw response từ API:", res);
 
   if (Array.isArray(res)) return res;
   if (res && Array.isArray(res.data)) return res.data;
   if (res && res.success === false) {
-    // ném lỗi để UI hiển thị message của BE
     const err = new Error(res.message || "Không tìm thấy Form KPI");
     err._isBackendMsg = true;
     throw err;
@@ -162,18 +149,26 @@ const unwrapForms = (res) => {
   return [];
 };
 
-const CheckKPISimpleModal = ({ onClose, onSaved }) => {
+const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
   const [codeInput, setCodeInput] = useState("");
   const [finding, setFinding] = useState(false);
   const [findError, setFindError] = useState("");
 
-  const [formRecord, setFormRecord] = useState(null); // 1 Form KPI
-  const [formKpis, setFormKpis] = useState([]); // KPI để nhập lỗi
-  const [monthInput, setMonthInput] = useState(new Date().getMonth() + 1);
+  const [formRecord, setFormRecord] = useState(null);
+  const [formKpis, setFormKpis] = useState([]);
 
-  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  // ĐỔI: Sử dụng Quý thay vì Tháng
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth() + 1;
+  const currentQuarter = checkKPIService.getQuarterFromMonth(currentMonth);
+  const [quarterInput, setQuarterInput] = useState(currentQuarter);
 
-  // Tính toán tổng điểm cuối - CẬP NHẬT MỚI: dựa trên ty_trong_cuoi thay vì điểm trừ
+  const currentYear = useMemo(
+    () => selectedYear || new Date().getFullYear(),
+    [selectedYear]
+  );
+
+  // Tính toán tổng điểm cuối
   const finalScore = useMemo(() => {
     let totalScore = 0;
 
@@ -193,15 +188,15 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
     }
     setFinding(true);
     try {
-      // 1) thử lấy đúng tháng/năm đang chọn
+      // ĐỔI: Tìm theo quý thay vì tháng
       let list = await formkpistaffService.getAllFormKPI({
         ma_nhan_vien: code,
-        thang: monthInput,
+        quy: quarterInput,
         nam: currentYear,
       });
       let arr = unwrapForms(list);
 
-      // 2) nếu không có -> fallback: lấy tất cả theo mã NV rồi chọn bản mới nhất
+      // Nếu không có -> fallback: lấy tất cả theo mã NV
       if (!arr.length) {
         list = await formkpistaffService.getAllFormKPI({ ma_nhan_vien: code });
         arr = unwrapForms(list);
@@ -214,18 +209,15 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
         return;
       }
 
-      // chọn bản mới nhất
+      // Chọn bản mới nhất theo quý
       arr.sort((a, b) => {
         const dn = Number(b?.nam || 0) - Number(a?.nam || 0);
-        return dn !== 0 ? dn : Number(b?.thang || 0) - Number(a?.thang || 0);
+        return dn !== 0 ? dn : Number(b?.quy || 0) - Number(a?.quy || 0);
       });
       const rec = arr[pickNewestIndex(arr)];
 
-      // DEBUG: Kiểm tra cấu trúc dữ liệu
       console.log("Form record nhận được:", rec);
       console.log("Form record _id:", rec?._id);
-      console.log("Form record id:", rec?.id);
-      console.log("Tất cả keys trong object:", Object.keys(rec || {}));
       console.log("Form record kpis:", rec?.kpis);
 
       if (!rec._id && !rec.id) {
@@ -237,7 +229,6 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
       setFormKpis(mapFormToEditable(rec));
     } catch (e) {
       console.error(e);
-      // Nếu là message từ BE, ưu tiên hiện ra
       setFindError(e?._isBackendMsg ? e.message : "Có lỗi khi tải Form KPI.");
     } finally {
       setFinding(false);
@@ -250,13 +241,11 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
       const curr = { ...next[i] };
 
       if (field === "da_thuc_hien") {
-        // clamp 0..100 cho hàng %, còn hàng "Lỗi" thì không clamp
         const v = String(value);
         let num = Number(v);
         if (Number.isNaN(num)) num = 0;
         if (num < 0) num = 0;
 
-        // Chỉ clamp 100 cho hàng có đơn vị %
         const isPercentRow =
           String(curr.don_vi_tinh || "").includes("%") ||
           ["F1", "F2"].includes(String(curr.ky_hieu || "").toUpperCase());
@@ -265,7 +254,6 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
 
         curr.da_thuc_hien = String(num);
 
-        // Tính lại NV đánh giá từ da_thuc_hien
         curr.nv_danh_gia = calculateNVDanhGia({
           daThucHien: num,
           tyTrong: curr.ty_trong,
@@ -273,13 +261,11 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
           kyHieu: curr.ky_hieu,
         });
       } else if (field === "cbql_danh_gia") {
-        // Cập nhật CBQL đánh giá
         const v = String(value);
         let num = Number(v);
         if (Number.isNaN(num)) num = 0;
         if (num < 0) num = 0;
 
-        // Chỉ clamp 100 cho hàng có đơn vị %
         const isPercentRow =
           String(curr.don_vi_tinh || "").includes("%") ||
           ["F1", "F2"].includes(String(curr.ky_hieu || "").toUpperCase());
@@ -288,7 +274,6 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
 
         curr.so_loi = String(num);
 
-        // Tính lại ty_trong_cuoi từ cbql_danh_gia
         curr.ty_trong_cuoi = calculateTyTrongCuoi({
           cbqlDanhGia: num,
           tyTrong: curr.ty_trong,
@@ -296,7 +281,6 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
           kyHieu: curr.ky_hieu,
         });
       } else if (field === "noi_dung_loi") {
-        // Cập nhật nội dung lỗi
         curr.noi_dung_loi = String(value);
       }
 
@@ -311,7 +295,6 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
       return;
     }
 
-    // Sử dụng id hoặc _id tuỳ backend
     const formId = formRecord._id || formRecord.id;
     if (!formId) {
       alert("Form KPI không hợp lệ (thiếu ID). Vui lòng thử tải lại Form KPI.");
@@ -323,17 +306,15 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
       return;
     }
 
-    // Chuẩn hoá tháng 1..12
-    let thang = parseInt(monthInput, 10);
-    if (Number.isNaN(thang) || thang < 1) thang = 1;
-    if (thang > 12) thang = 12;
+    // ĐỔI: Chuẩn hoá quý 1..4 thay vì tháng 1..12
+    let quy = parseInt(quarterInput, 10);
+    if (Number.isNaN(quy) || quy < 1) quy = 1;
+    if (quy > 4) quy = 4;
 
     try {
-      // Chuyển đổi dữ liệu về format mong đợi của backend - CẬP NHẬT: đảm bảo tất cả fields có giá trị
       const kpisToSave = formKpis.map((kpi, index) => {
-        // Đảm bảo tất cả fields có giá trị mặc định
         const kpiData = {
-          _id: kpi._id || undefined, // Giữ _id nếu có
+          _id: kpi._id || undefined,
           kpi: String(kpi.kpi || ""),
           ty_trong: Number(kpi.ty_trong || 0),
           ky_hieu: String(kpi.ky_hieu || ""),
@@ -344,35 +325,34 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
           nv_danh_gia: Number(kpi.nv_danh_gia || 0),
           cac_do_luong: String(kpi.cac_do_luong || ""),
           bp_theo_doi: String(kpi.bp_theo_doi || ""),
-          so_loi: String(kpi.so_loi || "0"), // CBQL đánh giá
-          ty_trong_cuoi: Number(kpi.ty_trong_cuoi || 0), // Tỷ trọng cuối
-          noi_dung_loi: String(kpi.noi_dung_loi || ""), // Nội dung lỗi
+          so_loi: String(kpi.so_loi || "0"),
+          ty_trong_cuoi: Number(kpi.ty_trong_cuoi || 0),
+          noi_dung_loi: String(kpi.noi_dung_loi || ""),
         };
 
         console.log(`KPI ${index + 1} data:`, kpiData);
         return kpiData;
       });
 
-      // Log dữ liệu trước khi gửi
       console.log("=== DATA GỬI ĐI ===");
       console.log("Form ID:", formId);
-      console.log("Tháng:", thang);
+      console.log("Quý:", quy);
       console.log("Năm:", currentYear);
       console.log("Final Score:", finalScore);
       console.log("KPIs to save:", kpisToSave);
       console.log("Ma nhan vien:", formRecord.ma_nhan_vien);
 
+      // ĐỔI: Gửi theo quý (ty_trong_quy) thay vì tháng (ty_trong_thang)
       const payloadData = {
         form_kpi_id: formId,
-        thang,
+        quy,
         nam: currentYear,
         danh_sach_check: kpisToSave,
-        ty_trong_thang: Number(finalScore || 0),
+        ty_trong_quy: Number(finalScore || 0),
       };
 
       console.log("=== PAYLOAD CUỐI CÙNG ===", payloadData);
 
-      // Lưu qua checkform (ưu tiên theo form_kpi_id)
       let created = null;
       try {
         console.log("Thử createCheckKPI với form_kpi_id...");
@@ -381,15 +361,14 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
       } catch (error1) {
         console.log("createCheckKPI thất bại, error:", error1);
 
-        // Fallback: nếu BE không có route create theo form_kpi_id
         try {
           console.log("Thử createCheckKPIFromStaff với ma_nhan_vien...");
           const fallbackPayload = {
             ma_nhan_vien: formRecord.ma_nhan_vien,
-            thang,
+            quy,
             nam: currentYear,
             danh_sach_check: kpisToSave,
-            ty_trong_thang: Number(finalScore || 0),
+            ty_trong_quy: Number(finalScore || 0),
           };
           console.log("Fallback payload:", fallbackPayload);
 
@@ -399,7 +378,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
           console.log("createCheckKPIFromStaff thành công:", created);
         } catch (error2) {
           console.log("createCheckKPIFromStaff cũng thất bại:", error2);
-          throw error1; // Ném lỗi đầu tiên
+          throw error1;
         }
       }
 
@@ -412,7 +391,6 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
       console.error("Error message:", e?.message);
       console.error("Error response:", e?.response?.data);
 
-      // Hiển thị thông tin lỗi chi tiết hơn
       let errorMessage = "Vui lòng thử lại.";
       if (e?.response?.data?.message) {
         errorMessage = e.response.data.message;
@@ -422,6 +400,12 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
 
       toast.error(`Lưu thất bại: ${errorMessage}`, { autoClose: 3000 });
     }
+  };
+
+  // Helper: Lấy tháng từ quý để hiển thị thông tin
+  const getQuarterMonths = (quy) => {
+    const months = checkKPIService.getMonthsFromQuarter(quy);
+    return `Tháng ${months.start} - ${months.end}`;
   };
 
   return (
@@ -434,7 +418,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
       {/* Overlay */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm"></div>
 
-      {/* Panel wrapper (đổi max-width theo formRecord) */}
+      {/* Panel wrapper */}
       <div
         className={[
           "relative z-10 mx-auto my-8 w-full px-4 sm:px-6",
@@ -449,7 +433,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
               id="kpi-review-title"
               className="text-lg sm:text-xl font-semibold text-slate-800 tracking-tight"
             >
-              Đánh giá KPI
+              Đánh giá KPI theo Quý
             </h3>
             <button
               type="button"
@@ -460,7 +444,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
             </button>
           </div>
 
-          {/* Body (scroll ở body) */}
+          {/* Body */}
           <div className="flex-1 overflow-y-auto">
             <div className="px-6 py-6 space-y-6">
               {/* Tìm mã NV */}
@@ -484,7 +468,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
                 <p className="text-sm text-rose-600">{findError}</p>
               )}
 
-              {/* Thông tin nhân viên + tháng/năm + bảng KPI */}
+              {/* Thông tin nhân viên + quý/năm + bảng KPI */}
               {formRecord && (
                 <div className="space-y-4">
                   {/* Info nhân viên */}
@@ -505,37 +489,31 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
                     </span>
                   </div>
 
-                  {/* Tháng / Năm */}
+                  {/* Quý / Năm */}
                   <div className="flex flex-wrap items-center gap-3">
-                    <label className="text-sm text-slate-700">
-                      Tháng chấm:
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={12}
-                      value={monthInput}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        if (!Number.isNaN(v)) {
-                          const clamped = Math.min(
-                            12,
-                            Math.max(1, Math.trunc(v))
-                          );
-                          setMonthInput(clamped);
-                        }
-                      }}
-                      className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
-                    />
+                    <label className="text-sm text-slate-700">Quý chấm:</label>
+                    <select
+                      value={quarterInput}
+                      onChange={(e) => setQuarterInput(Number(e.target.value))}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                    >
+                      <option value={1}>Quý 1 (T1-T3)</option>
+                      <option value={2}>Quý 2 (T4-T6)</option>
+                      <option value={3}>Quý 3 (T7-T9)</option>
+                      <option value={4}>Quý 4 (T10-T12)</option>
+                    </select>
                     <span className="text-sm text-slate-600">
                       Năm:{" "}
                       <b className="font-semibold text-slate-800">
                         {currentYear}
                       </b>
                     </span>
+                    <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-700 ring-1 ring-inset ring-blue-200">
+                      {getQuarterMonths(quarterInput)}
+                    </span>
                   </div>
 
-                  {/* Thông tin tính điểm (chỉ hiển thị điểm cuối) */}
+                  {/* Thông tin tính điểm */}
                   <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 p-4 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-4">
                       <div className="flex flex-wrap items-center gap-6 text-sm">
@@ -814,7 +792,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved }) => {
                 </span>
                 <span className="hidden md:inline">•</span>
                 <span className="hidden md:inline">
-                  Tháng <strong className="text-slate-800">{monthInput}</strong>{" "}
+                  Quý <strong className="text-slate-800">{quarterInput}</strong>{" "}
                   / {currentYear}
                 </span>
               </div>

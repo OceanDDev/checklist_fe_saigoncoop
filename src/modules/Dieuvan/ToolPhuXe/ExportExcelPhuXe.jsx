@@ -23,27 +23,31 @@ const ExportExcelPhuXe = ({
         return;
       }
 
-      // Lọc dữ liệu có đủ thông tin cần thiết
+      // ✅ Sửa lại điều kiện: Chỉ cần có thoi_gian_di là cho phép xuất
       const dataToExport = filteredData
-        .filter((item) => item.dieu_van_xac_nhan && item.thoi_gian_xong_chuyen)
+        .filter((item) => item.thoi_gian_di)
         .map((item, index) => {
-          const thoiGianDi = item.thoi_gian_di
-            ? dayjs(item.thoi_gian_di).tz(VN_TIMEZONE).format("HH:mm:ss")
-            : "";
+          // Format thời gian đi
+          const thoiGianDi = dayjs(item.thoi_gian_di)
+            .tz(VN_TIMEZONE)
+            .format("HH:mm:ss");
 
+          // Format thời gian xong (nếu có)
           const thoiGianXongChuyen = item.thoi_gian_xong_chuyen
-            ? dayjs(item.thoi_gian_xong_chuyen).tz(VN_TIMEZONE).format("HH:mm:ss")
+            ? dayjs(item.thoi_gian_xong_chuyen)
+                .tz(VN_TIMEZONE)
+                .format("HH:mm:ss")
             : "";
 
-          const ngay = item.thoi_gian_xong_chuyen
-            ? dayjs(item.thoi_gian_xong_chuyen).tz(VN_TIMEZONE).format("DD/MM/YYYY")
-            : "";
+          // Ưu tiên lấy ngày từ thoi_gian_xong_chuyen, nếu không có thì lấy từ thoi_gian_di
+          const ngayHienTai = item.thoi_gian_xong_chuyen || item.thoi_gian_di;
+          const ngay = dayjs(ngayHienTai).tz(VN_TIMEZONE).format("DD/MM/YYYY");
 
           return {
             stt: index + 1,
             hoTen: item.dieu_van_xac_nhan || "",
             thoiGianDi: thoiGianDi,
-            maCuaHang: item.ma_cua_hang || "", // ✅ Thêm Mã cửa hàng vào đây
+            maCuaHang: item.ma_cua_hang || "",
             diaDiemDen: item.ten_cua_hang || "",
             thoiGianXongChuyen: thoiGianXongChuyen,
             ngay: ngay,
@@ -51,21 +55,26 @@ const ExportExcelPhuXe = ({
         });
 
       if (dataToExport.length === 0) {
-        message.warning("Không có dữ liệu hợp lệ để xuất!");
+        message.warning(
+          "Không có dữ liệu hợp lệ (thiếu thời gian đi) để xuất!"
+        );
         return;
       }
 
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Danh Sách Phụ Xe");
 
-      // Định nghĩa lại các cột (Thêm cột Mã Cửa Hàng)
       worksheet.columns = [
         { header: "STT", key: "stt", width: 8 },
         { header: "Họ Tên", key: "hoTen", width: 25 },
         { header: "Thời Gian Đi", key: "thoiGianDi", width: 18 },
-        { header: "Mã Cửa Hàng", key: "maCuaHang", width: 15 }, // ✅ Cột mới
+        { header: "Mã Cửa Hàng", key: "maCuaHang", width: 15 },
         { header: "Địa Điểm Đến", key: "diaDiemDen", width: 35 },
-        { header: "Thời Gian Xong Chuyến", key: "thoiGianXongChuyen", width: 25 },
+        {
+          header: "Thời Gian Xong Chuyến",
+          key: "thoiGianXongChuyen",
+          width: 25,
+        },
         { header: "Ngày", key: "ngay", width: 15 },
       ];
 
@@ -86,7 +95,7 @@ const ExportExcelPhuXe = ({
         };
       });
 
-      // Thêm dữ liệu và style cho từng dòng
+      // Thêm dữ liệu
       dataToExport.forEach((data) => {
         const row = worksheet.addRow(data);
         row.eachCell((cell, colNumber) => {
@@ -97,7 +106,6 @@ const ExportExcelPhuXe = ({
             right: { style: "thin" },
           };
 
-          // Căn giữa cột STT (1), Mã Cửa Hàng (4) và Ngày (7)
           if ([1, 4, 7].includes(colNumber)) {
             cell.alignment = { vertical: "middle", horizontal: "center" };
           } else {
@@ -115,7 +123,9 @@ const ExportExcelPhuXe = ({
 
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `${fileName}_${dayjs().tz(VN_TIMEZONE).format("YYYYMMDD_HHmmss")}.xlsx`;
+      link.download = `${fileName}_${dayjs()
+        .tz(VN_TIMEZONE)
+        .format("YYYYMMDD_HHmmss")}.xlsx`;
       link.click();
       URL.revokeObjectURL(link.href);
 

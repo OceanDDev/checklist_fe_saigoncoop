@@ -34,6 +34,12 @@ const UserInfoFormBDH = ({
 
   const isRestrictedForm = () => {
     if (!formTitle) return false;
+
+    // ✅ Loại trừ form XUẤT HÀNG (HT)
+    if (formTitle.includes("XUẤT HÀNG (HT)")) {
+      return false;
+    }
+
     return Object.keys(FORM_PERMISSIONS).some((key) => formTitle.includes(key));
   };
 

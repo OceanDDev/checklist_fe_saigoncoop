@@ -11,8 +11,17 @@ import {
   Legend,
   ArcElement,
 } from "chart.js";
-import { Bar } from "react-chartjs-2";
-import { Calendar, RefreshCw, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Bar, Doughnut } from "react-chartjs-2";
+import {
+  Calendar,
+  RefreshCw,
+  X,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+} from "lucide-react";
 
 ChartJS.register(
   CategoryScale,
@@ -58,18 +67,66 @@ const DashboardBDH = () => {
   const [customEndDate, setCustomEndDate] = useState("");
   const [employeeNames, setEmployeeNames] = useState({});
   const [expandedEmployee, setExpandedEmployee] = useState(null);
+  const [selectedView, setSelectedView] = useState("overview"); // ✅ THÊM: Tab view
   const datePickerRef = useRef(null);
+
+  // ✅ THÊM: Badge cho loại quy định
+  const getScheduleBadge = (loai) => {
+    const badges = {
+      ngày: {
+        text: "Hàng ngày",
+        color: "bg-green-500",
+        icon: "📅",
+        desc: "Công việc cần làm mỗi ngày",
+      },
+      tuần: {
+        text: "Hàng tuần",
+        color: "bg-blue-500",
+        icon: "📆",
+        desc: "Công việc theo lịch tuần",
+      },
+      tháng: {
+        text: "Hàng tháng",
+        color: "bg-purple-500",
+        icon: "🗓️",
+        desc: "Công việc theo ngày trong tháng",
+      },
+      "phát sinh": {
+        text: "Phát sinh",
+        color: "bg-orange-500",
+        icon: "⚡",
+        desc: "Công việc xảy ra đột xuất",
+      },
+      phat_sinh: {
+        text: "Phát sinh",
+        color: "bg-orange-500",
+        icon: "⚡",
+        desc: "Công việc xảy ra đột xuất",
+      },
+    };
+    return badges[loai] || null;
+  };
+
+  // ✅ THÊM: Format ngày trong tuần
+  const formatWeekDays = (days) => {
+    const dayNames = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+    return days.map((d) => dayNames[d]).join(", ");
+  };
 
   // ✅ Hàm kiểm tra công việc có áp dụng cho ngày cụ thể không
   const shouldShowOnDate = (quy_dinh, checkDate) => {
-    if (!quy_dinh) return true; // Không có quy định → hiển thị mọi ngày
+    if (!quy_dinh) return true;
 
     const date = new Date(checkDate);
-    const dayOfWeek = date.getDay(); // 0=CN, 1=T2, ..., 6=T7
-    const dayOfMonth = date.getDate(); // 1-31
+    const dayOfWeek = date.getDay();
+    const dayOfMonth = date.getDate();
 
-    if (quy_dinh.loai === "ngày") {
-      return true; // Hàng ngày
+    if (
+      quy_dinh.loai === "ngày" ||
+      quy_dinh.loai === "phát sinh" ||
+      quy_dinh.loai === "phat_sinh"
+    ) {
+      return true;
     }
 
     if (quy_dinh.loai === "tuần") {
@@ -182,10 +239,9 @@ const DashboardBDH = () => {
     }
   };
 
-  // ✅ Filter data by date range (keep all checklists for counting)
+  // ✅ Filter data by date range
   const filteredData = useMemo(() => {
     const { start, end } = getDateRange();
-    
     return checklists.filter((item) => {
       const itemDate = new Date(
         item.ngay_tao || item.thoi_gian_tao || item.createdAt
@@ -210,7 +266,144 @@ const DashboardBDH = () => {
     return "Khác";
   };
 
-  // ✅ Calculate employee statistics (tách biệt công việc khác)
+  // ✅ THÊM: Thống kê theo loại quy định
+  const scheduleTypeStats = useMemo(() => {
+    const stats = {
+      ngày: { total: 0, completed: 0 },
+      tuần: { total: 0, completed: 0 },
+      tháng: { total: 0, completed: 0 },
+      phát_sinh: { total: 0, completed: 0 },
+    };
+
+    filteredData.forEach((checklist) => {
+      const checklistDate = new Date(
+        checklist.thoi_gian_tao || checklist.ngay_tao || checklist.createdAt
+      );
+
+      if (!isOffDuty(checklist)) {
+        checklist.cac_muc?.forEach((muc) => {
+          muc.cong_viec?.forEach((job) => {
+            if (shouldShowOnDate(job.quy_dinh, checklistDate)) {
+              const loai =
+                job.quy_dinh?.loai === "phat_sinh"
+                  ? "phát_sinh"
+                  : job.quy_dinh?.loai || "ngày";
+              if (stats[loai]) {
+                stats[loai].total++;
+                if (job.da_chon) stats[loai].completed++;
+              }
+            }
+          });
+        });
+      }
+    });
+
+    return stats;
+  }, [filteredData]);
+
+  // ✅ THÊM: Chi tiết công việc theo quy định
+  const jobsByScheduleType = useMemo(() => {
+    const jobs = {
+      ngày: [],
+      tuần: [],
+      tháng: [],
+      phát_sinh: [],
+    };
+
+    filteredData.forEach((checklist) => {
+      const empName =
+        employeeNames[checklist.ma_nhan_vien] || `NV ${checklist.ma_nhan_vien}`;
+      const checklistDate = new Date(
+        checklist.thoi_gian_tao || checklist.ngay_tao || checklist.createdAt
+      );
+
+      if (!isOffDuty(checklist)) {
+        checklist.cac_muc?.forEach((muc) => {
+          muc.cong_viec?.forEach((job) => {
+            if (shouldShowOnDate(job.quy_dinh, checklistDate)) {
+              const loai =
+                job.quy_dinh?.loai === "phat_sinh"
+                  ? "phát_sinh"
+                  : job.quy_dinh?.loai || "ngày";
+              if (jobs[loai]) {
+                jobs[loai].push({
+                  ...job,
+                  employeeName: empName,
+                  section: muc.ten_muc,
+                  date: checklistDate,
+                  quy_dinh: job.quy_dinh,
+                });
+              }
+            }
+          });
+        });
+      }
+    });
+
+    return jobs;
+  }, [filteredData, employeeNames]);
+
+  // ✅ THÊM: Thống kê điểm danh hôm nay
+  const employeeCheckStatus = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const status = {};
+
+    Object.entries(TEAM_CONFIG).forEach(([teamName, teamData]) => {
+      status[teamName] = {};
+      teamData.employees.forEach((empId) => {
+        status[teamName][empId] = {
+          name: employeeNames[empId] || `NV ${empId}`,
+          hasChecked: false,
+          checkTime: null,
+          totalJobs: 0,
+          completedJobs: 0,
+          status: "Chưa check",
+        };
+      });
+    });
+
+    checklists.forEach((checklist) => {
+      const checkDate = new Date(
+        checklist.thoi_gian_tao || checklist.ngay_tao || checklist.createdAt
+      );
+      checkDate.setHours(0, 0, 0, 0);
+
+      if (checkDate.getTime() === today.getTime()) {
+        const teamName = Object.keys(TEAM_CONFIG).find((team) =>
+          TEAM_CONFIG[team].employees.includes(checklist.ma_nhan_vien)
+        );
+
+        if (teamName && status[teamName][checklist.ma_nhan_vien]) {
+          status[teamName][checklist.ma_nhan_vien].hasChecked = true;
+          status[teamName][checklist.ma_nhan_vien].checkTime =
+            checklist.thoi_gian_tao ||
+            checklist.ngay_tao ||
+            checklist.createdAt;
+          status[teamName][checklist.ma_nhan_vien].status =
+            checklist.status || "Đi làm";
+
+          if (!isOffDuty(checklist)) {
+            checklist.cac_muc?.forEach((muc) => {
+              muc.cong_viec?.forEach((job) => {
+                if (shouldShowOnDate(job.quy_dinh, checkDate)) {
+                  status[teamName][checklist.ma_nhan_vien].totalJobs++;
+                  if (job.da_chon) {
+                    status[teamName][checklist.ma_nhan_vien].completedJobs++;
+                  }
+                }
+              });
+            });
+          }
+        }
+      }
+    });
+
+    return status;
+  }, [checklists, employeeNames]);
+
+  // ✅ Calculate employee statistics
   const employeeStats = useMemo(() => {
     const stats = {};
 
@@ -232,12 +425,10 @@ const DashboardBDH = () => {
             checklist.ngay_tao || checklist.thoi_gian_tao || checklist.createdAt
           );
 
-          // ✅ Chỉ tính công việc chính nếu KHÔNG phải nghỉ
           if (!isOffDuty(checklist)) {
             checklist.cac_muc?.forEach((muc) => {
               const sectionName = muc.ten_muc || "Không có tiêu đề";
               muc.cong_viec?.forEach((job) => {
-                // ✅ Chỉ tính công việc nếu nó áp dụng cho ngày checklist được tạo
                 if (shouldShowOnDate(job.quy_dinh, checklistDate)) {
                   totalJobs++;
                   if (job.da_chon) {
@@ -250,7 +441,6 @@ const DashboardBDH = () => {
               });
             });
 
-            // ✅ Công việc khác - KHÔNG tính vào phần trăm hoàn thành (chỉ khi không nghỉ)
             if (
               checklist.cong_viec_khac &&
               Array.isArray(checklist.cong_viec_khac)
@@ -271,54 +461,19 @@ const DashboardBDH = () => {
         stats[teamName][empId] = {
           name: employeeNames[empId] || `NV ${empId}`,
           checklistCount: empChecklists.length,
-          totalJobs, // Chỉ công việc chính
-          completedJobs, // Chỉ công việc chính
+          totalJobs,
+          completedJobs,
           incompleteJobs: totalJobs - completedJobs,
           completionRate:
             totalJobs > 0 ? ((completedJobs / totalJobs) * 100).toFixed(1) : 0,
           incompleteBySection,
-          otherJobs: otherJobsList, // Tách riêng
+          otherJobs: otherJobsList,
         };
       });
     });
 
     return stats;
   }, [filteredData, employeeNames]);
-
-  // ✅ Chart cho công việc khác
-  const getOtherJobsChart = () => {
-    const labels = [];
-    const completedData = [];
-    const incompleteData = [];
-
-    Object.values(employeeStats).forEach((employees) => {
-      Object.values(employees).forEach((emp) => {
-        if (emp.otherJobs && emp.otherJobs.length > 0) {
-          labels.push(emp.name);
-          const completed = emp.otherJobs.filter((j) => j.da_chon).length;
-          const incomplete = emp.otherJobs.length - completed;
-          completedData.push(completed);
-          incompleteData.push(incomplete);
-        }
-      });
-    });
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: "Đã hoàn thành",
-          data: completedData,
-          backgroundColor: "rgba(139, 92, 246, 0.8)",
-        },
-        {
-          label: "Chưa hoàn thành",
-          data: incompleteData,
-          backgroundColor: "rgba(236, 72, 153, 0.8)",
-        },
-      ],
-    };
-  };
 
   // ✅ Tổng hợp công việc khác
   const otherJobsStats = useMemo(() => {
@@ -342,7 +497,7 @@ const DashboardBDH = () => {
     };
   }, [employeeStats]);
 
-  // Chart data generators
+  // Chart data generators (GIỮ NGUYÊN TẤT CẢ CÁC HÀM CHART GỐC)
   const getEmployeeChecklistChart = () => {
     const labels = [];
     const data = [];
@@ -359,11 +514,7 @@ const DashboardBDH = () => {
     return {
       labels,
       datasets: [
-        {
-          label: "Số lượng checklist",
-          data,
-          backgroundColor: colors,
-        },
+        { label: "Số lượng checklist", data, backgroundColor: colors },
       ],
     };
   };
@@ -429,6 +580,101 @@ const DashboardBDH = () => {
     };
   };
 
+  const getOtherJobsChart = () => {
+    const labels = [];
+    const completedData = [];
+    const incompleteData = [];
+
+    Object.values(employeeStats).forEach((employees) => {
+      Object.values(employees).forEach((emp) => {
+        if (emp.otherJobs && emp.otherJobs.length > 0) {
+          labels.push(emp.name);
+          const completed = emp.otherJobs.filter((j) => j.da_chon).length;
+          const incomplete = emp.otherJobs.length - completed;
+          completedData.push(completed);
+          incompleteData.push(incomplete);
+        }
+      });
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Đã hoàn thành",
+          data: completedData,
+          backgroundColor: "rgba(139, 92, 246, 0.8)",
+        },
+        {
+          label: "Chưa hoàn thành",
+          data: incompleteData,
+          backgroundColor: "rgba(236, 72, 153, 0.8)",
+        },
+      ],
+    };
+  };
+
+  // ✅ THÊM: Biểu đồ theo loại quy định
+  const getScheduleTypePieChart = () => {
+    const labels = [];
+    const data = [];
+    const colors = [];
+
+    Object.entries(scheduleTypeStats).forEach(([type, stats]) => {
+      if (stats.total > 0) {
+        const badge = getScheduleBadge(type);
+        labels.push(`${badge?.icon || ""} ${badge?.text || type}`);
+        data.push(stats.total);
+
+        const colorMap = {
+          ngày: "rgba(34, 197, 94, 0.8)",
+          tuần: "rgba(59, 130, 246, 0.8)",
+          tháng: "rgba(168, 85, 247, 0.8)",
+          phát_sinh: "rgba(249, 115, 22, 0.8)",
+        };
+        colors.push(colorMap[type]);
+      }
+    });
+
+    return {
+      labels,
+      datasets: [
+        { data, backgroundColor: colors, borderWidth: 2, borderColor: "#fff" },
+      ],
+    };
+  };
+
+  const getScheduleTypeCompletionChart = () => {
+    const labels = [];
+    const completedData = [];
+    const incompleteData = [];
+
+    Object.entries(scheduleTypeStats).forEach(([type, stats]) => {
+      if (stats.total > 0) {
+        const badge = getScheduleBadge(type);
+        labels.push(`${badge?.icon || ""} ${badge?.text || type}`);
+        completedData.push(stats.completed);
+        incompleteData.push(stats.total - stats.completed);
+      }
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Đã hoàn thành",
+          data: completedData,
+          backgroundColor: "rgba(34, 197, 94, 0.8)",
+        },
+        {
+          label: "Chưa hoàn thành",
+          data: incompleteData,
+          backgroundColor: "rgba(239, 68, 68, 0.8)",
+        },
+      ],
+    };
+  };
+
   // Total stats
   const totalStats = useMemo(() => {
     const stats = { total: filteredData.length, byTeam: {} };
@@ -457,7 +703,7 @@ const DashboardBDH = () => {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      {/* Header */}
+      {/* Header - GIỮ NGUYÊN */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-3xl font-bold text-gray-800">
@@ -479,7 +725,41 @@ const DashboardBDH = () => {
           </div>
         )}
 
-        {/* Date Range Controls */}
+        {/* ✅ THÊM: View Tabs */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setSelectedView("overview")}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedView === "overview"
+                ? "bg-blue-600 text-white"
+                : "bg-white text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            📊 Tổng quan
+          </button>
+          <button
+            onClick={() => setSelectedView("schedule")}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedView === "schedule"
+                ? "bg-blue-600 text-white"
+                : "bg-white text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            📅 Theo quy định
+          </button>
+          <button
+            onClick={() => setSelectedView("attendance")}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedView === "attendance"
+                ? "bg-blue-600 text-white"
+                : "bg-white text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            👥 Điểm danh hôm nay
+          </button>
+        </div>
+
+        {/* Date Range Controls - GIỮ NGUYÊN */}
         <div className="flex flex-wrap gap-3 items-center">
           {[7, 30].map((days) => (
             <button
@@ -578,254 +858,683 @@ const DashboardBDH = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl shadow-lg">
-          <div className="text-sm opacity-90 mb-1">Tổng Checklist</div>
-          <div className="text-4xl font-bold">{totalStats.total}</div>
-        </div>
-        {Object.entries(totalStats.byTeam).map(([team, count]) => (
-          <div
-            key={team}
-            className="bg-white p-6 rounded-xl shadow border-l-4"
-            style={{ borderLeftColor: TEAM_CONFIG[team].color }}
-          >
-            <div className="text-sm text-gray-600 mb-1">{team}</div>
-            <div className="text-3xl font-bold text-gray-800">{count}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ✅ Card thống kê công việc khác */}
-      {otherJobsStats.total > 0 && (
-        <div className="bg-gradient-to-br from-purple-500 to-pink-500 text-white p-6 rounded-xl shadow-lg mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm opacity-90 mb-1">✏️ Công Việc Khác</div>
-              <div className="text-4xl font-bold">{otherJobsStats.total}</div>
+      {/* ========== VIEW 1: TỔNG QUAN (Original Dashboard) ========== */}
+      {selectedView === "overview" && (
+        <>
+          {/* Stats Cards - GIỮ NGUYÊN */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl shadow-lg">
+              <div className="text-sm opacity-90 mb-1">Tổng Checklist</div>
+              <div className="text-4xl font-bold">{totalStats.total}</div>
             </div>
-            <div className="text-right">
-              <div className="text-sm opacity-90">Hoàn thành</div>
-              <div className="text-3xl font-bold">
-                {otherJobsStats.completionRate}%
+            {Object.entries(totalStats.byTeam).map(([team, count]) => (
+              <div
+                key={team}
+                className="bg-white p-6 rounded-xl shadow border-l-4"
+                style={{ borderLeftColor: TEAM_CONFIG[team].color }}
+              >
+                <div className="text-sm text-gray-600 mb-1">{team}</div>
+                <div className="text-3xl font-bold text-gray-800">{count}</div>
               </div>
-              <div className="text-xs opacity-75">
-                {otherJobsStats.completed}/{otherJobsStats.total} việc
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Charts */}
-      {filteredData.length > 0 ? (
-        <div className="space-y-6">
-          {/* Row 1: Checklist count and completion rate */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                📊 Số Lượng Checklist
-              </h2>
-              <div style={{ height: "400px" }}>
-                <Bar
-                  data={getEmployeeChecklistChart()}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    indexAxis: "y",
-                    plugins: { legend: { display: false } },
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                📈 Tỷ Lệ Hoàn Thành (Chỉ công việc chính)
-              </h2>
-              <div style={{ height: "400px" }}>
-                <Bar
-                  data={getCompletionRateChart()}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    indexAxis: "y",
-                    scales: {
-                      x: {
-                        stacked: true,
-                        max: 100,
-                        ticks: { callback: (value) => value + "%" },
-                      },
-                      y: { stacked: true },
-                    },
-                  }}
-                />
-              </div>
-            </div>
+            ))}
           </div>
 
-          {/* Row 2: Total jobs */}
-          <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">
-              📋 Tổng Công Việc Chính - So Sánh Hoàn Thành vs Chưa Hoàn Thành
-            </h2>
-            <div style={{ height: "400px" }}>
-              <Bar
-                data={getTotalJobsChart()}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  scales: {
-                    x: { stacked: true },
-                    y: { stacked: true, beginAtZero: true },
-                  },
-                }}
-              />
-            </div>
-          </div>
-
-          {/* ✅ Row 3: Other Jobs Chart */}
+          {/* Card công việc khác - GIỮ NGUYÊN */}
           {otherJobsStats.total > 0 && (
-            <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                ✏️ Biểu Đồ Công Việc Khác
-              </h2>
-              <div style={{ height: "400px" }}>
-                <Bar
-                  data={getOtherJobsChart()}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    indexAxis: "y",
-                    scales: {
-                      x: { stacked: true, beginAtZero: true },
-                      y: { stacked: true },
-                    },
-                    plugins: {
-                      legend: { position: "top" },
-                    },
-                  }}
-                />
+            <div className="bg-gradient-to-br from-purple-500 to-pink-500 text-white p-6 rounded-xl shadow-lg mb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm opacity-90 mb-1">
+                    ✏️ Công Việc Khác
+                  </div>
+                  <div className="text-4xl font-bold">
+                    {otherJobsStats.total}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm opacity-90">Hoàn thành</div>
+                  <div className="text-3xl font-bold">
+                    {otherJobsStats.completionRate}%
+                  </div>
+                  <div className="text-xs opacity-75">
+                    {otherJobsStats.completed}/{otherJobsStats.total} việc
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Row 4: Other Jobs Details */}
-          <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">
-              ✏️ Chi Tiết Công Việc Khác
-            </h2>
-            <div className="space-y-4">
-              {Object.entries(employeeStats).map(([teamName, employees]) => (
-                <div key={teamName}>
-                  <h3
-                    className="text-lg font-semibold mb-3 pb-2 border-b"
-                    style={{ color: TEAM_CONFIG[teamName].color }}
-                  >
-                    {teamName}
-                  </h3>
-                  <div className="space-y-3">
-                    {Object.entries(employees).map(([empId, empData]) => {
-                      const hasOtherJobs =
-                        empData.otherJobs && empData.otherJobs.length > 0;
-                      if (!hasOtherJobs) return null;
-
-                      const isExpanded =
-                        expandedEmployee === `${teamName}-${empId}`;
-
-                      return (
-                        <div
-                          key={empId}
-                          className="border rounded-lg overflow-hidden"
-                        >
-                          <button
-                            onClick={() =>
-                              setExpandedEmployee(
-                                isExpanded ? null : `${teamName}-${empId}`
-                              )
-                            }
-                            className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="font-medium text-gray-800">
-                                {empData.name}
-                              </span>
-                              <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                                {empData.otherJobs.length} công việc
-                              </span>
-                            </div>
-                            {isExpanded ? (
-                              <ChevronUp size={20} />
-                            ) : (
-                              <ChevronDown size={20} />
-                            )}
-                          </button>
-
-                          {isExpanded && (
-                            <div className="p-4 bg-white">
-                              <div className="space-y-2">
-                                {empData.otherJobs.map((job, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
-                                  >
-                                    <div
-                                      className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
-                                        job.da_chon
-                                          ? "bg-green-500"
-                                          : "bg-gray-300"
-                                      }`}
-                                    />
-                                    <div className="flex-1">
-                                      <p className="text-sm text-gray-800">
-                                        {job.noidung}
-                                      </p>
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        {formatDate(job.ngay_tao)}
-                                      </p>
-                                    </div>
-                                    <span
-                                      className={`px-2 py-1 rounded text-xs font-medium ${
-                                        job.da_chon
-                                          ? "bg-green-100 text-green-700"
-                                          : "bg-gray-200 text-gray-600"
-                                      }`}
-                                    >
-                                      {job.da_chon ? "Hoàn thành" : "Chưa làm"}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+          {/* Charts - GIỮ NGUYÊN TẤT CẢ */}
+          {filteredData.length > 0 ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                    📊 Số Lượng Checklist
+                  </h2>
+                  <div style={{ height: "400px" }}>
+                    <Bar
+                      data={getEmployeeChecklistChart()}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: "y",
+                        plugins: { legend: { display: false } },
+                      }}
+                    />
                   </div>
                 </div>
-              ))}
 
-              {Object.values(employeeStats).every((employees) =>
-                Object.values(employees).every(
-                  (emp) => !emp.otherJobs || emp.otherJobs.length === 0
-                )
-              ) && (
-                <div className="text-center py-8 text-gray-500">
-                  <p>Không có công việc khác nào được ghi nhận</p>
+                <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                    📈 Tỷ Lệ Hoàn Thành (Chỉ công việc chính)
+                  </h2>
+                  <div style={{ height: "400px" }}>
+                    <Bar
+                      data={getCompletionRateChart()}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: "y",
+                        scales: {
+                          x: {
+                            stacked: true,
+                            max: 100,
+                            ticks: { callback: (value) => value + "%" },
+                          },
+                          y: { stacked: true },
+                        },
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                  📋 Tổng Công Việc Chính - So Sánh Hoàn Thành vs Chưa Hoàn
+                  Thành
+                </h2>
+                <div style={{ height: "400px" }}>
+                  <Bar
+                    data={getTotalJobsChart()}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true },
+                      },
+                    }}
+                  />
+                </div>
+              </div>
+
+              {otherJobsStats.total > 0 && (
+                <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                    ✏️ Biểu Đồ Công Việc Khác
+                  </h2>
+                  <div style={{ height: "400px" }}>
+                    <Bar
+                      data={getOtherJobsChart()}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: "y",
+                        scales: {
+                          x: { stacked: true, beginAtZero: true },
+                          y: { stacked: true },
+                        },
+                        plugins: { legend: { position: "top" } },
+                      }}
+                    />
+                  </div>
                 </div>
               )}
+
+              {/* Chi tiết công việc khác - GIỮ NGUYÊN */}
+              <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition-shadow">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                  ✏️ Chi Tiết Công Việc Khác
+                </h2>
+                <div className="space-y-4">
+                  {Object.entries(employeeStats).map(
+                    ([teamName, employees]) => (
+                      <div key={teamName}>
+                        <h3
+                          className="text-lg font-semibold mb-3 pb-2 border-b"
+                          style={{ color: TEAM_CONFIG[teamName].color }}
+                        >
+                          {teamName}
+                        </h3>
+                        <div className="space-y-3">
+                          {Object.entries(employees).map(([empId, empData]) => {
+                            const hasOtherJobs =
+                              empData.otherJobs && empData.otherJobs.length > 0;
+                            if (!hasOtherJobs) return null;
+
+                            const isExpanded =
+                              expandedEmployee === `${teamName}-${empId}`;
+
+                            return (
+                              <div
+                                key={empId}
+                                className="border rounded-lg overflow-hidden"
+                              >
+                                <button
+                                  onClick={() =>
+                                    setExpandedEmployee(
+                                      isExpanded ? null : `${teamName}-${empId}`
+                                    )
+                                  }
+                                  className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-medium text-gray-800">
+                                      {empData.name}
+                                    </span>
+                                    <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                                      {empData.otherJobs.length} công việc
+                                    </span>
+                                  </div>
+                                  {isExpanded ? (
+                                    <ChevronUp size={20} />
+                                  ) : (
+                                    <ChevronDown size={20} />
+                                  )}
+                                </button>
+
+                                {isExpanded && (
+                                  <div className="p-4 bg-white">
+                                    <div className="space-y-2">
+                                      {empData.otherJobs.map((job, idx) => (
+                                        <div
+                                          key={idx}
+                                          className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+                                        >
+                                          <div
+                                            className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                                              job.da_chon
+                                                ? "bg-green-500"
+                                                : "bg-gray-300"
+                                            }`}
+                                          />
+                                          <div className="flex-1">
+                                            <p className="text-sm text-gray-800">
+                                              {job.noidung}
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                              {formatDate(job.ngay_tao)}
+                                            </p>
+                                          </div>
+                                          <span
+                                            className={`px-2 py-1 rounded text-xs font-medium ${
+                                              job.da_chon
+                                                ? "bg-green-100 text-green-700"
+                                                : "bg-gray-200 text-gray-600"
+                                            }`}
+                                          >
+                                            {job.da_chon
+                                              ? "Hoàn thành"
+                                              : "Chưa làm"}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white p-12 rounded-xl shadow text-center">
+              <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                Không có dữ liệu
+              </h3>
+              <p className="text-gray-500">
+                Vui lòng chọn khoảng thời gian khác
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ========== VIEW 2: THEO QUY ĐỊNH ========== */}
+      {selectedView === "schedule" && (
+        <div className="space-y-6">
+          {/* Stats Cards theo loại quy định */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {Object.entries(scheduleTypeStats).map(([type, stats]) => {
+              const badge = getScheduleBadge(type);
+              const rate =
+                stats.total > 0
+                  ? ((stats.completed / stats.total) * 100).toFixed(1)
+                  : 0;
+
+              return (
+                <div
+                  key={type}
+                  className="bg-white p-6 rounded-xl shadow-lg border-l-4"
+                  style={{
+                    borderLeftColor: badge?.color
+                      .replace("bg-", "")
+                      .replace("-500", ""),
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-2xl">{badge?.icon}</span>
+                    <span
+                      className={`px-2 py-1 ${badge?.color} text-white text-xs rounded-full`}
+                    >
+                      {badge?.text}
+                    </span>
+                  </div>
+                  <div className="text-3xl font-bold text-gray-800 mb-1">
+                    {stats.total}
+                  </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    Tổng công việc
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full ${badge?.color}`}
+                        style={{ width: `${rate}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-700">
+                      {rate}%
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    {stats.completed}/{stats.total} hoàn thành
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Biểu đồ */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-xl shadow-lg">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                📊 Phân bổ công việc theo quy định
+              </h2>
+              <div
+                style={{ height: "300px" }}
+                className="flex items-center justify-center"
+              >
+                <Doughnut
+                  data={getScheduleTypePieChart()}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { position: "bottom" },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => {
+                            const label = context.label || "";
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce(
+                              (a, b) => a + b,
+                              0
+                            );
+                            const percentage = ((value / total) * 100).toFixed(
+                              1
+                            );
+                            return `${label}: ${value} việc (${percentage}%)`;
+                          },
+                        },
+                      },
+                    },
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-lg">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                📈 Tỷ lệ hoàn thành theo loại
+              </h2>
+              <div style={{ height: "300px" }}>
+                <Bar
+                  data={getScheduleTypeCompletionChart()}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      x: { stacked: true },
+                      y: { stacked: true, beginAtZero: true },
+                    },
+                    plugins: { legend: { position: "top" } },
+                  }}
+                />
+              </div>
             </div>
           </div>
+
+          {/* Giải thích quy định */}
+          <div className="bg-white p-6 rounded-xl shadow-lg">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+              📖 Giải thích quy định
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {["ngày", "tuần", "tháng", "phát_sinh"].map((type) => {
+                const badge = getScheduleBadge(type);
+                return (
+                  <div
+                    key={type}
+                    className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg"
+                  >
+                    <span
+                      className={`${badge?.color} text-white px-3 py-1 rounded-full text-sm font-bold`}
+                    >
+                      {badge?.icon} {badge?.text}
+                    </span>
+                    <p className="text-sm text-gray-700 flex-1">
+                      {badge?.desc}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Công việc theo loại */}
+          {Object.entries(jobsByScheduleType).map(([type, jobs]) => {
+            if (jobs.length === 0) return null;
+            const badge = getScheduleBadge(type);
+            const completed = jobs.filter((j) => j.da_chon).length;
+            const rate = ((completed / jobs.length) * 100).toFixed(1);
+
+            return (
+              <div key={type} className="bg-white p-6 rounded-xl shadow-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                    <span
+                      className={`${badge?.color} text-white px-3 py-1 rounded-full text-sm`}
+                    >
+                      {badge?.icon} {badge?.text}
+                    </span>
+                    <span className="text-gray-600 text-base">
+                      ({jobs.length} công việc - {rate}% hoàn thành)
+                    </span>
+                  </h2>
+                </div>
+
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {jobs.map((job, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex items-start gap-3 p-4 rounded-lg border-l-4 ${
+                        job.da_chon
+                          ? "bg-green-50 border-green-500"
+                          : "bg-red-50 border-red-500"
+                      }`}
+                    >
+                      <div
+                        className={`mt-1 ${
+                          job.da_chon ? "text-green-600" : "text-red-600"
+                        }`}
+                      >
+                        {job.da_chon ? (
+                          <CheckCircle2 size={20} />
+                        ) : (
+                          <AlertCircle size={20} />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-800">
+                          {job.noidung}
+                        </p>
+                        <div className="flex items-center gap-4 mt-1 text-xs text-gray-600">
+                          <span>👤 {job.employeeName}</span>
+                          <span>📂 {job.section}</span>
+                          <span>📅 {formatDate(job.date)}</span>
+                          {job.quy_dinh?.ngay_trong_tuan && (
+                            <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                              {formatWeekDays(job.quy_dinh.ngay_trong_tuan)}
+                            </span>
+                          )}
+                          {job.quy_dinh?.ngay_trong_thang && (
+                            <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                              Ngày{" "}
+                              {job.quy_dinh.ngay_trong_thang
+                                .sort((a, b) => a - b)
+                                .join(", ")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          job.da_chon
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {job.da_chon ? "✓ Xong" : "✗ Chưa"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
-      ) : (
-        <div className="bg-white p-12 rounded-xl shadow text-center">
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">
-            Không có dữ liệu
-          </h3>
-          <p className="text-gray-500">Vui lòng chọn khoảng thời gian khác</p>
+      )}
+
+      {/* ========== VIEW 3: ĐIỂM DANH HÔM NAY ========== */}
+      {selectedView === "attendance" && (
+        <div className="space-y-6">
+          {/* Tổng quan điểm danh */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-xl shadow-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm opacity-90">Đã check-in</span>
+                <CheckCircle2 size={24} />
+              </div>
+              <div className="text-4xl font-bold">
+                {
+                  Object.values(employeeCheckStatus)
+                    .flatMap((team) => Object.values(team))
+                    .filter((e) => e.hasChecked).length
+                }
+              </div>
+              <div className="text-sm opacity-90 mt-1">nhân viên</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-red-500 to-red-600 text-white p-6 rounded-xl shadow-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm opacity-90">Chưa check-in</span>
+                <AlertCircle size={24} />
+              </div>
+              <div className="text-4xl font-bold">
+                {
+                  Object.values(employeeCheckStatus)
+                    .flatMap((team) => Object.values(team))
+                    .filter((e) => !e.hasChecked).length
+                }
+              </div>
+              <div className="text-sm opacity-90 mt-1">nhân viên</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl shadow-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm opacity-90">Tỷ lệ check-in</span>
+                <Clock size={24} />
+              </div>
+              <div className="text-4xl font-bold">
+                {(() => {
+                  const total = Object.values(employeeCheckStatus).flatMap(
+                    (team) => Object.values(team)
+                  ).length;
+                  const checked = Object.values(employeeCheckStatus)
+                    .flatMap((team) => Object.values(team))
+                    .filter((e) => e.hasChecked).length;
+                  return total > 0 ? Math.round((checked / total) * 100) : 0;
+                })()}
+                %
+              </div>
+              <div className="text-sm opacity-90 mt-1">hoàn thành</div>
+            </div>
+          </div>
+
+          {/* Danh sách theo team */}
+          {Object.entries(employeeCheckStatus).map(([teamName, employees]) => {
+            const teamColor =
+              TEAM_CONFIG[teamName]?.color || "rgba(156, 163, 175, 0.8)";
+            const checked = Object.values(employees).filter(
+              (e) => e.hasChecked
+            ).length;
+            const total = Object.values(employees).length;
+            const rate = total > 0 ? Math.round((checked / total) * 100) : 0;
+
+            return (
+              <div
+                key={teamName}
+                className="bg-white rounded-xl shadow-lg overflow-hidden"
+              >
+                <div
+                  className="p-4 border-l-4"
+                  style={{ borderLeftColor: teamColor.replace("0.8", "1") }}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">
+                      {teamName}
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-600">
+                        {checked}/{total} đã check
+                      </span>
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-bold ${
+                          rate === 100
+                            ? "bg-green-100 text-green-700"
+                            : rate >= 50
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {rate}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                    <div
+                      className="h-2 rounded-full transition-all duration-500"
+                      style={{
+                        width: `${rate}%`,
+                        backgroundColor: teamColor.replace("0.8", "1"),
+                      }}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {Object.entries(employees).map(([empId, empData]) => (
+                      <div
+                        key={empId}
+                        className={`p-4 rounded-lg border-2 transition-all ${
+                          empData.hasChecked
+                            ? "bg-green-50 border-green-300"
+                            : "bg-red-50 border-red-300"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span
+                                className={`text-lg ${
+                                  empData.hasChecked
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {empData.hasChecked ? (
+                                  <CheckCircle2 size={20} />
+                                ) : (
+                                  <AlertCircle size={20} />
+                                )}
+                              </span>
+                              <span className="font-semibold text-gray-800">
+                                {empData.name}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-600 mb-2">
+                              Mã NV: {empId}
+                            </p>
+
+                            {empData.hasChecked ? (
+                              <>
+                                <div className="flex items-center gap-2 text-xs text-gray-600 mb-1">
+                                  <Clock size={14} />
+                                  <span>
+                                    {new Date(
+                                      empData.checkTime
+                                    ).toLocaleTimeString("vi-VN")}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200">
+                                  <span className="text-xs text-gray-600">
+                                    {empData.completedJobs}/{empData.totalJobs}{" "}
+                                    công việc
+                                  </span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                      empData.status === "Đi làm"
+                                        ? "bg-green-100 text-green-700"
+                                        : "bg-gray-100 text-gray-700"
+                                    }`}
+                                  >
+                                    {empData.status}
+                                  </span>
+                                </div>
+                                {empData.totalJobs > 0 && (
+                                  <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5">
+                                    <div
+                                      className="bg-green-500 h-1.5 rounded-full transition-all"
+                                      style={{
+                                        width: `${
+                                          (empData.completedJobs /
+                                            empData.totalJobs) *
+                                          100
+                                        }%`,
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div className="mt-2">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">
+                                  <AlertCircle size={12} />
+                                  Chưa check-in hôm nay
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 };
+
 export default DashboardBDH;
