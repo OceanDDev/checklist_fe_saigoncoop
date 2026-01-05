@@ -422,6 +422,7 @@ const PhuXeTableView = ({
       render: (text, record) =>
         renderEditableCell(text, record, "bien_so_xe", isRole24),
     },
+
     !isRole24 && {
       title: "Tên Phụ Xe",
       key: "ten_phu_xe",
@@ -504,6 +505,17 @@ const PhuXeTableView = ({
           </Tooltip>
         );
       },
+    },
+    !isRole24 && {
+      title: "Ghi Chú",
+      dataIndex: "ghi_chu",
+      key: "ghi_chu",
+      width: 150,
+      onCell: (record) => ({
+        style: { backgroundColor: getColorForKhungGio(record.khung_gio) },
+      }),
+      render: (text, record) =>
+        renderEditableCell(text, record, "ghi_chu", isRole24),
     },
     (!canEditDieuVan || canEditPhuXeName) && {
       title: "Hình Ảnh",

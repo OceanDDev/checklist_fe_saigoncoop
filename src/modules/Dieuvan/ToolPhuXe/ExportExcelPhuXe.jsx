@@ -46,10 +46,12 @@ const ExportExcelPhuXe = ({
           return {
             stt: index + 1,
             hoTen: item.dieu_van_xac_nhan || "",
+            dichVu: item.dich_vu || "",
             thoiGianDi: thoiGianDi,
             maCuaHang: item.ma_cua_hang || "",
             diaDiemDen: item.ten_cua_hang || "",
             thoiGianXongChuyen: thoiGianXongChuyen,
+            ghiChu: item.ghi_chu || "",
             ngay: ngay,
           };
         });
@@ -67,6 +69,8 @@ const ExportExcelPhuXe = ({
       worksheet.columns = [
         { header: "STT", key: "stt", width: 8 },
         { header: "Họ Tên", key: "hoTen", width: 25 },
+        { header: "Dịch Vụ", key: "dichVu", width: 15 }, // ✅ THÊM DÒNG NÀY
+
         { header: "Thời Gian Đi", key: "thoiGianDi", width: 18 },
         { header: "Mã Cửa Hàng", key: "maCuaHang", width: 15 },
         { header: "Địa Điểm Đến", key: "diaDiemDen", width: 35 },
@@ -75,6 +79,7 @@ const ExportExcelPhuXe = ({
           key: "thoiGianXongChuyen",
           width: 25,
         },
+        { header: "Ghi Chú", key: "ghiChu", width: 30 }, // ✅ THÊM DÒNG NÀY
         { header: "Ngày", key: "ngay", width: 15 },
       ];
 
