@@ -14,9 +14,10 @@ const mapFormToEditable = (rec) =>
     const donViTinh = String(it?.don_vi_tinh || "");
     const kpiPhuData = rec?.kpi_phu || null;
 
-    // ✅ Phân biệt C3 và các KPI điểm khác
+    // ✅ Phân biệt các loại đơn vị tính
     const kyHieuUpper = kyHieu.toUpperCase();
     const isDiemUnit = donViTinh.toLowerCase().includes("điểm");
+    const isLanUnit = donViTinh.toLowerCase().includes("lần");
 
     // C3 (Điểm) → Max 4.1
     const isC3Diem = kyHieuUpper === "C3" && isDiemUnit;
@@ -29,9 +30,11 @@ const mapFormToEditable = (rec) =>
     if (isFirstTwo) {
       da_thuc_hien = "100"; // F1, F2 mặc định 100%
     } else if (isC3Diem) {
-      da_thuc_hien = "4.1"; // C3 mặc định 4.1 điểm
+      da_thuc_hien = "4.1"; // C3 (Điểm) mặc định 4.1
+    } else if (isLanUnit) {
+      da_thuc_hien = "12"; // Đơn vị "Lần" mặc định 12
     } else {
-      da_thuc_hien = it?.da_thuc_hien ?? ""; // ✅ C1, C2 không set mặc định
+      da_thuc_hien = it?.da_thuc_hien ?? ""; // C1, C2 không set mặc định
     }
 
     // ✅ Set mặc định cho "CBQL Đánh giá" (so_loi)
@@ -42,7 +45,9 @@ const mapFormToEditable = (rec) =>
 
     let so_loi_default;
     if (isC3Diem) {
-      so_loi_default = "4.1"; // C3 mặc định 4.1
+      so_loi_default = "4.1"; // C3 (Điểm) mặc định 4.1
+    } else if (isLanUnit) {
+      so_loi_default = "12"; // Đơn vị "Lần" mặc định 12
     } else if (isOtherDiem) {
       so_loi_default = "100"; // C1, C2 mặc định 100
     } else if (isPercentRow) {
@@ -100,6 +105,13 @@ const calculateTyTrongCuoi = ({
   const w = Number(tyTrong || 0);
   const cbql = Number(cbqlDanhGia || 0);
 
+  // ✅ LOGIC ĐƠN VỊ "LẦN" (Max = 12)
+  if (String(donViTinh || "").toLowerCase().includes("lần")) {
+    const MAX_LAN = 12;
+    const score = Math.min(cbql, MAX_LAN);
+    return Math.round((score / MAX_LAN) * w * 100) / 100;
+  }
+
   // ===== LOGIC KPI C3 (Đơn vị tính = Điểm, Max cố định = 4.1) =====
   if (
     String(kyHieu || "").toUpperCase() === "C3" &&
@@ -107,18 +119,10 @@ const calculateTyTrongCuoi = ({
       .toLowerCase()
       .includes("điểm")
   ) {
-    const MAX_SCORE = 4.1; // ✅ Điểm tối đa CỐ ĐỊNH
-
-    // ✅ Lấy điểm từ CBQL Đánh giá (mặc định 4.1 nếu trống)
+    const MAX_SCORE = 4.1;
     const score = cbql > 0 ? cbql : MAX_SCORE;
-
-    // ✅ Giới hạn điểm không vượt quá 4.1
     const limitedScore = Math.min(score, MAX_SCORE);
-
-    // ✅ Tính tỷ trọng cuối: (CBQL / 4.1) × Tỷ trọng gốc
     const result = (limitedScore / MAX_SCORE) * w;
-
-    // ✅ Làm tròn 2 chữ số thập phân
     return Math.round(result * 100) / 100;
   }
 
@@ -178,6 +182,13 @@ const calculateNVDanhGia = ({
 }) => {
   const w = Number(tyTrong || 0);
   const th = Number(daThucHien || 0);
+
+  // ✅ LOGIC ĐƠN VỊ "LẦN" (Max = 12)
+  if (String(donViTinh || "").toLowerCase().includes("lần")) {
+    const MAX_LAN = 12;
+    const score = Math.min(th, MAX_LAN);
+    return Math.round((score / MAX_LAN) * w * 100) / 100;
+  }
 
   // ===== LOGIC MỚI: KPI C3 (Điểm) =====
   const isC3Diem =
@@ -269,7 +280,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
   const [kpiPhuErrorsAdded, setKpiPhuErrorsAdded] = useState(0);
 
   const handleOpenSubKpiModal = () => {
-    // ✅ Lấy kpi_phu từ formKpis (đã lưu) hoặc formRecord
     const savedKpiPhu = formKpis[0]?.kpi_phu || formRecord?.kpi_phu || [];
     setCurrentKpiPhu(savedKpiPhu);
     setShowSubKpiModal(true);
@@ -278,6 +288,7 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
   const handleCloseSubKpiModal = () => {
     setShowSubKpiModal(false);
   };
+
   // Kiểm tra quyền chấm KPI cho nhân viên
   const canScoreStaff = useCallback(
     (staff) => {
@@ -306,14 +317,12 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
 
       // ✅ ƯU TIÊN: Kiểm tra đơn vị PHỤ trước
       if (isPhuXuatHang) {
-        // Có đơn vị phụ "Xuất hàng" → CHỈ TOTRUONGXUAT1/2 được chấm
         return userRoles.some((r) =>
           [ROLE_KPI.TOTRUONGXUAT1, ROLE_KPI.TOTRUONGXUAT2].includes(r),
         );
       }
 
       if (isPhuNhapHang) {
-        // Có đơn vị phụ "Nhập hàng" → CHỈ TOTRUONGNHAP được chấm
         return userRoles.includes(ROLE_KPI.TOTRUONGNHAP);
       }
 
@@ -322,14 +331,12 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
       const isChinhNhapHang = donViChinh.trim().toLowerCase() === "nhập hàng";
 
       if (isChinhXuatHang) {
-        // Đơn vị chính "Xuất hàng" → CHỈ TOTRUONGXUAT1/2 được chấm
         return userRoles.some((r) =>
           [ROLE_KPI.TOTRUONGXUAT1, ROLE_KPI.TOTRUONGXUAT2].includes(r),
         );
       }
 
       if (isChinhNhapHang) {
-        // Đơn vị chính "Nhập hàng" → CHỈ TOTRUONGNHAP được chấm
         return userRoles.includes(ROLE_KPI.TOTRUONGNHAP);
       }
 
@@ -338,15 +345,13 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
     [userRoles],
   );
 
-  // ✅ HÀM XỬ LÝ SAVE KPI PHỤ - TRỪ TỶ TRỌNG CUỐI, TÍNH NGƯỢC CBQL
+  // ✅ HÀM XỬ LÝ SAVE KPI PHỤ
   const handleSaveSubKpi = (updatedSubKpis) => {
-    // Tính tổng số lỗi KPI phụ
     const totalSubKpiErrors = updatedSubKpis.reduce(
       (sum, item) => sum + Number(item.so_loi || 0),
       0,
     );
 
-    // Tính số lần đủ 3 lỗi (mỗi 3 lỗi = -1% tỷ trọng hoặc +1 lỗi)
     const errorsToDistribute = Math.floor(totalSubKpiErrors / 3);
 
     setFormKpis((prev) => {
@@ -357,9 +362,7 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
       setKpiPhuAffectedIndex(null);
       setKpiPhuErrorsAdded(0);
 
-      // Nếu có lỗi cần phân phối
       if (errorsToDistribute > 0) {
-        // Lọc ra các KPI KHÔNG PHẢI F1, F2, C3
         const eligibleKpis = updated
           .map((kpi, index) => ({
             index,
@@ -384,7 +387,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
           return updated;
         }
 
-        // Tìm KPI có tỷ trọng thấp nhất
         let lowestIndex = eligibleKpis[0].index;
         let lowestTyTrong = eligibleKpis[0].ty_trong;
 
@@ -395,33 +397,27 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
           }
         }
 
-        // Lấy KPI có tỷ trọng thấp nhất sẽ bị ảnh hưởng
         const kpi = { ...updated[lowestIndex] };
         const donViTinh = String(kpi.don_vi_tinh || "");
 
-        // ✅ Kiểm tra đơn vị tính của KPI có tỷ trọng thấp nhất
         const isPercentKPI =
           donViTinh.trim() === "%" || donViTinh.includes("%");
 
-        // ✅ PHÂN LOẠI THEO ĐƠN VỊ TÍNH CỦA KPI TỶ TRỌNG THẤP NHẤT
         if (isPercentKPI) {
-          // ========== KPI CÓ ĐƠN VỊ "%" - TRỪ TỶ TRỌNG CUỐI, TÍNH NGƯỢC CBQL ==========
           const tyTrongGoc = Number(kpi.ty_trong || 0);
           const oldTyTrongCuoi = Number(kpi.ty_trong_cuoi || tyTrongGoc);
 
-          // Trừ trực tiếp từ tỷ trọng cuối
           const newTyTrongCuoi = Math.max(
             0,
             oldTyTrongCuoi - errorsToDistribute,
           );
           kpi.ty_trong_cuoi = newTyTrongCuoi;
 
-          // ✅ TÍNH NGƯỢC CBQL: (Tỷ trọng cuối / Tỷ trọng gốc) × 100%
-          let newCBQL = 100; // Mặc định nếu tỷ trọng gốc = 0
+          let newCBQL = 100;
           if (tyTrongGoc > 0) {
             newCBQL =
               Math.round((newTyTrongCuoi / tyTrongGoc) * 100 * 100) / 100;
-            newCBQL = Math.max(0, Math.min(100, newCBQL)); // Giới hạn 0-100%
+            newCBQL = Math.max(0, Math.min(100, newCBQL));
           }
           kpi.so_loi = String(newCBQL);
 
@@ -430,11 +426,9 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
             { autoClose: 5000 },
           );
         } else {
-          // ========== KPI CÓ ĐƠN VỊ "LỖI" - LOGIC CŨ (CỘNG LỖI) ==========
           const currentErrors = Number(kpi.so_loi || 0);
           kpi.so_loi = String(currentErrors + errorsToDistribute);
 
-          // Tính lại ty_trong_cuoi theo công thức Lỗi
           kpi.ty_trong_cuoi = calculateTyTrongCuoi({
             cbqlDanhGia: kpi.so_loi,
             tyTrong: kpi.ty_trong,
@@ -458,7 +452,7 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
 
     setShowSubKpiModal(false);
   };
-  // ĐỔI: Sử dụng Quý thay vì Tháng
+
   const currentDate = new Date();
   const currentMonth = currentDate.getMonth() + 1;
   const currentQuarter = checkKPIService.getQuarterFromMonth(currentMonth);
@@ -469,14 +463,11 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
     [selectedYear],
   );
 
-  // Tính toán tổng điểm cuối
   const finalScore = useMemo(() => {
     let totalScore = 0;
-
     formKpis.forEach((item) => {
       totalScore += Number(item.ty_trong_cuoi || 0);
     });
-
     return Math.round(totalScore * 100) / 100;
   }, [formKpis]);
 
@@ -489,7 +480,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
     }
     setFinding(true);
     try {
-      // ĐỔI: Tìm theo quý thay vì tháng
       let list = await formkpistaffService.getAllFormKPI({
         ma_nhan_vien: code,
         quy: quarterInput,
@@ -497,7 +487,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
       });
       let arr = unwrapForms(list);
 
-      // Nếu không có -> fallback: lấy tất cả theo mã NV
       if (!arr.length) {
         list = await formkpistaffService.getAllFormKPI({ ma_nhan_vien: code });
         arr = unwrapForms(list);
@@ -510,24 +499,20 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
         return;
       }
 
-      // Chọn bản mới nhất theo quý
       arr.sort((a, b) => {
         const dn = Number(b?.nam || 0) - Number(a?.nam || 0);
         return dn !== 0 ? dn : Number(b?.quy || 0) - Number(a?.quy || 0);
       });
 
-      // ✅ MỚI: Ưu tiên lấy Form KPI của Quý đang chấm
       const formsInQuarter = arr.filter(
         (r) => Number(r?.quy) === Number(quarterInput),
       );
 
       let rec;
       if (formsInQuarter.length > 0) {
-        // Có Form KPI đúng quý → Dùng cái đó
         rec = formsInQuarter[0];
         console.log("✅ Tìm thấy Form KPI cho Quý", quarterInput);
       } else {
-        // Không có → Dùng Form KPI mới nhất + Cảnh báo
         rec = arr[pickNewestIndex(arr)];
         toast.warning(
           `Không tìm thấy Form KPI cho Quý ${quarterInput}/${currentYear}. Đang sử dụng Form KPI Quý ${rec?.quy || "?"}/${rec?.nam || "?"}`,
@@ -540,7 +525,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
         return;
       }
 
-      // ✅ VALIDATE QUYỀN CHẤM KPI
       if (!canScoreStaff(rec)) {
         setFormRecord(null);
         setFormKpis([]);
@@ -556,14 +540,11 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
 
         let errorMessage = "";
 
-        // ✅ Kiểm tra đơn vị PHỤ trước
         if (isPhuXuatHang) {
           errorMessage = `⚠️ Bạn không có quyền chấm KPI cho nhân viên "${rec.ho_ten}" (${rec.ma_nhan_vien}) có đơn vị phụ "Xuất hàng". Chỉ Tổ trưởng Xuất (TOTRUONGXUAT1/2) hoặc PGD mới được chấm!`;
         } else if (isPhuNhapHang) {
           errorMessage = `⚠️ Bạn không có quyền chấm KPI cho nhân viên "${rec.ho_ten}" (${rec.ma_nhan_vien}) có đơn vị phụ "Nhập hàng". Chỉ Tổ trưởng Nhập (TOTRUONGNHAP) hoặc PGD mới được chấm!`;
-        }
-        // ✅ Nếu không có đơn vị phụ → Kiểm tra đơn vị CHÍNH
-        else if (donViChinh.trim().toLowerCase() === "nhập hàng") {
+        } else if (donViChinh.trim().toLowerCase() === "nhập hàng") {
           errorMessage = `⚠️ Bạn không có quyền chấm KPI cho nhân viên "${rec.ho_ten}" (${rec.ma_nhan_vien}) thuộc Nhập hàng. Chỉ Tổ trưởng Nhập (TOTRUONGNHAP) hoặc PGD mới được chấm!`;
         } else if (donViChinh.trim().toLowerCase() === "xuất hàng") {
           errorMessage = `⚠️ Bạn không có quyền chấm KPI cho nhân viên "${rec.ho_ten}" (${rec.ma_nhan_vien}) thuộc Xuất hàng. Chỉ Tổ trưởng Xuất (TOTRUONGXUAT1/2) hoặc PGD mới được chấm!`;
@@ -576,7 +557,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
         return;
       }
 
-      // ✅ CÓ QUYỀN → Hiển thị Form KPI
       setFormRecord(rec);
       setFormKpis(mapFormToEditable(rec));
     } catch (e) {
@@ -598,22 +578,27 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
         if (Number.isNaN(num)) num = 0;
         if (num < 0) num = 0;
 
-        // ✅ Kiểm tra loại KPI
         const isC3Diem =
           String(curr.ky_hieu || "").toUpperCase() === "C3" &&
           String(curr.don_vi_tinh || "")
             .toLowerCase()
             .includes("điểm");
 
+        const isLanUnit = String(curr.don_vi_tinh || "")
+          .toLowerCase()
+          .includes("lần");
+
         // ✅ Giới hạn theo loại KPI
         if (isC3Diem) {
-          if (num > 4.1) num = 4.1; // C3 max 4.1
+          if (num > 4.1) num = 4.1;
+        } else if (isLanUnit) {
+          if (num > 12) num = 12;
         } else if (
           String(curr.don_vi_tinh || "")
             .toLowerCase()
             .includes("điểm")
         ) {
-          if (num > 100) num = 100; // C1, C2 max 100
+          if (num > 100) num = 100;
         } else {
           const isPercentRow =
             String(curr.don_vi_tinh || "").includes("%") ||
@@ -635,22 +620,27 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
         if (Number.isNaN(num)) num = 0;
         if (num < 0) num = 0;
 
-        // ✅ Kiểm tra loại KPI
         const isC3Diem =
           String(curr.ky_hieu || "").toUpperCase() === "C3" &&
           String(curr.don_vi_tinh || "")
             .toLowerCase()
             .includes("điểm");
 
+        const isLanUnit = String(curr.don_vi_tinh || "")
+          .toLowerCase()
+          .includes("lần");
+
         // ✅ Giới hạn theo loại KPI
         if (isC3Diem) {
-          if (num > 4.1) num = 4.1; // C3 max 4.1
+          if (num > 4.1) num = 4.1;
+        } else if (isLanUnit) {
+          if (num > 12) num = 12;
         } else if (
           String(curr.don_vi_tinh || "")
             .toLowerCase()
             .includes("điểm")
         ) {
-          if (num > 100) num = 100; // C1, C2 max 100
+          if (num > 100) num = 100;
         } else {
           const isPercentRow =
             String(curr.don_vi_tinh || "").includes("%") ||
@@ -697,7 +687,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
     if (quy > 4) quy = 4;
 
     try {
-      // ✅ KIỂM TRA TRÙNG LẶP
       let existingRecords = [];
       try {
         console.log("🔍 Bắt đầu kiểm tra trùng lặp cho:", {
@@ -706,21 +695,18 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
           nam: currentYear,
         });
 
-        // Lấy TẤT CẢ Check KPI trong năm
         const allCheckResult = await checkKPIService.getAllCheckKPI({
           nam: currentYear,
         });
 
-        // Unwrap kết quả
         let allRecords = [];
         if (Array.isArray(allCheckResult)) {
           allRecords = allCheckResult;
         } else if (allCheckResult?.data && Array.isArray(allCheckResult.data)) {
           allRecords = allCheckResult.data;
         }
-        // ✅ Filter với xử lý đầy đủ các trường hợp
+
         existingRecords = allRecords.filter((record) => {
-          // ✅ KIỂM TRA THEO ma_nhan_vien thay vì form_kpi_id
           const recordMaNV = record.ma_nhan_vien;
           const recordQuy = Number(record.quy);
           const recordNam = Number(record.nam);
@@ -741,7 +727,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
         console.error("❌ Chi tiết lỗi:", JSON.stringify(checkError, null, 2));
       }
 
-      // ✅ NẾU ĐÃ TỒN TẠI → KHÔNG CHO CHẤM LẠI
       if (existingRecords.length > 0) {
         toast.error(
           `❌ Đã tồn tại bản ghi đánh giá KPI cho ${formRecord.ho_ten} (${formRecord.ma_nhan_vien}) - Quý ${quy}/${currentYear}. Không thể chấm lại!`,
@@ -749,7 +734,7 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
         );
         return;
       }
-      // ✅ CHƯA TỒN TẠI → TẠO MỚI
+
       const kpisToSave = formKpis.map((kpi) => ({
         kpi: String(kpi.kpi || ""),
         ty_trong: Number(kpi.ty_trong || 0),
@@ -784,7 +769,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
     } catch (e) {
       let errorMessage = "Vui lòng thử lại.";
 
-      // Xử lý lỗi trùng lặp từ backend
       if (e?.response?.data?.message) {
         errorMessage = e.response.data.message;
 
@@ -805,7 +789,7 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
       toast.error(`Lưu thất bại: ${errorMessage}`, { autoClose: 3000 });
     }
   };
-  // Helper: Lấy tháng từ quý để hiển thị thông tin
+
   const getQuarterMonths = (quy) => {
     const months = checkKPIService.getMonthsFromQuarter(quy);
     return `Tháng ${months.start} - ${months.end}`;
@@ -818,19 +802,15 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
       aria-modal="true"
       aria-labelledby="kpi-review-title"
     >
-      {/* Overlay */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm"></div>
 
-      {/* Panel wrapper */}
       <div
         className={[
           "relative z-10 mx-auto my-8 w-full px-4 sm:px-6",
           formRecord ? "max-w-[95vw]" : "max-w-md",
         ].join(" ")}
       >
-        {/* Panel */}
         <div className="w-full rounded-2xl bg-white shadow-xl ring-1 ring-slate-900/10 max-h-[85vh] flex flex-col overflow-hidden transition-all duration-300">
-          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/80 shrink-0">
             <h3
               id="kpi-review-title"
@@ -847,10 +827,8 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
             </button>
           </div>
 
-          {/* Body */}
           <div className="flex-1 overflow-y-auto">
             <div className="px-6 py-6 space-y-6">
-              {/* Tìm mã NV */}
               <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
                 <input
                   value={codeInput}
@@ -871,10 +849,8 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
                 <p className="text-sm text-rose-600">{findError}</p>
               )}
 
-              {/* Thông tin nhân viên + quý/năm + bảng KPI */}
               {formRecord && (
                 <div className="space-y-4">
-                  {/* Info nhân viên */}
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-700 ring-1 ring-inset ring-slate-200">
                       Mã NV:{" "}
@@ -897,7 +873,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
                     </span>
                   </div>
 
-                  {/* Quý / Năm */}
                   <div className="flex flex-wrap items-center gap-3">
                     <label className="text-sm text-slate-700">Quý chấm:</label>
                     <select
@@ -920,8 +895,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
                       {getQuarterMonths(quarterInput)}
                     </span>
                   </div>
-
-                  {/* Thông tin tính điểm */}
 
                   <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 p-4 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-4">
@@ -952,6 +925,7 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
                       </div>
                     </div>
                   </div>
+
                   {formRecord?.kpi_phu && formRecord.kpi_phu.length > 0 && (
                     <div className="flex items-center justify-between p-4 rounded-xl border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50">
                       <div className="flex items-center gap-3">
@@ -1001,7 +975,7 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
                       </button>
                     </div>
                   )}
-                  {/* Bảng KPI */}
+
                   <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-lg">
                     <table className="w-full text-sm bg-white min-w-[2200px]">
                       <colgroup>
@@ -1263,7 +1237,6 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
             </div>
           </div>
 
-          {/* Footer */}
           {formRecord && (
             <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-200/80 bg-slate-50 rounded-b-2xl shrink-0">
               <div className="flex items-center gap-4 text-sm text-slate-600">
