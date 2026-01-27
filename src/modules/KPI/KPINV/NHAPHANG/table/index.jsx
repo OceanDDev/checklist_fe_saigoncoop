@@ -4,12 +4,12 @@ import { useParams } from "react-router-dom";
 import { formkpistaffService } from "@/services/formkpistaff.service";
 import { checkKPIService } from "@/services/checkkpistaff.service";
 import StaffKPIDetailModal from "../../../ComponentsKPI/StaffKPIDetailModal";
-import ExportExcelModal from "../../../ComponentsKPI/excel";
 import AddStaffWithKPIModal from "../../../ComponentsKPI/AddStaffWithKPIModal";
 import { ROLE_KPI } from "@/configs/constants";
-import CheckKPIKeToanModal from "./CheckKPIKeToanModal";
+import CheckKPIModal from "@/modules/KPI/ComponentsKPI/CheckKPIModal";
+import ExportExcelModal from "@/modules/KPI/ComponentsKPI/excel";
 
-const TableKeToan = () => {
+const TableNhapHang = () => {
   const { year } = useParams();
   const selectedYear = parseInt(year) || new Date().getFullYear();
 
@@ -66,34 +66,71 @@ const TableKeToan = () => {
     }
   }, []);
 
+  // Quyền quản lý KPI (hiển thị nút Thêm và Chấm KPI)
   const canManageKPI = useMemo(
     () =>
-      userRoles.some((r) => [ROLE_KPI.KETOANTRUONG, ROLE_KPI.PGD].includes(r)),
+      userRoles.some((r) => 
+        [
+          ROLE_KPI.PGD,          // 17
+          ROLE_KPI.TOTRUONGNHAP  // 10
+        ].includes(r)
+      ),
     [userRoles],
   );
 
-  // ✅ THÊM: Quyền xem chi tiết và xuất Excel (chỉ KETOANTRUONG và PGD)
-  const canViewDetails = useMemo(
-    () =>
-      userRoles.some((r) => [ROLE_KPI.KETOANTRUONG, ROLE_KPI.PGD].includes(r)),
-    [userRoles],
-  );
+  // Quyền chấm KPI cho từng nhân viên cụ thể
+  const canScoreStaff = useCallback((staff) => {
+    const donViChinh = typeof staff.don_vi === "object" 
+      ? staff.don_vi?.chinh || ""
+      : staff.don_vi || "";
+    const donViPhu = typeof staff.don_vi === "object"
+      ? staff.don_vi?.phu || ""
+      : "";
+    
+    const isPhuNhapHang = donViPhu.trim().toLowerCase() === "nhập hàng";
+    const isPhuXuatHang = donViPhu.trim().toLowerCase() === "xuất hàng";
+    
+    // PGD: Toàn quyền
+    if (userRoles.includes(ROLE_KPI.PGD)) {
+      return true;
+    }
+    
+    // ✅ Nếu có đơn vị phụ "Xuất hàng" → CHỈ TOTRUONGXUAT1/2 được chấm
+    if (isPhuXuatHang) {
+      return userRoles.some((r) => 
+        [ROLE_KPI.TOTRUONGXUAT1, ROLE_KPI.TOTRUONGXUAT2].includes(r)
+      );
+    }
+    
+    // Nếu có đơn vị phụ "Nhập hàng" → CHỈ TOTRUONGNHAP được chấm
+    if (isPhuNhapHang) {
+      return userRoles.includes(ROLE_KPI.TOTRUONGNHAP);
+    }
+    
+    // Nếu KHÔNG có đơn vị phụ → Dựa vào đơn vị chính
+    // TOTRUONGNHAP: CHỈ được chấm nhân viên Nhập hàng chính (không có đơn vị phụ)
+    if (userRoles.includes(ROLE_KPI.TOTRUONGNHAP)) {
+      return donViChinh.trim().toLowerCase() === "nhập hàng";
+    }
+    
+    return false;
+  }, [userRoles]);
 
   // Fetch data
   const refreshList = useCallback(async () => {
     try {
       setLoading(true);
       const list = await formkpistaffService.getAllFormKPI();
-      console.log("📦 Raw data from API:", list);
-
       let staffList = Array.isArray(list) ? list : [];
-      console.log("📊 Staff list count:", staffList.length);
 
       staffList = staffList.filter((staff) => {
-        const donViChinh = staff.don_vi?.chinh || staff.don_vi || "";
-        return donViChinh.trim().toLowerCase() === "kế toán";
-      });
+        const donViChinh =
+          typeof staff.don_vi === "object"
+            ? staff.don_vi?.chinh || ""
+            : staff.don_vi || "";
 
+        return donViChinh.trim().toLowerCase() === "nhập hàng";
+      });
       setData(staffList);
 
       await checkAllKPIStatus(staffList);
@@ -121,7 +158,6 @@ const TableKeToan = () => {
         allCheckKPI = response;
       }
 
-      // Nhóm theo mã nhân viên
       const kpiByStaff = new Map();
       allCheckKPI.forEach((checkKPI) => {
         if (checkKPI.ma_nhan_vien && checkKPI.ty_trong_quy !== undefined) {
@@ -135,7 +171,6 @@ const TableKeToan = () => {
         }
       });
 
-      // Tính trung bình cho từng nhân viên
       staffList.forEach((staff) => {
         const staffKPIs = kpiByStaff.get(staff.ma_nhan_vien) || [];
 
@@ -183,14 +218,13 @@ const TableKeToan = () => {
     const currentYear = currentDate.getFullYear();
     const statusMap = new Map();
 
-    // Xác định quý hiện tại hoặc target
     let targetQuarter;
     if (selectedYear > currentYear) {
-      targetQuarter = 1; // Quý đầu năm cho năm tương lai
+      targetQuarter = 1;
     } else if (selectedYear === currentYear) {
       targetQuarter = checkKPIService.getQuarterFromMonth(currentMonth);
     } else {
-      targetQuarter = 4; // Quý cuối năm cho năm quá khứ
+      targetQuarter = 4;
     }
 
     try {
@@ -252,6 +286,12 @@ const TableKeToan = () => {
   }, [detailOpen, checkOpen, exportOpen, addOpen]);
 
   const openDetail = (staff) => {
+    // ✅ Validate quyền trước khi mở modal
+    if (!canScoreStaff(staff)) {
+      alert("⚠️ Bạn không có quyền chấm KPI cho nhân viên này!");
+      return;
+    }
+    
     setSelectedStaff({
       ...staff,
       selectedYear: selectedYear,
@@ -260,6 +300,12 @@ const TableKeToan = () => {
   };
 
   const openExportModal = (staff) => {
+    // ✅ Validate quyền trước khi mở modal
+    if (!canScoreStaff(staff)) {
+      alert("⚠️ Bạn không có quyền xuất Excel KPI cho nhân viên này!");
+      return;
+    }
+    
     setSelectedStaff({
       ma_nhan_vien: staff.ma_nhan_vien,
       ho_ten: staff.ho_ten,
@@ -319,7 +365,7 @@ const TableKeToan = () => {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 bg-clip-text text-transparent">
-                KPI Kế Toán — {selectedYear}
+                KPI Nhập Hàng — {selectedYear}
               </h1>
 
               <span
@@ -360,7 +406,6 @@ const TableKeToan = () => {
           </div>
 
           <div className="flex flex-wrap justify-start md:justify-end gap-2">
-            {canManageKPI && (
               <>
                 <button
                   onClick={() => setAddOpen(true)}
@@ -384,7 +429,6 @@ const TableKeToan = () => {
                   Chấm KPI {selectedYear}
                 </button>
               </>
-            )}
           </div>
         </div>
       </div>
@@ -561,50 +605,23 @@ const TableKeToan = () => {
 
                       <td className="px-5 py-3">
                         <div className="flex flex-wrap items-center justify-center gap-2">
-                          {/* ✅ Nút Chi tiết - Chỉ KETOANTRUONG và PGD */}
                           <button
                             onClick={() =>
-                              canViewDetails &&
                               openDetail({
                                 ma_nhan_vien: item.ma_nhan_vien,
                                 ho_ten: item.ho_ten,
                                 don_vi: item.don_vi,
                               })
                             }
-                            disabled={!canViewDetails}
-                            className={[
-                              "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-sm transition",
-                              canViewDetails
-                                ? "text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 cursor-pointer"
-                                : "text-slate-400 bg-slate-100 cursor-not-allowed opacity-50",
-                            ].join(" ")}
-                            title={
-                              !canViewDetails
-                                ? "Chỉ Kế toán trưởng và PGD mới có quyền xem chi tiết"
-                                : `Xem chi tiết KPI của ${item.ho_ten}`
-                            }
+                            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 shadow-sm transition"
                             aria-label={`Xem chi tiết KPI của ${item.ho_ten}`}
                           >
                             📊 Chi tiết
                           </button>
 
-                          {/* ✅ Nút Excel - Chỉ KETOANTRUONG và PGD */}
                           <button
-                            onClick={() =>
-                              canViewDetails && openExportModal(item)
-                            }
-                            disabled={!canViewDetails}
-                            className={[
-                              "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-sm transition",
-                              canViewDetails
-                                ? "text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 cursor-pointer"
-                                : "text-slate-400 bg-slate-100 cursor-not-allowed opacity-50",
-                            ].join(" ")}
-                            title={
-                              !canViewDetails
-                                ? "Chỉ Kế toán trưởng và PGD mới có quyền xuất Excel"
-                                : `Xuất Excel KPI của ${item.ho_ten}`
-                            }
+                            onClick={() => openExportModal(item)}
+                            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-sm transition"
                             aria-label={`Xuất Excel KPI của ${item.ho_ten}`}
                           >
                             📤 Excel
@@ -669,7 +686,7 @@ const TableKeToan = () => {
       )}
 
       {checkOpen && (
-        <CheckKPIKeToanModal
+        <CheckKPIModal
           onClose={() => setCheckOpen(false)}
           onSaved={() => {
             refreshList();
@@ -690,4 +707,4 @@ const TableKeToan = () => {
   );
 };
 
-export default TableKeToan;
+export default TableNhapHang;

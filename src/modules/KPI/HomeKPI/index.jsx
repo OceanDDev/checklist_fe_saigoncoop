@@ -31,7 +31,7 @@ const HomeKPI = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* KPI BDH */}
           <Link
-            to="/kpi/bdh"
+            to="/kpi/homestaff/ban-dieu-hanh"
             className="outline-none focus-visible:ring-2 focus-visible:ring-white/50 rounded-2xl"
           >
             <div

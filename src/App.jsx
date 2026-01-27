@@ -23,6 +23,14 @@ import PhieuSoanHome from "./modules/PhieuSoan";
 import HomePhuXe from "./modules/Dieuvan/ToolPhuXe";
 import DashboardBDH from "./modules/BDH/DasboardBDH";
 import HomeTTB from "./modules/TTB";
+import HomeHoTro from "./modules/KPI/KPINV/HOTROKHO";
+import TableHoTro from "./modules/KPI/KPINV/HOTROKHO/table";
+import TableNhapHang from "./modules/KPI/KPINV/NHAPHANG/table";
+import HomeNhapHang from "./modules/KPI/KPINV/NHAPHANG";
+import HomeXuatHang from "./modules/KPI/KPINV/XUATHANG";
+import TableXuatHang from "./modules/KPI/KPINV/XUATHANG/table";
+import HomeBDH from "./modules/KPI/KPIBDH";
+import TableBDH from "./modules/KPI/KPIBDH/table";
 
 function App() {
   return (
@@ -181,14 +189,14 @@ function App() {
           }
         />
 
-  
         {/* TTB */}
         <Route
           path="/ttb"
           element={
             <PrivateRoute allowRoles={[23]}>
-              <MainLayout> {" "}
-               <HomeTTB />{" "}
+              <MainLayout>
+                {" "}
+                <HomeTTB />{" "}
               </MainLayout>
             </PrivateRoute>
           }
@@ -236,6 +244,93 @@ function App() {
             </PrivateRoute>
           }
         />
+
+        <Route
+          path="/kpi/homestaff/ho-tro-kho"
+          element={
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <HomeHoTro /> 
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/kpi/homestaff/ho-tro-kho/table/:year"
+          element={
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <TableHoTro />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+         <Route
+          path="/kpi/homestaff/ban-dieu-hanh"
+          element={
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <HomeBDH /> 
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/kpi/homestaff/ban-dieu-hanh/table/:year"
+          element={
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <TableBDH />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+
+         <Route
+          path="/kpi/homestaff/xuat-hang"
+          element={
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <HomeXuatHang /> 
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/kpi/homestaff/xuat-hang/table/:year"
+          element={
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <TableXuatHang />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+         <Route
+          path="/kpi/homestaff/nhap-hang"
+          element={
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <HomeNhapHang /> 
+              </MainLayout>
+            </PrivateRoute>
+          }
+
+        />
+           <Route
+          path="/kpi/homestaff/nhap-hang/table/:year"
+          element={
+            <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
+              <MainLayout>
+                <TableNhapHang /> 
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
         {/* PHIEU SOAN */}
 
         <Route
@@ -248,7 +343,6 @@ function App() {
             </PrivateRoute>
           }
         />
-
 
         <Route path="/thank-you" element={<ThankYouScreen />} />
 

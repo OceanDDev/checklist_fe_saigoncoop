@@ -2,8 +2,28 @@
 import { ApiServer, URL } from "@/configs/api-request";
 
 // Unwrap helper: ưu tiên res.data.data -> res.data -> []
-const pick = (res) => (res?.data?.data ?? res?.data ?? []);
+const pick = (res) => {
+  // Case 1: Response trực tiếp là mảng
+  if (Array.isArray(res)) return res;
 
+  // Case 2: Response có cấu trúc { data: { data: [...] } }
+  if (res?.data?.data && Array.isArray(res.data.data)) {
+    return res.data.data;
+  }
+
+  // Case 3: Response có cấu trúc { data: [...] }
+  if (res?.data && Array.isArray(res.data)) {
+    return res.data;
+  }
+
+  // Case 4: Response là object đơn (getById)
+  if (res?.data && typeof res.data === "object") {
+    return res.data;
+  }
+
+  // Fallback
+  return [];
+};
 const commonNoCache = {
   headers: { "Cache-Control": "no-cache" },
   // Nếu muốn chắc chắn hơn: params: { _t: Date.now(), ...(params || {}) }
@@ -15,13 +35,16 @@ const getAllFormKPI = async (params) => {
     ...commonNoCache,
     params,
   });
-  return pick(res);            // ← luôn trả về mảng
+  return pick(res); // ← luôn trả về mảng
 };
 
 // Lấy theo _id (record id)
 const getFormKPIById = async (id) => {
-  const res = await ApiServer.get(`${URL.formkpistaff.list}/${id}`, commonNoCache);
-  return pick(res);            // có thể là object hoặc mảng tùy backend
+  const res = await ApiServer.get(
+    `${URL.formkpistaff.list}/${id}`,
+    commonNoCache,
+  );
+  return pick(res); // có thể là object hoặc mảng tùy backend
 };
 
 // (Tùy backend có route này không) Lấy theo mã NV + tháng/năm
@@ -30,12 +53,16 @@ const getFormKPIByStaffMonth = async (ma_nhan_vien, thang, nam) => {
     ...commonNoCache,
     params: { ma_nhan_vien, thang, nam },
   });
-  return pick(res);            // thường là mảng các bản ghi phù hợp
+  return pick(res); // thường là mảng các bản ghi phù hợp
 };
 
 // Tạo Form KPI
 const createFormKPI = async (payload) => {
-  const res = await ApiServer.post(URL.formkpistaff.create, payload, commonNoCache);
+  const res = await ApiServer.post(
+    URL.formkpistaff.create,
+    payload,
+    commonNoCache,
+  );
   // nhiều API trả {success,data}; ta lấy data thật
   return res?.data?.data ?? payload;
 };
@@ -43,14 +70,21 @@ const createFormKPI = async (payload) => {
 // Cập nhật Form KPI theo _id (nhớ đúng base path PUT/ids)
 const updateFormKPI = async (id, payload) => {
   // dùng URL.formkpistaff.list cho REST chuẩn: PUT /formkpistaff/:id
-  const res = await ApiServer.put(`${URL.formkpistaff.list}/${id}`, payload, commonNoCache);
+  const res = await ApiServer.put(
+    `${URL.formkpistaff.list}/${id}`,
+    payload,
+    commonNoCache,
+  );
   return res?.data?.data ?? { _id: id, ...payload };
 };
 
 // Xoá Form KPI theo _id
 const deleteFormKPI = async (id) => {
   // tương tự: DELETE /formkpistaff/:id
-  const res = await ApiServer.delete(`${URL.formkpistaff.list}/${id}`, commonNoCache);
+  const res = await ApiServer.delete(
+    `${URL.formkpistaff.list}/${id}`,
+    commonNoCache,
+  );
   return res?.data?.data ?? { _id: id };
 };
 
@@ -62,4 +96,3 @@ export const formkpistaffService = {
   updateFormKPI,
   deleteFormKPI,
 };
-  

@@ -1,16 +1,15 @@
+/* eslint-disable no-unused-vars */
 /* eslint-disable react/prop-types */
 import { useMemo, useState } from "react";
 import { formkpistaffService } from "@/services/formkpistaff.service";
 import { checkKPIService } from "@/services/checkkpistaff.service";
 import { toast } from "react-toastify";
 
-// Chuẩn hoá KPI items từ Form KPI - CẬP NHẬT MỚI với logic CBQL đánh giá
 const mapFormToEditable = (rec) =>
   (rec?.kpis ?? []).map((it, index) => {
-    const isFirstTwo = index < 2; // F1, F2
-    const da_thuc_hien = isFirstTwo ? "100" : it?.da_thuc_hien ?? "";
+    const isFirstTwo = index < 2;
+    const da_thuc_hien = isFirstTwo ? "100" : (it?.da_thuc_hien ?? "");
 
-    // Kiểm tra đơn vị tính để xác định mặc định CBQL đánh giá
     const isPercentRow =
       String(it?.don_vi_tinh || "").trim() === "%" ||
       String(it?.don_vi_tinh || "").includes("%") ||
@@ -18,7 +17,6 @@ const mapFormToEditable = (rec) =>
 
     const so_loi_default = isPercentRow ? "100" : "0";
 
-    // TÍNH NV đánh giá dựa trên da_thuc_hien
     const nv_danh_gia_calc = calculateNVDanhGia({
       daThucHien: da_thuc_hien,
       tyTrong: it?.ty_trong ?? 0,
@@ -26,7 +24,6 @@ const mapFormToEditable = (rec) =>
       kyHieu: it?.ky_hieu ?? "",
     });
 
-    // TÍNH ty_trong_cuoi dựa trên CBQL đánh giá
     const ty_trong_cuoi_calc = calculateTyTrongCuoi({
       cbqlDanhGia: so_loi_default,
       tyTrong: it?.ty_trong ?? 0,
@@ -51,6 +48,13 @@ const mapFormToEditable = (rec) =>
       ty_trong_cuoi: ty_trong_cuoi_calc,
       ty_trong_cuoi_goc: it?.ty_trong ?? 0,
       noi_dung_loi: it?.noi_dung_loi ?? "",
+      kpi_phu:
+        Array.isArray(it?.kpi_phu) && it.kpi_phu.length > 0
+          ? it.kpi_phu.map((sub) => ({
+              ten_kpi_phu: sub.ten_kpi_phu || "",
+              so_loi: 0, // Reset về 0 để người dùng chấm
+            }))
+          : null,
     };
   });
 
@@ -135,8 +139,6 @@ const pickNewestIndex = (arr) => {
 
 // Unwrap response
 const unwrapForms = (res) => {
-  console.log("Raw response từ API:", res);
-
   if (Array.isArray(res)) return res;
   if (res && Array.isArray(res.data)) return res.data;
   if (res && res.success === false) {
@@ -144,12 +146,10 @@ const unwrapForms = (res) => {
     err._isBackendMsg = true;
     throw err;
   }
-
-  console.log("Dữ liệu sau khi unwrap:", res);
   return [];
 };
 
-const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
+const CheckKPIKeToanModal = ({ onClose, onSaved, selectedYear }) => {
   const [codeInput, setCodeInput] = useState("");
   const [finding, setFinding] = useState(false);
   const [findError, setFindError] = useState("");
@@ -165,7 +165,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
 
   const currentYear = useMemo(
     () => selectedYear || new Date().getFullYear(),
-    [selectedYear]
+    [selectedYear],
   );
 
   // Tính toán tổng điểm cuối
@@ -215,10 +215,6 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
         return dn !== 0 ? dn : Number(b?.quy || 0) - Number(a?.quy || 0);
       });
       const rec = arr[pickNewestIndex(arr)];
-
-      console.log("Form record nhận được:", rec);
-      console.log("Form record _id:", rec?._id);
-      console.log("Form record kpis:", rec?.kpis);
 
       if (!rec._id && !rec.id) {
         setFindError("Form KPI không có ID hợp lệ. Dữ liệu có thể bị lỗi.");
@@ -306,7 +302,6 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
       return;
     }
 
-    // ĐỔI: Chuẩn hoá quý 1..4 thay vì tháng 1..12
     let quy = parseInt(quarterInput, 10);
     if (Number.isNaN(quy) || quy < 1) quy = 1;
     if (quy > 4) quy = 4;
@@ -314,9 +309,9 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
     try {
       const kpisToSave = formKpis.map((kpi, index) => {
         const kpiData = {
-          _id: kpi._id || undefined,
           kpi: String(kpi.kpi || ""),
           ty_trong: Number(kpi.ty_trong || 0),
+          ty_trong_cuoi: Number(kpi.ty_trong_cuoi || 0), // ✅ THÊM field này
           ky_hieu: String(kpi.ky_hieu || ""),
           don_vi_tinh: String(kpi.don_vi_tinh || ""),
           da_thuc_hien: String(kpi.da_thuc_hien || "0"),
@@ -325,44 +320,26 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
           nv_danh_gia: Number(kpi.nv_danh_gia || 0),
           cac_do_luong: String(kpi.cac_do_luong || ""),
           bp_theo_doi: String(kpi.bp_theo_doi || ""),
-          so_loi: String(kpi.so_loi || "0"),
-          ty_trong_cuoi: Number(kpi.ty_trong_cuoi || 0),
+          so_loi: Number(kpi.so_loi || 0), // ✅ ĐỔI: Number thay vì String
           noi_dung_loi: String(kpi.noi_dung_loi || ""),
         };
 
-        console.log(`KPI ${index + 1} data:`, kpiData);
         return kpiData;
       });
 
-      console.log("=== DATA GỬI ĐI ===");
-      console.log("Form ID:", formId);
-      console.log("Quý:", quy);
-      console.log("Năm:", currentYear);
-      console.log("Final Score:", finalScore);
-      console.log("KPIs to save:", kpisToSave);
-      console.log("Ma nhan vien:", formRecord.ma_nhan_vien);
-
-      // ĐỔI: Gửi theo quý (ty_trong_quy) thay vì tháng (ty_trong_thang)
       const payloadData = {
         form_kpi_id: formId,
         quy,
         nam: currentYear,
-        danh_sach_check: kpisToSave,
+        danh_sach_check: kpisToSave, // ✅ Đúng field name
         ty_trong_quy: Number(finalScore || 0),
       };
 
-      console.log("=== PAYLOAD CUỐI CÙNG ===", payloadData);
-
       let created = null;
       try {
-        console.log("Thử createCheckKPI với form_kpi_id...");
         created = await checkKPIService.createCheckKPI(payloadData);
-        console.log("createCheckKPI thành công:", created);
       } catch (error1) {
-        console.log("createCheckKPI thất bại, error:", error1);
-
         try {
-          console.log("Thử createCheckKPIFromStaff với ma_nhan_vien...");
           const fallbackPayload = {
             ma_nhan_vien: formRecord.ma_nhan_vien,
             quy,
@@ -370,15 +347,11 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
             danh_sach_check: kpisToSave,
             ty_trong_quy: Number(finalScore || 0),
           };
-          console.log("Fallback payload:", fallbackPayload);
 
-          created = await checkKPIService.createCheckKPIFromStaff(
-            fallbackPayload
-          );
-          console.log("createCheckKPIFromStaff thành công:", created);
+          created =
+            await checkKPIService.createCheckKPIFromStaff(fallbackPayload);
         } catch (error2) {
-          console.log("createCheckKPIFromStaff cũng thất bại:", error2);
-          throw error1;
+          throw error1; // Throw lỗi đầu tiên
         }
       }
 
@@ -386,11 +359,6 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
       if (typeof onSaved === "function") await onSaved();
       onClose?.();
     } catch (e) {
-      console.error("=== LỖI CUỐI CÙNG ===");
-      console.error("Error object:", e);
-      console.error("Error message:", e?.message);
-      console.error("Error response:", e?.response?.data);
-
       let errorMessage = "Vui lòng thử lại.";
       if (e?.response?.data?.message) {
         errorMessage = e.response.data.message;
@@ -483,10 +451,13 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
                       Họ tên:{" "}
                       <b className="ml-1 font-semibold">{formRecord.ho_ten}</b>
                     </span>
-                    <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-indigo-700 ring-1 ring-inset ring-indigo-200">
-                      Đơn vị:{" "}
-                      <b className="ml-1 font-semibold">{formRecord.don_vi}</b>
-                    </span>
+                   <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-indigo-700 ring-1 ring-inset ring-indigo-200">
+  Đơn vị:{" "}
+  <b className="ml-1 font-semibold">
+    {formRecord.don_vi?.chinh}
+    {formRecord.don_vi?.phu ? ` - ${formRecord.don_vi.phu}` : ""}
+  </b>
+</span>
                   </div>
 
                   {/* Quý / Năm */}
@@ -656,7 +627,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
                                     updateKpiField(
                                       i,
                                       "da_thuc_hien",
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   placeholder="Thực hiện"
@@ -726,7 +697,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
                                       updateKpiField(
                                         i,
                                         "cbql_danh_gia",
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-center text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
@@ -761,7 +732,7 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
                                     updateKpiField(
                                       i,
                                       "noi_dung_loi",
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   placeholder="Mô tả (nếu có)..."
@@ -834,4 +805,4 @@ const CheckKPISimpleModal = ({ onClose, onSaved, selectedYear }) => {
   );
 };
 
-export default CheckKPISimpleModal;
+export default CheckKPIKeToanModal;

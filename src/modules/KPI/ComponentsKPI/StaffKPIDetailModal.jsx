@@ -10,7 +10,7 @@ const unwrapArray = (res) => {
   return [];
 };
 
-const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const QUARTERS = [1, 2, 3, 4];
 
 // Helper function để lấy thông tin user từ localStorage
 const getUserFromStorage = () => {
@@ -47,67 +47,96 @@ const getUserFromStorage = () => {
 };
 
 // Function tính NV đánh giá dựa trên da_thuc_hien và ty_trong
-// NEW: NV đánh giá giống CheckKPISimpleModal
-const calculateNVDanhGia = ({ daThucHien, tyTrong, donViTinh, kyHieu}) => {
+const calculateNVDanhGia = ({ daThucHien, tyTrong, donViTinh, kyHieu }) => {
   const w = Number(tyTrong || 0);
   const th = Number(daThucHien || 0);
 
+  // ✅ THÊM LOGIC C3 (Điểm)
+  const isC3Diem =
+    String(kyHieu || "").toUpperCase() === "C3" &&
+    String(donViTinh || "")
+      .toLowerCase()
+      .includes("điểm");
+
+  if (isC3Diem) {
+    const MAX_SCORE = 4.1;
+    const score = Math.min(th, MAX_SCORE);
+    return Math.round((score / MAX_SCORE) * w * 100) / 100;
+  }
+
+  // Logic cũ cho % và Lỗi
   const isPercentRow =
     String(donViTinh || "").trim() === "%" ||
     String(donViTinh || "").includes("%") ||
     ["F1", "F2"].includes(String(kyHieu || "").toUpperCase());
 
   if (!isPercentRow) {
-    // Hàng "Lỗi": trừ từ tỷ trọng gốc theo số lỗi đã thực hiện
+    // Hàng "Lỗi"
     if (th === 0) return w;
     if (w >= 1 && w <= 9) {
-      const deduction = th * 1; // mỗi lỗi -1%
+      const deduction = th * 1;
       return Math.max(0, w - deduction);
     } else if (w >= 10) {
-      const deductionPerError = w / 2; // mỗi lỗi -1/2 w
+      const deductionPerError = w / 2;
       const totalDeduction = th * deductionPerError;
       return Math.max(0, w - totalDeduction);
     }
     return w;
   }
 
-  // Hàng % (hoặc F1/F2): tính theo % thực hiện
-  const pct = Math.max(0, Math.min(100, th)); // clamp 0..100
+  // Hàng %
+  const pct = Math.max(0, Math.min(100, th));
   return Math.round(((w * pct) / 100) * 100) / 100;
 };
-
-const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = false }) => {
+const StaffKPIDetailModal = ({
+  staff,
+  onClose,
+  selectedYear,
+  canManageKPI = false,
+}) => {
   // Sử dụng selectedYear từ props, fallback về năm hiện tại
   const targetYear = useMemo(
     () => Number(selectedYear || new Date().getFullYear()),
-    [selectedYear]
+    [selectedYear],
   );
+  const [subKpiModal, setSubKpiModal] = useState({ open: false, data: [] });
+  const openSubKpiModal = () => {
+    if (
+      record?.kpi_phu &&
+      Array.isArray(record.kpi_phu) &&
+      record.kpi_phu.length > 0
+    ) {
+      setSubKpiModal({ open: true, data: record.kpi_phu });
+    }
+  };
+  const closeSubKpiModal = () => setSubKpiModal({ open: false, data: [] });
 
-  const defaultMonth = useMemo(() => {
+  const defaultQuarter = useMemo(() => {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     if (targetYear === currentYear) {
       const currentMonth = currentDate.getMonth() + 1;
-      return MONTHS.includes(currentMonth) ? currentMonth : 1;
+      const currentQuarter = checkKPIService.getQuarterFromMonth(currentMonth);
+      return QUARTERS.includes(currentQuarter) ? currentQuarter : 1;
     } else if (targetYear > currentYear) {
-      return 1; // năm tương lai → tháng 1
+      return 1; // năm tương lai → quý 1
     } else {
-      return 12; // năm quá khứ → tháng 12
+      return 4; // năm quá khứ → quý 4
     }
   }, [targetYear]);
 
-  const [activeMonth, setActiveMonth] = useState(defaultMonth);
+  const [activeQuarter, setActiveQuarter] = useState(defaultQuarter);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const originalItemsRef = useRef([]); // giữ snapshot trước khi cập nhật
 
-  // Map tháng -> record
-  const [byMonth, setByMonth] = useState(() =>
-    Object.fromEntries(MONTHS.map((m) => [m, null]))
+  // Map quý -> record
+  const [byQuarter, setByQuarter] = useState(() =>
+    Object.fromEntries(QUARTERS.map((q) => [q, null])),
   );
 
-  const record = byMonth[activeMonth];
+  const record = byQuarter[activeQuarter];
 
   // Fix: Move items calculation after record is defined
   const items = useMemo(() => {
@@ -122,33 +151,41 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
   const noteRef = useRef(null);
   const isNoteEmpty = useMemo(
     () => updateNote.trim().length === 0,
-    [updateNote]
+    [updateNote],
   );
 
   // Thêm state để track việc save thành công
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const storedScore = Number(record?.ty_trong_thang || 0);
+  const storedScore = Number(record?.ty_trong_quy || 0);
 
-  // Khi đổi record (tháng), sync editableItems
   useEffect(() => {
     if (record?.danh_sach_check) {
       setEditableItems(
-        record.danh_sach_check.map((it) => ({
-          kpi: it.kpi,
-          ty_trong: Number(it.ty_trong ?? 0),
-          so_loi: Number(it.so_loi ?? 0),
-          noi_dung_loi: String(it.noi_dung_loi ?? ""),
-          ky_hieu: String(it.ky_hieu ?? ""),
-          don_vi_tinh: String(it.don_vi_tinh ?? ""),
-          // Thêm các field mới
-          da_thuc_hien: String(it.da_thuc_hien ?? ""),
-          ke_hoach_quy: String(it.ke_hoach_quy ?? ""),
-          chu_ki: String(it.chu_ki ?? ""),
-          nv_danh_gia: String(it.nv_danh_gia ?? ""),
-          cac_do_luong: String(it.cac_do_luong ?? ""),
-          bp_theo_doi: String(it.bp_theo_doi ?? ""),
-        }))
+        record.danh_sach_check.map((it) => {
+          // ✅ BỎ biến isC3Diem không dùng, chỉ cần gọi calculateNVDanhGia
+          const nvCalc = calculateNVDanhGia({
+            daThucHien: it.da_thuc_hien ?? 0,
+            tyTrong: it.ty_trong ?? 0,
+            donViTinh: it.don_vi_tinh ?? "",
+            kyHieu: it.ky_hieu ?? "",
+          });
+
+          return {
+            kpi: it.kpi,
+            ty_trong: Number(it.ty_trong ?? 0),
+            so_loi: Number(it.so_loi ?? 0),
+            noi_dung_loi: String(it.noi_dung_loi ?? ""),
+            ky_hieu: String(it.ky_hieu ?? ""),
+            don_vi_tinh: String(it.don_vi_tinh ?? ""),
+            da_thuc_hien: String(it.da_thuc_hien ?? ""),
+            ke_hoach_quy: String(it.ke_hoach_quy ?? ""),
+            chu_ki: String(it.chu_ki ?? ""),
+            nv_danh_gia: String(nvCalc),
+            cac_do_luong: String(it.cac_do_luong ?? ""),
+            bp_theo_doi: String(it.bp_theo_doi ?? ""),
+          };
+        }),
       );
     } else {
       setEditableItems([]);
@@ -157,8 +194,8 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
     setUpdateNoteError("");
     setEditMode(false);
     setSaveSuccess(false);
-    originalItemsRef.current = []; // reset baseline khi đổi tháng/record
-  }, [record?._id, activeMonth]);
+    originalItemsRef.current = [];
+  }, [record?._id, activeQuarter]);
 
   const fetchAllOfYear = async () => {
     const payload = { ma_nhan_vien: staff?.ma_nhan_vien, nam: targetYear };
@@ -172,21 +209,21 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
 
       const sameYear = arr
         .filter((r) => Number(r?.nam) === Number(targetYear))
-        .sort((a, b) => Number(a?.thang || 0) - Number(b?.thang || 0));
+        .sort((a, b) => Number(a?.quy || 0) - Number(b?.quy || 0));
 
-      const grouped = Object.fromEntries(MONTHS.map((m) => [m, null]));
+      const grouped = Object.fromEntries(QUARTERS.map((q) => [q, null]));
       for (const r of sameYear) {
-        const m = Number(r?.thang);
-        if (!MONTHS.includes(m)) continue;
-        if (!grouped[m]) {
-          grouped[m] = r;
+        const q = Number(r?.quy);
+        if (!QUARTERS.includes(q)) continue;
+        if (!grouped[q]) {
+          grouped[q] = r;
         } else {
-          const t1 = new Date(grouped[m]?.ngay_tao || 0).getTime();
+          const t1 = new Date(grouped[q]?.ngay_tao || 0).getTime();
           const t2 = new Date(r?.ngay_tao || 0).getTime();
-          if (t2 >= t1) grouped[m] = r;
+          if (t2 >= t1) grouped[q] = r;
         }
       }
-      setByMonth(grouped);
+      setByQuarter(grouped);
     } catch (e) {
       const msg =
         e?.response?.data?.message ||
@@ -209,8 +246,6 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
     document.body.style.overflow = "hidden";
     return () => (document.body.style.overflow = prev);
   }, []);
-
-  // GIỐNG CheckKPISimpleModal
   const calculateTyTrongCuoi = ({
     cbqlDanhGia,
     tyTrong,
@@ -220,6 +255,21 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
     const w = Number(tyTrong || 0);
     const cbql = Number(cbqlDanhGia || 0);
 
+    // ✅ THÊM LOGIC C3 (Điểm)
+    if (
+      String(kyHieu || "").toUpperCase() === "C3" &&
+      String(donViTinh || "")
+        .toLowerCase()
+        .includes("điểm")
+    ) {
+      const MAX_SCORE = 4.1;
+      const score = cbql > 0 ? cbql : MAX_SCORE;
+      const limitedScore = Math.min(score, MAX_SCORE);
+      const result = (limitedScore / MAX_SCORE) * w;
+      return Math.round(result * 100) / 100;
+    }
+
+    // Logic cũ cho % và Lỗi
     const isPercentRow =
       String(donViTinh || "").trim() === "%" ||
       String(donViTinh || "").includes("%") ||
@@ -230,25 +280,21 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
       .includes("lỗi");
 
     if (isErrorRow) {
-      if (cbql === 0) return w; // 0 lỗi → giữ nguyên
-
+      if (cbql === 0) return w;
       if (w >= 1 && w <= 9) {
-        // 1-9%: mỗi lỗi trừ 1%
         const deduction = cbql * 1;
         return Math.max(0, w - deduction);
       } else if (w >= 10) {
-        // ≥10%: mỗi lỗi trừ 1/2 tỷ trọng
         const deductionPerError = w / 2;
         const totalDeduction = cbql * deductionPerError;
         return Math.max(0, w - totalDeduction);
       }
       return w;
     } else if (isPercentRow) {
-      const pct = Math.max(0, Math.min(100, cbql)); // clamp 0..100
+      const pct = Math.max(0, Math.min(100, cbql));
       return Math.round(((w * pct) / 100) * 100) / 100;
     }
 
-    // Mặc định: quy theo %
     const pct = Math.max(0, Math.min(100, cbql));
     return Math.round(((w * pct) / 100) * 100) / 100;
   };
@@ -264,17 +310,12 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
     if (updates.length > 0) {
       updates.sort(
         (a, b) =>
-          new Date(a?.at || 0).getTime() - new Date(b?.at || 0).getTime()
+          new Date(a?.at || 0).getTime() - new Date(b?.at || 0).getTime(),
       );
 
-      const eqNum = (a, b) => Number(a ?? 0) === Number(b ?? 0); // "" ~ 0
+      const eqNum = (a, b) => Number(a ?? 0) === Number(b ?? 0);
       const eqStr = (a, b) => String(a ?? "").trim() === String(b ?? "").trim();
 
-      // baseline:
-      // 1) nếu backend có snapshot_before -> dùng
-      // 2) nếu KHÔNG có và đây là lần cập nhật đầu (updates.length===1) -> dùng
-      //    ảnh trước khi sửa lưu tại client (originalItemsRef.current)
-      // 3) fallback: dùng snapshot sau (ít nhất không crash)
       let prevSnap =
         updates[0]?.snapshot_before?.danh_sach_check ??
         (updates.length === 1 && originalItemsRef.current.length
@@ -288,8 +329,8 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
         const currSnap = Array.isArray(u?.snapshot?.danh_sach_check)
           ? u.snapshot.danh_sach_check
           : i === updates.length - 1
-          ? items
-          : prevSnap;
+            ? items
+            : prevSnap;
 
         const len = Math.max(prevSnap?.length || 0, currSnap?.length || 0);
         for (let idx = 0; idx < len; idx++) {
@@ -363,6 +404,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
 
     setEditableItems(
       (originalItemsRef.current = items.map((it) => {
+        // ✅ THÊM: Tính NV đánh giá có xử lý C3
         const nvCalc = calculateNVDanhGia({
           daThucHien: it.da_thuc_hien ?? 0,
           tyTrong: it.ty_trong ?? 0,
@@ -377,16 +419,14 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
           noi_dung_loi: String(it.noi_dung_loi ?? ""),
           ky_hieu: String(it.ky_hieu ?? ""),
           don_vi_tinh: String(it.don_vi_tinh ?? ""),
-
-          // NEW
           da_thuc_hien: String(it.da_thuc_hien ?? ""),
           ke_hoach_quy: String(it.ke_hoach_quy ?? ""),
           chu_ki: String(it.chu_ki ?? ""),
-          nv_danh_gia: String(nvCalc), // ← tính lại theo logic mới
+          nv_danh_gia: String(nvCalc), // ✅ Dùng nvCalc đã tính
           cac_do_luong: String(it.cac_do_luong ?? ""),
           bp_theo_doi: String(it.bp_theo_doi ?? ""),
         };
-      }))
+      })),
     );
   };
 
@@ -399,14 +439,13 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
         noi_dung_loi: String(it.noi_dung_loi ?? ""),
         ky_hieu: String(it.ky_hieu ?? ""),
         don_vi_tinh: String(it.don_vi_tinh ?? ""),
-        // Thêm các field mới
         da_thuc_hien: String(it.da_thuc_hien ?? ""),
         ke_hoach_quy: String(it.ke_hoach_quy ?? ""),
         chu_ki: String(it.chu_ki ?? ""),
         nv_danh_gia: String(it.nv_danh_gia ?? ""),
         cac_do_luong: String(it.cac_do_luong ?? ""),
         bp_theo_doi: String(it.bp_theo_doi ?? ""),
-      }))
+      })),
     );
     setUpdateNote("");
     setUpdateNoteError("");
@@ -424,7 +463,6 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
         const n = Number(value);
         curr.so_loi = Number.isNaN(n) || n < 0 ? 0 : n;
       } else if (field === "da_thuc_hien") {
-        // NEW: clamp + tính NV đánh giá theo CheckKPISimpleModal
         const isPercentRow =
           String(curr.don_vi_tinh || "").includes("%") ||
           ["F1", "F2"].includes(String(curr.ky_hieu || "").toUpperCase());
@@ -440,7 +478,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
             tyTrong: curr.ty_trong,
             donViTinh: curr.don_vi_tinh,
             kyHieu: curr.ky_hieu,
-          })
+          }),
         );
       } else if (field === "noi_dung_loi") {
         curr.noi_dung_loi = value;
@@ -453,7 +491,6 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
       } else if (field === "chu_ki") {
         curr.chu_ki = value;
       } else if (field === "nv_danh_gia") {
-        // (giữ nguyên nếu bạn có chỗ khác set thủ công; còn mặc định ta auto tính ở trên)
         curr.nv_danh_gia = value;
       } else if (field === "cac_do_luong") {
         curr.cac_do_luong = value;
@@ -469,12 +506,10 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
   const handleSave = async () => {
     if (!record?._id) return;
 
-    // Validate lý do cập nhật không để trống
     const trimmedNote = updateNote.trim();
     if (trimmedNote.length === 0) {
       setUpdateNoteError("Lý do cập nhật không được để trống.");
       noteRef.current?.focus();
-      // Scroll to the note input nếu cần
       noteRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -484,7 +519,6 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
 
       const userName = getUserFromStorage();
 
-      // Tính toán điểm cuối cùng dựa trên editableItems thực tế
       const finalScoreToSave = editableItems.reduce((total, item) => {
         const soLoi = Number(item?.so_loi ?? 0);
         const tyTrong = Number(item?.ty_trong ?? 0);
@@ -503,8 +537,8 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
 
       await checkKPIService.updateCheckKPI(record._id, {
         danh_sach_check: editableItems,
-        ty_trong_thang: Math.round(finalScoreToSave * 100) / 100,
-        update_note: trimmedNote, // Sử dụng trimmed note
+        ty_trong_quy: Math.round(finalScoreToSave * 100) / 100,
+        update_note: trimmedNote,
         by_name: userName,
       });
 
@@ -523,9 +557,8 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
     }
   };
 
-  // Đóng modal chính
   const handleClose = () => {
-    if (logModal.open) return; // Không đóng nếu modal con đang mở
+    if (logModal.open) return;
     onClose();
   };
 
@@ -533,7 +566,9 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key === "Escape") {
-        if (logModal.open) {
+        if (subKpiModal.open) {
+          closeSubKpiModal();
+        } else if (logModal.open) {
           closeLogModal();
         } else if (editMode) {
           cancelEdit();
@@ -544,8 +579,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
     };
     document.addEventListener("keydown", handleEsc);
     return () => document.removeEventListener("keydown", handleEsc);
-  }, [logModal.open, editMode]);
-
+  }, [subKpiModal.open, logModal.open, editMode]);
   // Helper function trạng thái năm
   const getYearStatus = () => {
     const currentYear = new Date().getFullYear();
@@ -554,6 +588,12 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
     return "past";
   };
   const yearStatus = getYearStatus();
+
+  // Helper function để lấy tháng từ quý
+  const getQuarterMonths = (quy) => {
+    const months = checkKPIService.getMonthsFromQuarter(quy);
+    return `Tháng ${months.start} - ${months.end}`;
+  };
 
   return (
     <>
@@ -590,15 +630,15 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                   </span>
                   <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-indigo-700 ring-1 ring-inset ring-indigo-200">
                     Đơn vị:{" "}
-                    <b className="ml-1 font-semibold">{staff?.don_vi}</b>
+                    <b className="ml-1 font-semibold">{staff?.don_vi?.chinh}</b>
                   </span>
                   <span
                     className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
                       yearStatus === "current"
                         ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"
                         : yearStatus === "future"
-                        ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200"
-                        : "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200"
+                          ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200"
+                          : "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200"
                     }`}
                   >
                     Năm: <b className="ml-1 font-semibold">{targetYear}</b>
@@ -606,101 +646,100 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                       {yearStatus === "current"
                         ? "(Hiện tại)"
                         : yearStatus === "future"
-                        ? "(Tương lai)"
-                        : "(Quá khứ)"}
+                          ? "(Tương lai)"
+                          : "(Quá khứ)"}
                     </span>
                   </span>
                 </div>
               </div>
-                          {canManageKPI  && (
-                            
-              <div className="flex items-center gap-2">
-                {!editMode ? (
-                  <button
-                    onClick={enterEdit}
-                    disabled={!record}
-                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
-                    title="Cập nhật thông tin KPI"
-                  >
-                    Chỉnh sửa
-                  </button>
-                ) : (
-                  <>
+              {canManageKPI && (
+                <div className="flex items-center gap-2">
+                  {!editMode ? (
                     <button
-                      onClick={cancelEdit}
-                      className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                      onClick={enterEdit}
+                      disabled={!record}
+                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                      title="Cập nhật thông tin KPI"
                     >
-                      Hủy
+                      Chỉnh sửa
                     </button>
-                    <button
-                      onClick={handleSave}
-                      disabled={saving || isNoteEmpty}
-                      title={
-                        saving
-                          ? "Đang xử lý..."
-                          : isNoteEmpty
-                          ? "Vui lòng nhập lý do cập nhật trước khi lưu"
-                          : "Lưu các thay đổi"
-                      }
-                      className={`relative rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
-                        saving || isNoteEmpty
-                          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                          : "bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-500 transform hover:scale-105"
-                      }`}
-                    >
-                      {saving ? (
-                        <div className="flex items-center gap-2">
-                          <svg
-                            className="animate-spin h-4 w-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
+                  ) : (
+                    <>
+                      <button
+                        onClick={cancelEdit}
+                        className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        disabled={saving || isNoteEmpty}
+                        title={
+                          saving
+                            ? "Đang xử lý..."
+                            : isNoteEmpty
+                              ? "Vui lòng nhập lý do cập nhật trước khi lưu"
+                              : "Lưu các thay đổi"
+                        }
+                        className={`relative rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                          saving || isNoteEmpty
+                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            : "bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-500 transform hover:scale-105"
+                        }`}
+                      >
+                        {saving ? (
+                          <div className="flex items-center gap-2">
+                            <svg
+                              className="animate-spin h-4 w-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              />
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              />
+                            </svg>
+                            Đang lưu...
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <svg
+                              className="h-4 w-4"
+                              fill="none"
                               stroke="currentColor"
-                              strokeWidth="4"
-                            />
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            />
-                          </svg>
-                          Đang lưu...
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
-                          Lưu thay đổi
-                        </div>
-                      )}
-                    </button>
-                  </>
-                )}
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M5 13l4 4L19 7"
+                              />
+                            </svg>
+                            Lưu thay đổi
+                          </div>
+                        )}
+                      </button>
+                    </>
+                  )}
 
-                <button
-                  onClick={handleClose}
-                  className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-                >
-                  Đóng
-                </button>
-              </div>
-                          )}
+                  <button
+                    onClick={handleClose}
+                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Success notification */}
@@ -733,9 +772,8 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-slate-600 text-sm">
-                      Điểm cuối cùng tháng {activeMonth}/{targetYear}:
+                      Điểm cuối cùng Quý {activeQuarter}/{targetYear}:
                     </span>
-                    {/* 100% xanh lá, còn lại đỏ */}
                     <div
                       className={`inline-flex items-center rounded-full px-4 py-2 text-lg font-bold ring-2 ${
                         Number(storedScore) === 100
@@ -749,54 +787,112 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                 </div>
               </div>
             )}
+            {record &&
+              record.kpi_phu &&
+              Array.isArray(record.kpi_phu) &&
+              record.kpi_phu.length > 0 && (
+                <div className="mx-6 rounded-xl border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 p-4 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-indigo-600">
+                        <svg
+                          className="h-5 w-5 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-800">
+                          KPI Phụ đã chấm
+                        </h4>
+                        <p className="text-xs text-slate-600">
+                          {record.kpi_phu.length} KPI phụ
+                          {(() => {
+                            const totalErrors = record.kpi_phu.reduce(
+                              (sum, item) => sum + Number(item.so_loi || 0),
+                              0,
+                            );
+                            const distributed = Math.floor(totalErrors / 3);
+                            return totalErrors > 0 ? (
+                              <span className="ml-2 text-orange-600 font-medium">
+                                • {totalErrors} lỗi (→ +{distributed} lỗi vào
+                                KPI tỷ trọng thấp nhất)
+                              </span>
+                            ) : null;
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openSubKpiModal}
+                      className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-500 transition-all"
+                    >
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                        />
+                      </svg>
+                      Xem chi tiết KPI Phụ
+                    </button>
+                  </div>
+                </div>
+              )}
 
             {/* Body */}
             <div className="p-4 md:p-6 space-y-4 overflow-y-auto">
-              {/* Tháng selector */}
+              {/* Quý selector */}
               <div className="space-y-3">
-                {/* Mobile */}
-                <div className="-mx-2 px-2 md:hidden">
-                  <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x snap-mandatory">
-                    {MONTHS.map((m) => {
-                      const active = activeMonth === m;
-                      return (
-                        <button
-                          key={`m-sm-${m}`}
-                          onClick={() => setActiveMonth(m)}
-                          className={[
-                            "snap-start shrink-0 px-3 py-1.5 rounded-xl text-sm font-medium ring-1 transition-all duration-200",
-                            active
-                              ? "bg-indigo-600 text-white ring-indigo-500"
-                              : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300",
-                          ].join(" ")}
-                          aria-pressed={active}
-                        >
-                          Tháng {m}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Desktop */}
-                <div className="hidden md:grid grid-cols-6 lg:grid-cols-12 gap-2">
-                  {MONTHS.map((m) => {
-                    const active = activeMonth === m;
+                {/* Mobile & Desktop - simplified for quarters */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {QUARTERS.map((q) => {
+                    const active = activeQuarter === q;
+                    const months = getQuarterMonths(q);
                     return (
                       <button
-                        key={`m-lg-${m}`}
-                        onClick={() => setActiveMonth(m)}
+                        key={`q-${q}`}
+                        onClick={() => setActiveQuarter(q)}
                         className={[
-                          "w-full px-3 py-2 rounded-xl text-sm font-medium ring-1 transition-all duration-200",
+                          "w-full px-4 py-3 rounded-xl text-sm font-medium ring-1 transition-all duration-200",
                           active
-                            ? "bg-indigo-600 text-white ring-indigo-500"
+                            ? "bg-indigo-600 text-white ring-indigo-500 shadow-lg"
                             : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300",
                         ].join(" ")}
                         aria-pressed={active}
                       >
-                        Tháng {m}
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="font-bold">Quý {q}</span>
+                          <span
+                            className={`text-xs ${
+                              active ? "text-indigo-100" : "text-slate-500"
+                            }`}
+                          >
+                            {months}
+                          </span>
+                        </div>
                       </button>
                     );
                   })}
@@ -824,7 +920,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                     onBlur={() => {
                       if (updateNote.trim().length === 0) {
                         setUpdateNoteError(
-                          "Lý do cập nhật không được để trống."
+                          "Lý do cập nhật không được để trống.",
                         );
                       }
                     }}
@@ -990,7 +1086,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                             className="p-6 text-center text-slate-500"
                           >
                             <div className="text-4xl mb-2">📋</div>
-                            Chưa có dữ liệu check KPI cho tháng {activeMonth}/
+                            Chưa có dữ liệu check KPI cho Quý {activeQuarter}/
                             {targetYear}
                           </td>
                         </tr>
@@ -1014,7 +1110,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                         const soLoi = Number(currentItem?.so_loi ?? 0);
                         const tyTrong = Number(currentItem?.ty_trong ?? 0);
                         const donViTinh = String(
-                          currentItem?.don_vi_tinh ?? ""
+                          currentItem?.don_vi_tinh ?? "",
                         );
                         const kyHieu = String(currentItem?.ky_hieu ?? "");
                         const tyTrongCuoi = calculateTyTrongCuoi({
@@ -1024,20 +1120,20 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                           kyHieu,
                         });
                         const daThucHien = String(
-                          currentItem?.da_thuc_hien ?? ""
+                          currentItem?.da_thuc_hien ?? "",
                         );
                         const keHoachQuy = String(
-                          currentItem?.ke_hoach_quy ?? ""
+                          currentItem?.ke_hoach_quy ?? "",
                         );
                         const chuKi = String(currentItem?.chu_ki ?? "");
                         const nvDanhGia = String(
-                          currentItem?.nv_danh_gia ?? ""
+                          currentItem?.nv_danh_gia ?? "",
                         );
                         const cacDoLuong = String(
-                          currentItem?.cac_do_luong ?? ""
+                          currentItem?.cac_do_luong ?? "",
                         );
                         const bpTheoDoi = String(
-                          currentItem?.bp_theo_doi ?? ""
+                          currentItem?.bp_theo_doi ?? "",
                         );
                         const updateCount = perItemLog[idx]?.length || 0;
                         const hasUpdateHistory = updateCount > 0;
@@ -1145,7 +1241,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                                     updateItemField(
                                       idx,
                                       "da_thuc_hien",
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   placeholder="Thực hiện"
@@ -1262,7 +1358,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                               )}
                             </td>
 
-                            {/* CBQL Đánh giá (số lỗi) — 0 lỗi xanh lá, >=1 lỗi đỏ */}
+                            {/* CBQL Đánh giá (số lỗi) */}
                             <td className="p-3 text-center">
                               {editMode ? (
                                 <div className="flex items-center justify-center gap-1">
@@ -1281,7 +1377,7 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                                       updateItemField(
                                         idx,
                                         "so_loi",
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     className="w-20 rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all duration-200"
@@ -1312,21 +1408,19 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                                     raw === null ||
                                     raw === "";
                                   const valueNum = Number(soLoi);
-                                  // Hiển thị: % => rỗng -> 100, ngược lại dùng số hiện có; lỗi => dùng số hiện có
                                   const displayValue = unitIsPercent
                                     ? isEmpty
                                       ? 100
                                       : valueNum
                                     : valueNum;
 
-                                  // Màu: % => 100 xanh, <100 đỏ ; lỗi => 0 xanh, >=1 đỏ
                                   const badgeClass = unitIsPercent
                                     ? displayValue === 100
                                       ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
                                       : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
                                     : displayValue >= 1
-                                    ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
-                                    : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+                                      ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                                      : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
 
                                   return (
                                     <span
@@ -1372,13 +1466,13 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                                 <textarea
                                   rows="2"
                                   value={String(
-                                    currentItem?.noi_dung_loi ?? ""
+                                    currentItem?.noi_dung_loi ?? "",
                                   )}
                                   onChange={(e) =>
                                     updateItemField(
                                       idx,
                                       "noi_dung_loi",
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   placeholder="Mô tả chi tiết lỗi (nếu có)"
@@ -1720,6 +1814,83 @@ const StaffKPIDetailModal = ({ staff, onClose, selectedYear, canManageKPI = fals
                   <p className="text-slate-500">
                     Chưa có lịch sử cập nhật chi tiết cho KPI này
                   </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {subKpiModal.open && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4">
+          <div className="w-full max-w-4xl rounded-xl bg-white shadow-2xl max-h-[80vh] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b shrink-0">
+              <div>
+                <h4 className="text-lg font-semibold text-slate-800">
+                  Chi tiết KPI Phụ
+                </h4>
+                <p className="text-sm text-slate-600 mt-1">
+                  Quý {activeQuarter}/{targetYear} - {staff?.ho_ten}
+                </p>
+              </div>
+              <button
+                onClick={closeSubKpiModal}
+                className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-4 overflow-y-auto">
+              {subKpiModal.data.length > 0 ? (
+                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                  <table className="w-full text-sm bg-white">
+                    <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                          STT
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                          Tên KPI phụ
+                        </th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">
+                          Số lỗi
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subKpiModal.data.map((item, index) => (
+                        <tr
+                          key={index}
+                          className="border-b border-slate-100 hover:bg-slate-50"
+                        >
+                          <td className="px-4 py-3 text-slate-600">
+                            {index + 1}
+                          </td>
+                          <td className="px-4 py-3 text-slate-800 font-medium">
+                            {item.ten_kpi_phu || "---"}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                                Number(item.so_loi || 0) === 0
+                                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                  : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                              }`}
+                            >
+                              {item.so_loi || 0}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-2">📋</div>
+                  <p className="text-slate-500">Không có dữ liệu KPI phụ</p>
                 </div>
               )}
             </div>

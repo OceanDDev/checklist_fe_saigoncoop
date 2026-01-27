@@ -23,23 +23,26 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
   };
 
   // lấy dữ liệu KPI theo quý
-  const fetchKPIData = async (maNhanVien, nam, startMonth, endMonth) => {
+  const fetchKPIData = async (maNhanVien, nam, quy) => {
     try {
-      const payload = { ma_nhan_vien: maNhanVien, nam };
+      const payload = { ma_nhan_vien: maNhanVien, nam, quy };
       const res = await checkKPIService.getAllCheckKPI(payload);
       const allData = unwrapArray(res);
 
+      // Lọc theo quý và năm
       const quarterData = allData.filter((record) => {
         const recordYear = Number(record?.nam);
-        const recordMonth = Number(record?.thang);
-        return (
-          recordYear === nam &&
-          recordMonth >= startMonth &&
-          recordMonth <= endMonth
-        );
+        const recordQuarter = Number(record?.quy);
+        return recordYear === nam && recordQuarter === quy;
       });
 
-      quarterData.sort((a, b) => Number(a?.thang || 0) - Number(b?.thang || 0));
+      // Sắp xếp theo ngày tạo để lấy record mới nhất
+      quarterData.sort((a, b) => {
+        const dateA = new Date(a?.ngay_tao || 0).getTime();
+        const dateB = new Date(b?.ngay_tao || 0).getTime();
+        return dateB - dateA; // mới nhất lên đầu
+      });
+
       return quarterData;
     } catch (error) {
       console.error("Lỗi khi lấy dữ liệu KPI:", error);
@@ -47,285 +50,61 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
     }
   };
 
-  // === Helpers “Điểm trừ” ===
-  const toNum = (v) => {
-    if (v === null || v === undefined) return 0;
-    const n = Number(String(v).replace("%", "").trim());
-    return Number.isFinite(n) ? n : 0;
-  };
-
-  const round1 = (x) => Math.round(x * 10) / 10;
-
-  const isPercentRow = (donViTinh, kyHieu) =>
-    String(donViTinh || "").trim() === "%" ||
-    String(donViTinh || "").includes("%") ||
-    ["F1", "F2"].includes(String(kyHieu || "").toUpperCase());
-
-  const calcNvByDiemTru = (w, daThucHien, donViTinh, kyHieu) => {
-    const weight = toNum(w);
-    const th = toNum(daThucHien);
-    if (isPercentRow(donViTinh, kyHieu)) {
-      const pct = Math.max(0, Math.min(100, th));
-      return round1((weight * pct) / 100);
-    }
-    if (weight >= 1 && weight <= 9) {
-      return Math.max(0, round1(weight - th * 1));
-    }
-    if (weight >= 10) {
-      const deductionPerError = weight / 2;
-      return Math.max(0, round1(weight - th * deductionPerError));
-    }
-    return round1(weight);
-  };
-
-  const calcTyCuoiByDiemTru = (w, cbqlDanhGia, donViTinh, kyHieu) => {
-    const weight = toNum(w);
-    const v = toNum(cbqlDanhGia);
-    if (isPercentRow(donViTinh, kyHieu)) {
-      const pct = Math.max(0, Math.min(100, v));
-      return round1((weight * pct) / 100);
-    }
-    if (weight >= 1 && weight <= 9) {
-      return Math.max(0, round1(weight - v * 1));
-    }
-    if (weight >= 10) {
-      const deductionPerError = weight / 2;
-      return Math.max(0, round1(weight - v * deductionPerError));
-    }
-    return round1(weight);
+  // Helper để format giá trị
+  const formatValue = (value) => {
+    if (value === null || value === undefined || value === "") return "";
+    return value;
   };
 
   // === Tạo & xuất Excel ===
-  const createExcelFile = async (
-    staffInfo,
-    year,
-    quarter,
-    startMonth,
-    endMonth
-  ) => {
+  const createExcelFile = async (staffInfo, year, quarter) => {
     try {
-      // helpers mới - SỬA ĐỔI: dùng Math.round thay vì Math.floor(n + 0.5)
-      const roundToInt = (v) => {
-        const n = toNum(v);
-        if (!Number.isFinite(n)) return "";
-        return Math.round(n); // 1.3 -> 1, 1.5 -> 2, 1.6 -> 2
-      };
-      const avgToInt = (sum, cnt) => {
-        if (cnt <= 0) return "";
-        const avg = sum / cnt;
-        const rounded = Math.round(avg);
-
-        return rounded;
-      };
-
-      // 1) Lấy dữ liệu các tháng trong quý
+      // 1) Lấy dữ liệu quý (chỉ lấy record mới nhất)
       const quarterData = await fetchKPIData(
         staffInfo.ma_nhan_vien,
         year,
-        startMonth,
-        endMonth
+        quarter,
       );
 
-      // 2) Gom KPI theo key & tính trung bình theo số tháng có dữ liệu
-      const kpiMap = new Map();
-      let seq = 0; // fallback recency khi thiếu field 'thang'
-
-      for (const monthRec of quarterData) {
-        seq += 1;
-        const monthNo =
-          Number(monthRec?.thang) || Number(monthRec?.thang_danh_gia) || null;
-        const recency = monthNo ?? startMonth + seq - 1;
-
-        const items = Array.isArray(monthRec?.danh_sach_check)
-          ? monthRec.danh_sach_check
-          : [];
-
-        for (const it of items) {
-          const kyHieu = String(it?.ky_hieu || "").trim();
-          const key =
-            kyHieu || String(it?.kpi || "").trim() || `row_${Math.random()}`;
-
-          const prev = kpiMap.get(key) || {
-            ky_hieu: kyHieu,
-            kpi: String(it?.kpi || ""),
-            ty_trong_ref: null,
-            cac_do_luong: String(it?.cac_do_luong || ""),
-            ke_hoach_quy: String(it?.ke_hoach_quy || ""),
-            don_vi_tinh: String(it?.don_vi_tinh || ""),
-            bp_theo_doi: String(it?.bp_theo_doi || ""),
-            chu_ki: String(it?.chu_ki || ""),
-            noi_dung_loi: String(it?.noi_dung_loi || ""),
-
-            sum_da_thuc_hien: 0,
-            cnt_da_thuc_hien: 0,
-            sum_nv_danh_gia: 0,
-            cnt_nv_danh_gia: 0,
-            sum_cbql_danh_gia: 0,
-            cnt_cbql_danh_gia: 0,
-            sum_ty_trong_cuoi: 0,
-            cnt_ty_trong_cuoi: 0,
-
-            isF2: kyHieu.toUpperCase() === "F2",
-            latest: null, // { it, recency }
-          };
-
-          if (prev.ty_trong_ref === null)
-            prev.ty_trong_ref = toNum(it?.ty_trong);
-
-          const daNum = toNum(it?.da_thuc_hien);
-          const soLoiNum = toNum(it?.so_loi);
-
-          const nvCalc = calcNvByDiemTru(
-            prev.ty_trong_ref,
-            it?.da_thuc_hien,
-            prev.don_vi_tinh,
-            prev.ky_hieu
-          );
-          const tyCuoiCalc = calcTyCuoiByDiemTru(
-            prev.ty_trong_ref,
-            it?.so_loi,
-            prev.don_vi_tinh,
-            prev.ky_hieu
-          );
-
-          if (Number.isFinite(daNum)) {
-            prev.sum_da_thuc_hien += daNum;
-            prev.cnt_da_thuc_hien += 1;
-          }
-          if (Number.isFinite(nvCalc)) {
-            prev.sum_nv_danh_gia += nvCalc;
-            prev.cnt_nv_danh_gia += 1;
-          }
-          if (Number.isFinite(soLoiNum)) {
-            prev.sum_cbql_danh_gia += soLoiNum;
-            prev.cnt_cbql_danh_gia += 1;
-          }
-          if (Number.isFinite(tyCuoiCalc)) {
-            prev.sum_ty_trong_cuoi += tyCuoiCalc;
-            prev.cnt_ty_trong_cuoi += 1;
-          }
-
-          if (prev.isF2) {
-            if (!prev.latest || recency > prev.latest.recency) {
-              prev.latest = { it, recency };
-            }
-          }
-
-          kpiMap.set(key, prev);
-        }
+      if (!quarterData || quarterData.length === 0) {
+        throw new Error(`Không có dữ liệu KPI cho Quý ${quarter}/${year}`);
       }
 
-      // 3) Chuẩn hoá rows
-      const excelRows = [];
-      for (const [, v] of kpiMap) {
-        if (v.isF2 && v.latest?.it) {
-          // ====== F2: dùng tháng gần nhất (KHÔNG ĐỔI) ======
-          const it = v.latest.it;
+      // Lấy record mới nhất (đã sort ở fetchKPIData)
+      const latestRecord = quarterData[0];
+      const items = Array.isArray(latestRecord?.danh_sach_check)
+        ? latestRecord.danh_sach_check
+        : [];
 
-          const ky_hieu = String(it?.ky_hieu || v.ky_hieu || "");
-          const kpi = String(it?.kpi || v.kpi || "");
-          const don_vi_tinh = String(it?.don_vi_tinh || v.don_vi_tinh || "");
-          const cac_do_luong = String(it?.cac_do_luong || v.cac_do_luong || "");
-          const ke_hoach_quy = String(it?.ke_hoach_quy || v.ke_hoach_quy || "");
-          const bp_theo_doi = String(it?.bp_theo_doi || v.bp_theo_doi || "");
-          const chu_ki = String(it?.chu_ki || v.chu_ki || "");
-          const noi_dung_loi = String(it?.noi_dung_loi || v.noi_dung_loi || "");
-
-          const tyRef = toNum(it?.ty_trong ?? v.ty_trong_ref ?? 0);
-
-          const nvCalc = calcNvByDiemTru(
-            tyRef,
-            it?.da_thuc_hien,
-            don_vi_tinh,
-            ky_hieu
-          );
-          const tyCuoiCalc = calcTyCuoiByDiemTru(
-            tyRef,
-            it?.so_loi,
-            don_vi_tinh,
-            ky_hieu
-          );
-
-          excelRows.push({
-            ma_nv: staffInfo.ma_nhan_vien || "",
-            ho_ten: staffInfo.ho_ten || "",
-            ky_hieu,
-            kpi,
-
-            // % Tỷ trọng chỉ tiêu → F2 vẫn dùng logic cũ (half-up)
-            ty_trong: Math.floor(tyRef + 0.5),
-
-            cac_do_luong,
-            ke_hoach_quy,
-
-            // "Đã thực hiện" vẫn giữ dạng số/thập phân tuỳ nghiệp vụ
-            da_thuc_hien: Number.isFinite(toNum(it?.da_thuc_hien))
-              ? round1(toNum(it?.da_thuc_hien))
-              : "",
-
-            don_vi_tinh,
-
-            // % NV tự đánh giá → F2 vẫn dùng logic cũ (half-up)
-            nv_danh_gia: Number.isFinite(nvCalc)
-              ? Math.floor(nvCalc + 0.5)
-              : "",
-
-            bp_theo_doi,
-            chu_ki,
-
-            // Lỗi → F2 vẫn dùng logic cũ (half-up)
-            cbql_danh_gia: Number.isFinite(toNum(it?.so_loi))
-              ? Math.floor(toNum(it?.so_loi) + 0.5)
-              : "",
-
-            // % Tỷ trọng cuối → F2 vẫn dùng logic cũ (half-up)
-            ty_trong_cuoi: Number.isFinite(tyCuoiCalc)
-              ? Math.floor(tyCuoiCalc + 0.5)
-              : "",
-
-            ghi_chu: noi_dung_loi,
-            ghi_chu_cuoi: "", // cột O – ghi chú rỗng
-          });
-        } else {
-          // ====== CÁC KPI KHÁC: sử dụng Math.round (1.3->1, 1.5->2) ======
-          const avgOrBlank = (sum, cnt) => (cnt > 0 ? round1(sum / cnt) : "");
-
-          excelRows.push({
-            ma_nv: staffInfo.ma_nhan_vien || "",
-            ho_ten: staffInfo.ho_ten || "",
-            ky_hieu: v.ky_hieu,
-            kpi: v.kpi,
-
-            // % Tỷ trọng chỉ tiêu → dùng Math.round
-            ty_trong: roundToInt(v.ty_trong_ref ?? 0),
-
-            cac_do_luong: v.cac_do_luong,
-            ke_hoach_quy: v.ke_hoach_quy,
-
-            // "Đã thực hiện"
-            da_thuc_hien: avgOrBlank(v.sum_da_thuc_hien, v.cnt_da_thuc_hien),
-
-            don_vi_tinh: v.don_vi_tinh,
-
-            // % NV tự đánh giá → dùng Math.round
-            nv_danh_gia: avgToInt(v.sum_nv_danh_gia, v.cnt_nv_danh_gia),
-
-            bp_theo_doi: v.bp_theo_doi,
-            chu_ki: v.chu_ki,
-
-            // Lỗi → dùng Math.round (1.3->1, 1.5->2)
-            cbql_danh_gia: avgToInt(v.sum_cbql_danh_gia, v.cnt_cbql_danh_gia),
-
-            // % Tỷ trọng cuối → dùng Math.round
-            ty_trong_cuoi: avgToInt(v.sum_ty_trong_cuoi, v.cnt_ty_trong_cuoi),
-
-            ghi_chu: v.noi_dung_loi || "",
-            ghi_chu_cuoi: "", // cột O – ghi chú rỗng
-          });
-        }
+      if (items.length === 0) {
+        throw new Error(
+          `Không có danh sách KPI trong record Quý ${quarter}/${year}`,
+        );
       }
 
-      // 4) Workbook + sheet
+      // 2) Chuẩn hoá rows từ record mới nhất - KHÔNG TÍNH TOÁN GÌ CẢ
+      const excelRows = items.map((it) => {
+        return {
+          ma_nv: staffInfo.ma_nhan_vien || "",
+          ho_ten: staffInfo.ho_ten || "",
+          ky_hieu: formatValue(it?.ky_hieu),
+          kpi: formatValue(it?.kpi),
+          ty_trong: formatValue(it?.ty_trong),
+          cac_do_luong: formatValue(it?.cac_do_luong),
+          ke_hoach_quy: formatValue(it?.ke_hoach_quy),
+          da_thuc_hien: formatValue(it?.da_thuc_hien),
+          don_vi_tinh: formatValue(it?.don_vi_tinh),
+          nv_danh_gia: formatValue(it?.nv_danh_gia),
+          bp_theo_doi: formatValue(it?.bp_theo_doi),
+          chu_ki: formatValue(it?.chu_ki),
+          cbql_danh_gia: formatValue(it?.so_loi),
+          ty_trong_cuoi: formatValue(it?.ty_trong_cuoi),
+          ghi_chu: formatValue(it?.noi_dung_loi),
+          ghi_chu_cuoi: "",
+        };
+      });
+
+      // 3) Workbook + sheet
       const workbook = new ExcelJS.Workbook();
       const ws = workbook.addWorksheet(`KPI Q${quarter}-${year}`);
 
@@ -333,8 +112,9 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
       const safeMerge = (range) => {
         try {
           ws.unMergeCells(range);
+          // eslint-disable-next-line no-unused-vars
         } catch (e) {
-          e;
+          // ignore
         }
         ws.mergeCells(range);
       };
@@ -367,13 +147,13 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
       };
 
       // màu sử dụng
-      const YELLOW = "FFFFFF00"; // tiêu đề chính
-      const ORANGE = "FFFCE4D6"; // cột E
-      const GREEN = "FFE2EFDA"; // cột J
-      const ALTROW = "FFF8F9FA"; // zebra
-      const TOTALY = "FFFFF3CD"; // dòng tổng
+      const YELLOW = "FFFFFF00";
+      const ORANGE = "FFFCE4D6";
+      const GREEN = "FFE2EFDA";
+      const ALTROW = "FFF8F9FA";
+      const TOTALY = "FFFFF3CD";
 
-      // Header trên cùng (mở rộng tới O)
+      // Header trên cùng
       safeMerge("A1:O1");
       Object.assign(ws.getCell("A1"), {
         value: "LIÊN HIỆP HTX THƯƠNG MẠI",
@@ -447,7 +227,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         fill: { type: "pattern", pattern: "solid", fgColor: { argb: YELLOW } },
       });
 
-      // Header bảng (thêm cột O)
+      // Header bảng
       const headers = [
         { range: "A10:A11", text: "Mã NV" },
         { range: "B10:B11", text: "Họ và tên" },
@@ -490,7 +270,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
       ws.getRow(10).height = 25;
       ws.getRow(11).height = 25;
 
-      // 5) DATA ROWS
+      // 4) DATA ROWS - CHỈ HIỂN THỊ DATA NGUYÊN BẢN
       const startDataRow = 12;
       excelRows.forEach((row, idx) => {
         const r = startDataRow + idx;
@@ -499,45 +279,31 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         ws.getCell(r, 2).value = row.ho_ten;
         ws.getCell(r, 3).value = row.ky_hieu;
         ws.getCell(r, 4).value = row.kpi;
-
-        // E – % tỷ trọng chỉ tiêu (int + '%')
         ws.getCell(r, 5).value = row.ty_trong;
-        ws.getCell(r, 5).numFmt = '0"%"';
+        ws.getCell(r, 6).value = row.cac_do_luong;
+        ws.getCell(r, 7).value = row.ke_hoach_quy;
+        ws.getCell(r, 8).value = row.da_thuc_hien;
+        ws.getCell(r, 9).value = row.don_vi_tinh;
+        ws.getCell(r, 10).value = row.nv_danh_gia;
+        ws.getCell(r, 11).value = row.bp_theo_doi;
+        ws.getCell(r, 12).value = row.chu_ki;
+        ws.getCell(r, 13).value = row.cbql_danh_gia;
+        ws.getCell(r, 14).value = row.ty_trong_cuoi;
+        ws.getCell(r, 15).value = row.ghi_chu_cuoi;
+
+        // Styling cho các cột màu
         ws.getCell(r, 5).fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: ORANGE },
         };
-
-        ws.getCell(r, 6).value = row.cac_do_luong;
-        ws.getCell(r, 7).value = row.ke_hoach_quy;
-        ws.getCell(r, 8).value = row.da_thuc_hien;
-        ws.getCell(r, 9).value = row.don_vi_tinh;
-
-        // J – % NV tự đánh giá (int + '%')
-        ws.getCell(r, 10).value = row.nv_danh_gia;
-        ws.getCell(r, 10).numFmt = '0"%"';
         ws.getCell(r, 10).fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: GREEN },
         };
 
-        ws.getCell(r, 11).value = row.bp_theo_doi;
-        ws.getCell(r, 12).value = row.chu_ki;
-
-        // M – lỗi (int)
-        ws.getCell(r, 13).value = row.cbql_danh_gia;
-        ws.getCell(r, 13).numFmt = "0";
-
-        // N – % tỷ trọng cuối (int + '%')
-        ws.getCell(r, 14).value = row.ty_trong_cuoi;
-        ws.getCell(r, 14).numFmt = '0"%"';
-
-        // O – Ghi chú rỗng
-        ws.getCell(r, 15).value = row.ghi_chu_cuoi;
-
-        // Phần chung: border, font, align, zebra
+        // Border và alignment cho tất cả cells
         for (let c = 1; c <= 15; c++) {
           const cell = ws.getCell(r, c);
           cell.font = { name: "Times New Roman", size: 10 };
@@ -554,6 +320,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
             vertical: "middle",
             wrapText: true,
           };
+          // Màu xen kẽ cho rows
           if (idx % 2 === 1 && c !== 5 && c !== 10) {
             cell.fill = {
               type: "pattern",
@@ -564,7 +331,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         }
       });
 
-      // Merge dọc A & B cho block nhân viên
+      // Merge dọc A & B
       const lastDataRow = startDataRow + excelRows.length - 1;
       if (excelRows.length > 0) {
         safeMerge(`A${startDataRow}:A${lastDataRow}`);
@@ -580,7 +347,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         };
       }
 
-      // 6) DÒNG TỔNG CỘNG (%)
+      // 5) DÒNG TỔNG CỘNG
       const totalRow = lastDataRow + 1;
       safeMerge(`A${totalRow}:D${totalRow}`);
       ws.getCell(`A${totalRow}`).value = "TỔNG CỘNG (%)";
@@ -604,11 +371,6 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         formula: `SUM(N${startDataRow}:N${lastDataRow})`,
       };
 
-      // Đồng nhất định dạng tổng: E/J/N đều '0"%"
-      ws.getCell(`E${totalRow}`).numFmt = '0"%"';
-      ws.getCell(`J${totalRow}`).numFmt = '0"%"';
-      ws.getCell(`N${totalRow}`).numFmt = '0"%"';
-
       for (let c = 1; c <= 15; c++) {
         const cell = ws.getCell(totalRow, c);
         cell.border = {
@@ -627,7 +389,6 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
           fgColor: { argb: TOTALY },
         };
       }
-      // giữ strip màu E & J cho ô tổng
       ws.getCell(`E${totalRow}`).fill = {
         type: "pattern",
         pattern: "solid",
@@ -639,7 +400,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         fgColor: { argb: GREEN },
       };
 
-      // 7) WIDTHS (thêm cột O)
+      // 6) WIDTHS
       ws.columns = [
         { width: 12 }, // A
         { width: 22 }, // B
@@ -658,7 +419,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
         { width: 16 }, // O
       ];
 
-      // 8) Xuất file
+      // 7) Xuất file
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -682,24 +443,15 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const startMonth = (selectedQuarter - 1) * 3 + 1;
-      const endMonth = selectedQuarter * 3;
-
-      await createExcelFile(
-        staff,
-        selectedYear,
-        selectedQuarter,
-        startMonth,
-        endMonth
-      );
+      await createExcelFile(staff, selectedYear, selectedQuarter);
 
       alert(
-        `Đã xuất Excel thành công cho ${staff.ho_ten} - Quý ${selectedQuarter}/${selectedYear}!`
+        `Đã xuất Excel thành công cho ${staff.ho_ten} - Quý ${selectedQuarter}/${selectedYear}!`,
       );
       onClose();
     } catch (error) {
       console.error("Lỗi xuất Excel:", error);
-      alert("Có lỗi xảy ra khi xuất Excel. Vui lòng thử lại.");
+      alert(error.message || "Có lỗi xảy ra khi xuất Excel. Vui lòng thử lại.");
     } finally {
       setExporting(false);
     }
@@ -712,13 +464,10 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
       aria-modal="true"
       aria-labelledby="export-kpi-title"
     >
-      {/* Overlay */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm"></div>
 
-      {/* Panel */}
       <div className="relative z-10 mx-auto my-8 w-full max-w-xl px-4 sm:px-6">
         <div className="w-full rounded-2xl bg-white shadow-xl ring-1 ring-slate-900/10">
-          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/80">
             <h3
               id="export-kpi-title"
@@ -735,9 +484,7 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
             </button>
           </div>
 
-          {/* Body */}
           <div className="px-6 py-6 space-y-6">
-            {/* Thông tin nhân viên */}
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-white grid place-items-center font-bold">
@@ -752,18 +499,21 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
                   </div>
                 </div>
               </div>
+
+              {/* CHỖ CẦN SỬA: Kiểm tra nếu don_vi là object thì lấy .chinh, không thì render string */}
               <div className="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200">
-                {staff.don_vi} • Năm {selectedYear}
+                {typeof staff.don_vi === "object"
+                  ? staff.don_vi?.chinh || "N/A"
+                  : staff.don_vi || "N/A"}{" "}
+                • Năm {selectedYear}
               </div>
             </div>
 
-            {/* Chọn quý */}
             <div className="space-y-3">
               <label className="text-sm font-medium text-slate-700">
                 Chọn quý để xuất Excel:
               </label>
 
-              {/* 1 cột trên mobile, 2 cột từ sm trở lên */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {quarters.map((q) => {
                   const active = selectedQuarter === q.value;
@@ -800,7 +550,6 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
             </div>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-between gap-3 border-t border-slate-200/80 bg-slate-50 px-6 py-4 rounded-b-2xl">
             <button
               type="button"
@@ -817,13 +566,25 @@ const ExportExcelModal = ({ staff, selectedYear, onClose }) => {
             >
               {exporting ? (
                 <>
-                  <span className="inline-block h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  Đang tạo Excel...
+                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                  Đang xuất...
                 </>
               ) : (
                 <>
-                  <span aria-hidden>📤</span>
-                  Xuất Excel KPI
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                  Xuất Excel
                 </>
               )}
             </button>

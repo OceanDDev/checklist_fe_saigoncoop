@@ -7,9 +7,9 @@ import StaffKPIDetailModal from "../../../ComponentsKPI/StaffKPIDetailModal";
 import ExportExcelModal from "../../../ComponentsKPI/excel";
 import AddStaffWithKPIModal from "../../../ComponentsKPI/AddStaffWithKPIModal";
 import { ROLE_KPI } from "@/configs/constants";
-import CheckKPIKeToanModal from "./CheckKPIKeToanModal";
+import CheckKPIModal from "../../../ComponentsKPI/CheckKPIModal";
 
-const TableKeToan = () => {
+const TableHoTro = () => {
   const { year } = useParams();
   const selectedYear = parseInt(year) || new Date().getFullYear();
 
@@ -68,14 +68,7 @@ const TableKeToan = () => {
 
   const canManageKPI = useMemo(
     () =>
-      userRoles.some((r) => [ROLE_KPI.KETOANTRUONG, ROLE_KPI.PGD].includes(r)),
-    [userRoles],
-  );
-
-  // ✅ THÊM: Quyền xem chi tiết và xuất Excel (chỉ KETOANTRUONG và PGD)
-  const canViewDetails = useMemo(
-    () =>
-      userRoles.some((r) => [ROLE_KPI.KETOANTRUONG, ROLE_KPI.PGD].includes(r)),
+      userRoles.some((r) => [ROLE_KPI.TOTRUONGXUAT1, ROLE_KPI.PGD].includes(r)),
     [userRoles],
   );
 
@@ -84,16 +77,17 @@ const TableKeToan = () => {
     try {
       setLoading(true);
       const list = await formkpistaffService.getAllFormKPI();
-      console.log("📦 Raw data from API:", list);
-
       let staffList = Array.isArray(list) ? list : [];
-      console.log("📊 Staff list count:", staffList.length);
 
       staffList = staffList.filter((staff) => {
-        const donViChinh = staff.don_vi?.chinh || staff.don_vi || "";
-        return donViChinh.trim().toLowerCase() === "kế toán";
-      });
+        // Xử lý cả trường hợp don_vi là object hoặc string (backward compatible)
+        const donViChinh =
+          typeof staff.don_vi === "object"
+            ? staff.don_vi?.chinh || ""
+            : staff.don_vi || "";
 
+        return donViChinh.trim().toLowerCase() === "hỗ trợ";
+      });
       setData(staffList);
 
       await checkAllKPIStatus(staffList);
@@ -319,7 +313,7 @@ const TableKeToan = () => {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 bg-clip-text text-transparent">
-                KPI Kế Toán — {selectedYear}
+                KPI Hỗ Trợ — {selectedYear}
               </h1>
 
               <span
@@ -561,50 +555,23 @@ const TableKeToan = () => {
 
                       <td className="px-5 py-3">
                         <div className="flex flex-wrap items-center justify-center gap-2">
-                          {/* ✅ Nút Chi tiết - Chỉ KETOANTRUONG và PGD */}
                           <button
                             onClick={() =>
-                              canViewDetails &&
                               openDetail({
                                 ma_nhan_vien: item.ma_nhan_vien,
                                 ho_ten: item.ho_ten,
                                 don_vi: item.don_vi,
                               })
                             }
-                            disabled={!canViewDetails}
-                            className={[
-                              "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-sm transition",
-                              canViewDetails
-                                ? "text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 cursor-pointer"
-                                : "text-slate-400 bg-slate-100 cursor-not-allowed opacity-50",
-                            ].join(" ")}
-                            title={
-                              !canViewDetails
-                                ? "Chỉ Kế toán trưởng và PGD mới có quyền xem chi tiết"
-                                : `Xem chi tiết KPI của ${item.ho_ten}`
-                            }
+                            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 shadow-sm transition"
                             aria-label={`Xem chi tiết KPI của ${item.ho_ten}`}
                           >
                             📊 Chi tiết
                           </button>
 
-                          {/* ✅ Nút Excel - Chỉ KETOANTRUONG và PGD */}
                           <button
-                            onClick={() =>
-                              canViewDetails && openExportModal(item)
-                            }
-                            disabled={!canViewDetails}
-                            className={[
-                              "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-sm transition",
-                              canViewDetails
-                                ? "text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 cursor-pointer"
-                                : "text-slate-400 bg-slate-100 cursor-not-allowed opacity-50",
-                            ].join(" ")}
-                            title={
-                              !canViewDetails
-                                ? "Chỉ Kế toán trưởng và PGD mới có quyền xuất Excel"
-                                : `Xuất Excel KPI của ${item.ho_ten}`
-                            }
+                            onClick={() => openExportModal(item)}
+                            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-sm transition"
                             aria-label={`Xuất Excel KPI của ${item.ho_ten}`}
                           >
                             📤 Excel
@@ -617,7 +584,7 @@ const TableKeToan = () => {
 
               {!loading && data.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-16">
+                  <td colSpan={6} className="px-5 py-16">
                     <div className="mx-auto max-w-md text-center space-y-4">
                       <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200">
                         <span className="text-3xl">📋</span>
@@ -669,13 +636,13 @@ const TableKeToan = () => {
       )}
 
       {checkOpen && (
-        <CheckKPIKeToanModal
+        <CheckKPIModal
+          userRoles={userRoles}
           onClose={() => setCheckOpen(false)}
           onSaved={() => {
             refreshList();
           }}
           selectedYear={selectedYear}
-          userRoles={userRoles}
         />
       )}
 
@@ -690,4 +657,4 @@ const TableKeToan = () => {
   );
 };
 
-export default TableKeToan;
+export default TableHoTro;

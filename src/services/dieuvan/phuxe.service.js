@@ -1,4 +1,4 @@
-import { ApiServer, URL } from "@/configs/api-request";
+import { ApiServer, URL, DEF_HEADERS } from "@/configs/api-request";
 import { requestService } from "../request.service";
 
 //
@@ -7,7 +7,9 @@ import { requestService } from "../request.service";
 // ==============================
 //
 
-// ✅ Lấy danh sách tất cả phụ xe
+/**
+ * ✅ Lấy danh sách tất cả phụ xe
+ */
 const getAllPhuXe = async () => {
   try {
     const results = await requestService.get(
@@ -18,60 +20,14 @@ const getAllPhuXe = async () => {
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi getAllPhuXe:", error);
-    return null;
+    console.error("❌ Lỗi getAllPhuXe:", error);
+    throw error; // ✅ Throw để component xử lý UI error
   }
 };
 
-// ✅ Thêm 1 phụ xe (tự động nhận biết FormData hoặc JSON)
-const addPhuXe = async (data) => {
-  try {
-    const isFormData = data instanceof FormData;
-    const results = await requestService.post(
-      URL.dieuvan.phuxe,
-      data,
-      undefined,
-      ApiServer,
-      isFormData ? { "Content-Type": "multipart/form-data" } : undefined
-    );
-    return results;
-  } catch (error) {
-    console.error("Lỗi khi gọi addPhuXe:", error);
-    return null;
-  }
-};
-
-const addPhuXeWithImage = async (formData) => {
-  try {
-    const results = await requestService.post(
-      URL.dieuvan.phuxe,
-      formData,
-      undefined,
-      ApiServer,
-      { "Content-Type": "multipart/form-data" }
-    );
-    return results;
-  } catch (error) {
-    console.error("Lỗi khi gọi addPhuXeWithImage:", error);
-    return null;
-  }
-};
-
-const addManyPhuXe = async (dataArray) => {
-  try {
-    const results = await requestService.post(
-      `${URL.dieuvan.phuxe}/addmany`,
-      dataArray,
-      undefined,
-      ApiServer
-    );
-    return results;
-  } catch (error) {
-    console.error("Lỗi khi gọi addManyPhuXe:", error);
-    return null;
-  }
-};
-
+/**
+ * ✅ Lấy 1 phụ xe theo ID
+ */
 const getPhuXeById = async (id) => {
   try {
     const results = await requestService.get(
@@ -82,42 +38,122 @@ const getPhuXeById = async (id) => {
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi getPhuXeById:", error);
-    return null;
+    console.error("❌ Lỗi getPhuXeById:", error);
+    throw error;
   }
 };
 
+/**
+ * ➕ Thêm 1 phụ xe (tự động phát hiện FormData hoặc JSON)
+ * @param {Object|FormData} data - Dữ liệu phụ xe (có thể có file ảnh)
+ */
+const addPhuXe = async (data) => {
+  try {
+    const isFormData = data instanceof FormData;
+
+    // ✅ ĐÚNG: Thứ tự tham số
+    const results = await requestService.post(
+      URL.dieuvan.phuxe, // path
+      data, // body
+      isFormData ? { "Content-Type": "multipart/form-data" } : DEF_HEADERS, // headers
+      ApiServer // axiosInstance
+    );
+
+    return results;
+  } catch (error) {
+    console.error("❌ Lỗi addPhuXe:", error);
+
+    // ✅ Xử lý lỗi storage đầy
+    if (error?.errorType === "STORAGE_LIMIT_EXCEEDED") {
+      throw new Error(
+        "Hệ thống lưu trữ đã đầy. Vui lòng liên hệ quản trị viên."
+      );
+    }
+
+    throw error;
+  }
+};
+/**
+ * 🔥 Import nhiều phụ xe cùng lúc
+ * @param {Array} dataArray - Mảng dữ liệu phụ xe
+ */
+const addManyPhuXe = async (dataArray) => {
+  try {
+    if (!Array.isArray(dataArray) || dataArray.length === 0) {
+      throw new Error("Dữ liệu không hợp lệ hoặc rỗng");
+    }
+
+    const results = await requestService.post(
+      `${URL.dieuvan.phuxe}/addmany`,
+      dataArray,
+      undefined,
+      ApiServer
+    );
+
+    return results;
+  } catch (error) {
+    console.error("❌ Lỗi addManyPhuXe:", error);
+    throw error;
+  }
+};
+
+/**
+ * ✏️ Cập nhật phụ xe (tự động phát hiện FormData hoặc JSON)
+ * @param {string} id - ID phụ xe
+ * @param {Object|FormData} data - Dữ liệu cập nhật (có thể có file ảnh)
+ */
 const updatePhuXe = async (id, data) => {
   try {
     const isFormData = data instanceof FormData;
+
+    // ✅ ĐÚNG: Thứ tự tham số (path, body, headers, axiosInstance)
     const results = await requestService.put(
-      `${URL.dieuvan.phuxe}/${id}`,
-      data,
+      `${URL.dieuvan.phuxe}/${id}`, // path
+      data, // body
+      isFormData ? { "Content-Type": "multipart/form-data" } : DEF_HEADERS, // headers
+      ApiServer // axiosInstance
+    );
+
+    console.log("✅ Service - Update result:", results);
+    return results;
+  } catch (error) {
+    console.error("❌ Lỗi updatePhuXe:", error);
+
+    // ✅ Xử lý lỗi storage đầy
+    if (error?.errorType === "STORAGE_LIMIT_EXCEEDED") {
+      throw new Error(
+        "Hệ thống lưu trữ đã đầy. Vui lòng liên hệ quản trị viên."
+      );
+    }
+
+    throw error;
+  }
+};
+
+/**
+ * ✅ Xác nhận điều vận
+ * @param {string} id - ID phụ xe
+ * @param {boolean} dieu_van_xac_nhan - Trạng thái xác nhận
+ */
+const xacNhanDieuVan = async (id, dieu_van_xac_nhan) => {
+  try {
+    const results = await requestService.patch(
+      `${URL.dieuvan.phuxe}/${id}/xac-nhan`,
+      { dieu_van_xac_nhan },
       undefined,
-      ApiServer,
-      isFormData ? { "Content-Type": "multipart/form-data" } : undefined
+      ApiServer
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi updatePhuXe:", error);
-    return null;
+    console.error("❌ Lỗi xacNhanDieuVan:", error);
+    throw error;
   }
 };
 
-const updatePhuXeWithImage = async (id, formData) => {
-  try {
-    const response = await ApiServer.put(
-      `${URL.dieuvan.phuxe}/${id}`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error("❌ Lỗi khi gọi updatePhuXeWithImage:", error);
-    return null;
-  }
-};
-
+/**
+ * 🗑️ Xóa phụ xe (tự động xóa ảnh trên Cloudinary)
+ * @param {string} id - ID phụ xe
+ */
 const deletePhuXe = async (id) => {
   try {
     const results = await requestService.del(
@@ -128,8 +164,8 @@ const deletePhuXe = async (id) => {
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi deletePhuXe:", error);
-    return null;
+    console.error("❌ Lỗi deletePhuXe:", error);
+    throw error;
   }
 };
 
@@ -139,72 +175,90 @@ const deletePhuXe = async (id) => {
 // ==============================
 //
 
+/**
+ * ✅ Lấy danh sách tất cả tên phụ xe
+ */
 const getAllPhuXeNames = async () => {
   try {
-    const results = await requestService.get(URL.dieuvan.tenphuxe, {}, undefined, ApiServer);
-    return results;
-  } catch (error) {
-    console.error("Lỗi khi gọi getAllPhuXeNames:", error);
-    return null;
-  }
-};
-
-const addPhuXeName = async (name) => {
-  try {
-    const results = await requestService.post(URL.dieuvan.tenphuxe, { name }, undefined, ApiServer);
-    return results;
-  } catch (error) {
-    console.error("Lỗi khi gọi addPhuXeName:", error);
-    return null;
-  }
-};
-
-const deletePhuXeName = async (id) => {
-  try {
-    const results = await requestService.del(`${URL.dieuvan.tenphuxe}/${id}`, {}, undefined, ApiServer);
-    return results;
-  } catch (error) {
-    console.error("Lỗi khi gọi deletePhuXeName:", error);
-    return null;
-  }
-};
-
-//
-// ==============================
-// 🏪 API 3: QUẢN LÝ CỬA HÀNG (CHBX) 🆕
-// ==============================
-//
-
-const getAllChbx = async () => {
-  try {
     const results = await requestService.get(
-      URL.dieuvan.chbx, // Đảm bảo URL này tồn tại trong config
+      URL.dieuvan.tenphuxe,
       {},
       undefined,
       ApiServer
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi getAllChbx:", error);
-    return null;
+    console.error("❌ Lỗi getAllPhuXeNames:", error);
+    throw error;
   }
 };
 
-const addChbx = async (data) => {
+/**
+ * ➕ Thêm tên phụ xe mới
+ * @param {string} name - Tên phụ xe
+ */
+const addPhuXeName = async (name) => {
   try {
     const results = await requestService.post(
-      URL.dieuvan.chbx,
-      data, // Gửi { ma_cua_hang, ten_cua_hang }
+      URL.dieuvan.tenphuxe,
+      { name },
       undefined,
       ApiServer
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi addChbx:", error);
-    return null;
+    console.error("❌ Lỗi addPhuXeName:", error);
+    throw error;
   }
 };
 
+/**
+ * 🗑️ Xóa tên phụ xe
+ * @param {string} id - ID tên phụ xe
+ */
+const deletePhuXeName = async (id) => {
+  try {
+    const results = await requestService.del(
+      `${URL.dieuvan.tenphuxe}/${id}`,
+      {},
+      undefined,
+      ApiServer
+    );
+    return results;
+  } catch (error) {
+    console.error("❌ Lỗi deletePhuXeName:", error);
+    throw error;
+  }
+};
+
+//
+// ==============================
+// 🏪 API 3: QUẢN LÝ CỬA HÀNG (CHBX)
+// ==============================
+//
+
+/**
+ * ✅ Lấy danh sách tất cả cửa hàng
+ */
+const getAllChbx = async () => {
+  try {
+    const results = await requestService.get(
+      URL.dieuvan.chbx,
+      {},
+      undefined,
+      ApiServer
+    );
+    return results;
+  } catch (error) {
+    console.error("❌ Lỗi getAllChbx:", error);
+    throw error;
+  }
+};
+
+/**
+ * ✅ Lấy 1 cửa hàng theo ID
+ * @param {string} id - ID cửa hàng
+ */
 const getChbxById = async (id) => {
   try {
     const results = await requestService.get(
@@ -215,11 +269,59 @@ const getChbxById = async (id) => {
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi getChbxById:", error);
-    return null;
+    console.error("❌ Lỗi getChbxById:", error);
+    throw error;
   }
 };
 
+/**
+ * ➕ Thêm 1 cửa hàng mới
+ * @param {Object} data - { ma_cua_hang, ten_cua_hang }
+ */
+const addChbx = async (data) => {
+  try {
+    const results = await requestService.post(
+      URL.dieuvan.chbx,
+      data,
+      undefined,
+      ApiServer
+    );
+    return results;
+  } catch (error) {
+    console.error("❌ Lỗi addChbx:", error);
+    throw error;
+  }
+};
+
+/**
+ * 🔥 Import nhiều cửa hàng cùng lúc
+ * @param {Array} dataArray - Mảng { ma_cua_hang, ten_cua_hang }
+ */
+const addManyChbx = async (dataArray) => {
+  try {
+    if (!Array.isArray(dataArray) || dataArray.length === 0) {
+      throw new Error("Dữ liệu không hợp lệ hoặc rỗng");
+    }
+
+    const results = await requestService.post(
+      `${URL.dieuvan.chbx}/addmany`,
+      dataArray,
+      undefined,
+      ApiServer
+    );
+
+    return results;
+  } catch (error) {
+    console.error("❌ Lỗi addManyChbx:", error);
+    throw error;
+  }
+};
+
+/**
+ * ✏️ Cập nhật cửa hàng
+ * @param {string} id - ID cửa hàng
+ * @param {Object} data - Dữ liệu cập nhật
+ */
 const updateChbx = async (id, data) => {
   try {
     const results = await requestService.put(
@@ -230,11 +332,15 @@ const updateChbx = async (id, data) => {
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi updateChbx:", error);
-    return null;
+    console.error("❌ Lỗi updateChbx:", error);
+    throw error;
   }
 };
 
+/**
+ * 🗑️ Xóa cửa hàng
+ * @param {string} id - ID cửa hàng
+ */
 const deleteChbx = async (id) => {
   try {
     const results = await requestService.del(
@@ -243,45 +349,27 @@ const deleteChbx = async (id) => {
       undefined,
       ApiServer
     );
-    return results; 
-  } catch (error) {
-    console.error("Lỗi khi gọi deleteChbx:", error);
-    return null;
-  }
-};
-
-// Thêm tính năng import nhiều cửa hàng cùng lúc
-const addManyChbx = async (dataArray) => {
-  try {
-    const results = await requestService.post(
-      `${URL.dieuvan.chbx}/addmany`,
-      dataArray,
-      undefined,
-      ApiServer
-    );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi addManyChbx:", error);
-    return null;
+    console.error("❌ Lỗi deleteChbx:", error);
+    throw error;
   }
 };
 
 //
 // ==============================
-// 📦 XUẤT CÁC HÀM DÙNG CHUNG
+// 📦 EXPORT SERVICE
 // ==============================
 //
 
 export const phuXeService = {
   // 📘 Quản lý phụ xe
   getAllPhuXe,
-  addPhuXe,
-  addPhuXeWithImage,
-  addManyPhuXe,
   getPhuXeById,
+  addPhuXe,
+  addManyPhuXe,
   updatePhuXe,
-  updatePhuXeWithImage,
-  updatePhuXeWithImages: updatePhuXeWithImage,
+  xacNhanDieuVan, // 🆕 Thêm API xác nhận điều vận
   deletePhuXe,
 
   // 📗 Quản lý tên phụ xe
@@ -289,11 +377,11 @@ export const phuXeService = {
   addPhuXeName,
   deletePhuXeName,
 
-  // 🏪 Quản lý Cửa hàng bán xe (CHBX)
+  // 🏪 Quản lý cửa hàng (CHBX)
   getAllChbx,
-  addChbx,
   getChbxById,
+  addChbx,
+  addManyChbx,
   updateChbx,
   deleteChbx,
-  addManyChbx,
 };

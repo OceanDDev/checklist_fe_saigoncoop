@@ -4,9 +4,9 @@ import { Link } from "react-router-dom";
 const images = ["/img/pic1.jpg", "/img/pic2.webp", "/img/pic3.jpg"];
 
 const departments = [
-  { key: "xuat",  title: "XUẤT HÀNG",  desc: "Theo dõi đơn xuất, đối chiếu phiếu xuất.", to: "/xuat-hang" },
-  { key: "nhap",  title: "NHẬP HÀNG",  desc: "Tiếp nhận, kiểm đếm, nhập kho theo quy trình.", to: "/nhap-hang" },
-  { key: "hotro", title: "HỖ TRỢ KHO", desc: "Điều phối, sắp xếp, kiểm tra tồn.",            to: "/ho-tro-kho" },
+  { key: "xuat",  title: "XUẤT HÀNG",  desc: "Theo dõi đơn xuất, đối chiếu phiếu xuất.", to: "/kpi/homestaff/xuat-hang" },
+  { key: "nhap",  title: "NHẬP HÀNG",  desc: "Tiếp nhận, kiểm đếm, nhập kho theo quy trình.", to: "/kpi/homestaff/nhap-hang" },
+  { key: "hotro", title: "HỖ TRỢ KHO", desc: "Điều phối, sắp xếp, kiểm tra tồn.",            to: "/kpi/homestaff/ho-tro-kho" },
   { key: "ketoan",title: "KẾ TOÁN",    desc: "Đối soát chứng từ, báo cáo thuế/kế toán.",     to: "/kpi/homestaff/homeKeToan" },
 ];
 

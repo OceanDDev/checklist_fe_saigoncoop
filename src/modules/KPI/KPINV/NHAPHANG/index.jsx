@@ -4,7 +4,7 @@ import { checkKPIService } from "@/services/checkkpistaff.service";
 
 const images = ["/img/pic1.jpg", "/img/pic2.webp", "/img/pic3.jpg"];
 
-const HomeHoTro = () => {
+const HomeNhapHang = () => {
   const [currentImage, setCurrentImage] = useState(0);
   const [availableYears, setAvailableYears] = useState([]);
   const [yearStatsMap, setYearStatsMap] = useState(new Map());
@@ -153,7 +153,7 @@ const HomeHoTro = () => {
       <main className="relative z-10 mx-auto max-w-6xl px-4 pt-20 pb-10 sm:pt-24">
         <header className="mb-8 sm:mb-10 text-center sm:text-left">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight">
-            KPI Hỗ Trợ Kho
+            KPI Nhập Hàng
           </h1>
           <p className="mt-2 text-white/85">
             {loading 
@@ -235,7 +235,7 @@ const HomeHoTro = () => {
                       </>
                     ) : (
                       isCurrentYear 
-                        ? `Bắt đầu quản lý KPI Hỗ Trợ Kho năm ${y}.`
+                        ? `Bắt đầu quản lý KPI Nhập Hàng năm ${y}.`
                         : isFutureYear
                         ? `Chuẩn bị dữ liệu KPI cho năm ${y}.`
                         : `Chưa có dữ liệu KPI năm ${y}.`
@@ -270,8 +270,8 @@ const HomeHoTro = () => {
               return (
                 <Link
                   key={y}
-                  to={`/kpi/homestaff/ho-tro-kho/table/${y}`}
-                  aria-label={`Mở KPI Hỗ Trợ Kho năm ${y}`}
+                  to={`/kpi/homestaff/nhap-hang/table/${y}`}
+                  aria-label={`Mở KPI Nhập Hàng năm ${y}`}
                   className="outline-none focus-visible:ring-2 focus-visible:ring-white/50 rounded-2xl"
                 >
                   {Card}
@@ -328,4 +328,4 @@ const HomeHoTro = () => {
   );
 };
 
-export default HomeHoTro;
+export default HomeNhapHang;
