@@ -24,15 +24,31 @@ const Header = () => {
         return "TOOL ĐIỀU VẬN";
       case 2:
         return "KPIs";
+      case 10:
+        return "KPIs";
+      case 11:
+        return "KPIs";
+      case 12:
+        return "KPIs";
+      case 13:
+        return "KPIs";
+      case 14:
+        return "KPIs";
+      case 15:
+        return "KPIs";
+      case 16:
+        return "KPIs";
+      case 17:
+        return "KPIs";
       case 4:
         return "XUẤT TRẢ";
       case 20:
         return "PHIẾU SOẠN";
-         case 21:
+      case 21:
         return "PHỤ XE - BỐC XẾP";
-         case 22:
+      case 22:
         return "PHỤ XE - BỐC XẾP";
-        case 23:
+      case 23:
         return "TRANG THIẾT BỊ";
       default:
         return "CHECKLIST";
