@@ -106,7 +106,11 @@ const calculateTyTrongCuoi = ({
   const cbql = Number(cbqlDanhGia || 0);
 
   // ✅ LOGIC ĐƠN VỊ "LẦN" (Max = 12)
-  if (String(donViTinh || "").toLowerCase().includes("lần")) {
+  if (
+    String(donViTinh || "")
+      .toLowerCase()
+      .includes("lần")
+  ) {
     const MAX_LAN = 12;
     const score = Math.min(cbql, MAX_LAN);
     return Math.round((score / MAX_LAN) * w * 100) / 100;
@@ -184,7 +188,11 @@ const calculateNVDanhGia = ({
   const th = Number(daThucHien || 0);
 
   // ✅ LOGIC ĐƠN VỊ "LẦN" (Max = 12)
-  if (String(donViTinh || "").toLowerCase().includes("lần")) {
+  if (
+    String(donViTinh || "")
+      .toLowerCase()
+      .includes("lần")
+  ) {
     const MAX_LAN = 12;
     const score = Math.min(th, MAX_LAN);
     return Math.round((score / MAX_LAN) * w * 100) / 100;
@@ -402,17 +410,17 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
 
         const isPercentKPI =
           donViTinh.trim() === "%" || donViTinh.includes("%");
-
         if (isPercentKPI) {
           const tyTrongGoc = Number(kpi.ty_trong || 0);
-          const oldTyTrongCuoi = Number(kpi.ty_trong_cuoi || tyTrongGoc);
 
+          // ✅ Trừ trực tiếp từ TỶ TRỌNG GỐC, không dùng tỷ trọng cuối cũ
           const newTyTrongCuoi = Math.max(
             0,
-            oldTyTrongCuoi - errorsToDistribute,
+            tyTrongGoc - errorsToDistribute, // ✅ Trừ từ tỷ trọng gốc
           );
           kpi.ty_trong_cuoi = newTyTrongCuoi;
 
+          // ✅ Tính ngược CBQL từ tỷ trọng cuối
           let newCBQL = 100;
           if (tyTrongGoc > 0) {
             newCBQL =
@@ -422,12 +430,12 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
           kpi.so_loi = String(newCBQL);
 
           toast.info(
-            `📊 KPI "${kpi.kpi}" (${tyTrongGoc}%): ${totalSubKpiErrors} lỗi KPI phụ → Tỷ trọng cuối: ${oldTyTrongCuoi}% → ${newTyTrongCuoi}% | CBQL tính ngược: ${newCBQL}%`,
+            `📊 KPI "${kpi.kpi}" (${tyTrongGoc}%): ${totalSubKpiErrors} lỗi KPI phụ → Trừ ${errorsToDistribute}% | Tỷ trọng: ${tyTrongGoc}% → ${newTyTrongCuoi}% | CBQL: ${newCBQL}%`,
             { autoClose: 5000 },
           );
         } else {
-          const currentErrors = Number(kpi.so_loi || 0);
-          kpi.so_loi = String(currentErrors + errorsToDistribute);
+          // ✅ CHỈ GHI ĐÈ = số lỗi từ KPI phụ, KHÔNG cộng thêm
+          kpi.so_loi = String(errorsToDistribute);
 
           kpi.ty_trong_cuoi = calculateTyTrongCuoi({
             cbqlDanhGia: kpi.so_loi,
@@ -437,7 +445,7 @@ const CheckKPIModal = ({ onClose, onSaved, selectedYear, userRoles }) => {
           });
 
           toast.info(
-            `⚠️ KPI "${kpi.kpi}" (${lowestTyTrong}%): ${totalSubKpiErrors} lỗi KPI phụ → +${errorsToDistribute} lỗi (${currentErrors} → ${kpi.so_loi}). Tỷ trọng: ${kpi.ty_trong_cuoi}%`,
+            `⚠️ KPI "${kpi.kpi}" (${lowestTyTrong}%): ${totalSubKpiErrors} lỗi KPI phụ → ${errorsToDistribute} lỗi. Tỷ trọng: ${kpi.ty_trong_cuoi}%`,
             { autoClose: 5000 },
           );
         }
