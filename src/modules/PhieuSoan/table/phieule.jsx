@@ -251,7 +251,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
   const [selectedPhieu, setSelectedPhieu] = useState(null);
   // eslint-disable-next-line no-unused-vars
   const [tempNote, setTempNote] = useState("");
-
+  const [sortMaCH, setSortMaCH] = useState("");
   // Filter panel
   const [showFilters, setShowFilters] = useState(false);
 
@@ -401,7 +401,13 @@ const PhieuLeTable = forwardRef((props, ref) => {
     console.log("🔄 Refreshing data after print...");
     fetchPhieuLe();
   }, [fetchPhieuLe]);
-
+  const handleToggleSortMaCH = useCallback(() => {
+    setSortMaCH((prev) => {
+      if (prev === "") return "asc";
+      if (prev === "asc") return "desc";
+      return "";
+    });
+  }, []);
   const handleStartEdit = useCallback((row) => {
     setEditingPhieuId(row._id);
     setEditValue(row.ghi_chu_phieu || "");
@@ -481,7 +487,21 @@ const PhieuLeTable = forwardRef((props, ref) => {
     },
     [selectedIds, fetchPhieuLe],
   );
+  // ✅ Sort rows theo maCH trên frontend
+  const sortedRows = useMemo(() => {
+    if (!sortMaCH) return rows;
 
+    return [...rows].sort((a, b) => {
+      const maCHA = a.mach || "";
+      const maCHB = b.mach || "";
+
+      if (sortMaCH === "asc") {
+        return maCHA.localeCompare(maCHB, "vi", { numeric: true });
+      } else {
+        return maCHB.localeCompare(maCHA, "vi", { numeric: true });
+      }
+    });
+  }, [rows, sortMaCH]);
   // ✅ OPTIMIZATION 10: useCallback cho handleExportExcel và lazy load ExcelJS
   const handleExportExcel = useCallback(async () => {
     if (selectedIds.length === 0) {
@@ -659,7 +679,50 @@ const PhieuLeTable = forwardRef((props, ref) => {
                     key={col.key}
                     className="px-3 py-2 text-left font-semibold text-slate-700 whitespace-nowrap"
                   >
-                    {col.label}
+                    {col.key === "mach" ? (
+                      <div className="flex items-center gap-2">
+                        <span>{col.label}</span>
+                        <button
+                          onClick={handleToggleSortMaCH}
+                          className="p-1 hover:bg-slate-200 rounded transition-colors"
+                          title={
+                            sortMaCH === "asc"
+                              ? "Đang sắp xếp: A → Z (Bé → Lớn)"
+                              : sortMaCH === "desc"
+                                ? "Đang sắp xếp: Z → A (Lớn → Bé)"
+                                : "Nhấn để sắp xếp"
+                          }
+                        >
+                          {sortMaCH === "asc" ? (
+                            <svg
+                              className="w-4 h-4 text-blue-600"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M3 3a1 1 0 000 2h11a1 1 0 100-2H3zM3 7a1 1 0 000 2h5a1 1 0 000-2H3zM3 11a1 1 0 100 2h4a1 1 0 100-2H3zM13 16a1 1 0 102 0v-5.586l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 101.414 1.414L13 10.414V16z" />
+                            </svg>
+                          ) : sortMaCH === "desc" ? (
+                            <svg
+                              className="w-4 h-4 text-blue-600"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M3 3a1 1 0 000 2h11a1 1 0 100-2H3zM3 7a1 1 0 000 2h7a1 1 0 100-2H3zM3 11a1 1 0 100 2h4a1 1 0 100-2H3zM15 8a1 1 0 10-2 0v5.586l-1.293-1.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L15 13.586V8z" />
+                            </svg>
+                          ) : (
+                            <svg
+                              className="w-4 h-4 text-slate-400"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M5 12a1 1 0 102 0V6.414l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L5 6.414V12zM15 8a1 1 0 10-2 0v5.586l-1.293-1.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L15 13.586V8z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      col.label
+                    )}
                   </th>
                 ))}
                 <th className="px-3 py-2 text-center font-semibold text-slate-700 whitespace-nowrap">
@@ -702,7 +765,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
                 </tr>
               )}
 
-              {!loading && !error && rows?.length === 0 && (
+              {!loading && !error && sortedRows?.length === 0 && (
                 <tr>
                   <td colSpan={columns.length + 3} className="px-3 py-6">
                     <EmptyState />
@@ -712,28 +775,33 @@ const PhieuLeTable = forwardRef((props, ref) => {
 
               {!loading &&
                 !error &&
-                rows?.length > 0 &&
-                rows.map((row, idx) => (
-                  <MemoizedTableRow
-                    key={row._id || idx}
-                    row={row}
-                    idx={idx}
-                    page={page}
-                    limit={limit}
-                    columns={columns}
-                    isSelected={selectedIds.includes(row._id)}
-                    isEditing={editingPhieuId === row._id}
-                    editValue={editValue}
-                    savingGhiChu={savingGhiChu}
-                    onSelectOne={handleSelectOne}
-                    onStartEdit={handleStartEdit}
-                    onSaveGhiChu={handleSaveGhiChu}
-                    onCancelEdit={handleCancelEdit}
-                    onViewDetail={handleViewDetail}
-                    setEditValue={setEditValue}
-                    formatDate={formatDate}
-                  />
-                ))}
+                sortedRows?.length > 0 && // ✅ ĐÚNG
+                sortedRows.map(
+                  (
+                    row,
+                    idx, // ✅ ĐÚNG
+                  ) => (
+                    <MemoizedTableRow
+                      key={row._id || idx}
+                      row={row}
+                      idx={idx}
+                      page={page}
+                      limit={limit}
+                      columns={columns}
+                      isSelected={selectedIds.includes(row._id)}
+                      isEditing={editingPhieuId === row._id}
+                      editValue={editValue}
+                      savingGhiChu={savingGhiChu}
+                      onSelectOne={handleSelectOne}
+                      onStartEdit={handleStartEdit}
+                      onSaveGhiChu={handleSaveGhiChu}
+                      onCancelEdit={handleCancelEdit}
+                      onViewDetail={handleViewDetail}
+                      setEditValue={setEditValue}
+                      formatDate={formatDate}
+                    />
+                  ),
+                )}
             </tbody>
           </table>
         </div>
