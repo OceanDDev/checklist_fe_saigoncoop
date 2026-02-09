@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 /* eslint-disable react/prop-types */
 import { useRef, useState } from "react";
 import ExcelJS from "exceljs";
@@ -27,6 +28,9 @@ const HEADER_MAP = {
   SKU: "SKU",
   NAME: "NAME",
   PACK: "PACK",
+  KHOILUONG: "KHOILUONG",
+  "KHOI LUONG": "KHOILUONG",
+  "KHỐI LƯỢNG": "KHOILUONG",
   LOAIHINH: "LOAIHINH",
   NGAY_IMPORT: "NGAY_IMPORT",
   LOAI_HINH: "LOAIHINH",
@@ -147,6 +151,7 @@ const buildStyledWorkbook = (rows = []) => {
     { header: "SKU", key: "SKU", width: 16 },
     { header: "NAME", key: "NAME", width: 36 },
     { header: "PACK", key: "PACK", width: 10 },
+    { header: "KHOILUONG", key: "KHOILUONG", width: 12 },
     { header: "LOAIHINH", key: "LOAIHINH", width: 20 },
     { header: "NGAY_IMPORT", key: "NGAY_IMPORT", width: 14 },
   ];
@@ -182,7 +187,7 @@ const buildStyledWorkbook = (rows = []) => {
     rows.forEach((r) => ws.addRow(r));
   } else {
     ws.addRow({
-        MANCC: "",
+      MANCC: "",
       MANH: "",
       DEPT: "",
       SUBDEPT: "",
@@ -190,9 +195,9 @@ const buildStyledWorkbook = (rows = []) => {
       SKU: "",
       NAME: "",
       PACK: "",
+      KHOILUONG: "",
       LOAIHINH: "",
       NGAY_IMPORT: "",
-   
     });
   }
 
@@ -275,8 +280,59 @@ const DinhViImport = ({ onImportSuccess }) => {
 
     setImporting(true);
     try {
-      await dinhViService.importManyDinhVi(parsedRows);
-      alert(`✅ Đã import thành công ${rowCount} dòng từ "${fileName}".`);
+      // ✅ Kiểm tra từng SKU xem đã tồn tại chưa và có LOAIHINH đặc biệt không
+      const processedRows = await Promise.all(
+        parsedRows.map(async (row) => {
+          try {
+            // Gọi API để lấy thông tin SKU hiện tại (giả sử có API này)
+            const existing = await dinhViService.getDinhViBySKU(row.SKU);
+
+            if (
+              existing &&
+              (existing.LOAIHINH === "1" ||
+                existing.LOAIHINH === "Hàng đặc thù")
+            ) {
+              // ⚠️ Chỉ cho phép cập nhật SLOT, giữ nguyên các trường khác
+              return {
+                SKU: row.SKU,
+                SLOT: row.SLOT, // Chỉ lấy SLOT mới từ file import
+                // Giữ nguyên các trường cũ
+                MANCC: existing.MANCC,
+                MANH: existing.MANH,
+                DEPT: existing.DEPT,
+                SUBDEPT: existing.SUBDEPT,
+                PACK: existing.PACK,
+                NAME: existing.NAME,
+                KHOILUONG: existing.KHOILUONG,
+                LOAIHINH: existing.LOAIHINH,
+                NGAY_IMPORT: existing.NGAY_IMPORT,
+              };
+            }
+
+            // ✅ SKU mới hoặc chưa có LOAIHINH đặc biệt → Cho phép cập nhật toàn bộ
+            return row;
+          } catch (err) {
+            // Nếu không tìm thấy SKU (SKU mới) → Cho phép import toàn bộ
+            return row;
+          }
+        }),
+      );
+
+      const response = await dinhViService.importManyDinhVi(processedRows);
+
+      const stats = response?.stats || {};
+      const inserted = stats.inserted || 0;
+      const modified = stats.modified || 0;
+      const unchanged = (stats.matched || 0) - modified;
+
+      let message = `✅ Import hoàn tất từ "${fileName}":\n`;
+      message += `• Thêm mới: ${inserted} SKU\n`;
+      message += `• Cập nhật: ${modified} SKU\n`;
+      if (unchanged > 0) {
+        message += `• Không thay đổi: ${unchanged} SKU`;
+      }
+
+      alert(message);
       setShowModal(false);
       resetState();
       onImportSuccess?.();
@@ -326,6 +382,32 @@ const DinhViImport = ({ onImportSuccess }) => {
             </div>
 
             <div className="p-6 space-y-5">
+              {/* ✅ Thông tin về logic import */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <div className="text-blue-600 text-xl mt-0.5">ℹ️</div>
+                  <div className="text-sm text-blue-900">
+                    <div className="font-semibold mb-1">Cách thức import:</div>
+                    <ul className="space-y-1 text-blue-800">
+                      <li>
+                        • Nếu <strong>SKU chưa tồn tại</strong> → Thêm mới
+                      </li>
+                      <li>
+                        • Nếu <strong>SKU đã tồn tại</strong> và chưa có
+                        cách/đặc thù → Cập nhật toàn bộ
+                      </li>
+                      <li>
+                        • Nếu{" "}
+                        <strong>
+                          SKU đã có cách = 1 hoặc Hàng đặc thù
+                        </strong>{" "}
+                        → Chỉ cập nhật <strong>SLOT</strong>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
               <div className="text-sm text-slate-600">
                 Hỗ trợ:{" "}
                 <span className="font-medium">.csv, .xlsx, .xls, .json</span>

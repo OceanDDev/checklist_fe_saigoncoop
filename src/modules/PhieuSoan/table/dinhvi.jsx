@@ -29,6 +29,7 @@ const DinhViTable = forwardRef((props, ref) => {
   const [sku, setSku] = useState("");
   const [name, setName] = useState("");
   const [pack, setPack] = useState("");
+  const [khoiluong, setKhoiluong] = useState("");
   const [maNCC, setMaNCC] = useState("");
   const [maNH, setMaNH] = useState("");
   const [Dept, setDept] = useState("");
@@ -40,6 +41,33 @@ const DinhViTable = forwardRef((props, ref) => {
   const [error, setError] = useState("");
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
+
+  // ✅ State cho chỉnh sửa
+  const [editingRowId, setEditingRowId] = useState(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [editedPacks, setEditedPacks] = useState({});
+
+  // ✅ Khôi phục editedPacks từ localStorage khi component mount
+  useEffect(() => {
+    const saved = localStorage.getItem("editedPacks");
+    if (saved) {
+      try {
+        setEditedPacks(JSON.parse(saved));
+      } catch (e) {
+        console.error("Không thể khôi phục editedPacks:", e);
+      }
+    }
+  }, []);
+
+  // ✅ Lưu editedPacks vào localStorage mỗi khi thay đổi
+  useEffect(() => {
+    if (Object.keys(editedPacks).length > 0) {
+      localStorage.setItem("editedPacks", JSON.stringify(editedPacks));
+    } else {
+      localStorage.removeItem("editedPacks");
+    }
+  }, [editedPacks]);
 
   // Debounce search 350ms
   useEffect(() => {
@@ -56,6 +84,7 @@ const DinhViTable = forwardRef((props, ref) => {
       sku,
       name,
       pack,
+      khoiluong,
       maNCC,
       maNH,
       Dept,
@@ -69,12 +98,13 @@ const DinhViTable = forwardRef((props, ref) => {
       sku,
       name,
       pack,
+      khoiluong,
       maNCC,
       maNH,
       Dept,
       SubDept,
       debouncedSearch,
-    ]
+    ],
   );
 
   const fetchDinhVi = async () => {
@@ -85,8 +115,8 @@ const DinhViTable = forwardRef((props, ref) => {
       const data = Array.isArray(res)
         ? res
         : Array.isArray(res?.data)
-        ? res.data
-        : [];
+          ? res.data
+          : [];
       setRows(data);
       setTotal(Number(res?.pagination?.total ?? res?.total ?? data.length));
     } catch (e) {
@@ -100,6 +130,7 @@ const DinhViTable = forwardRef((props, ref) => {
   // Expose fetchDinhVi method to parent via ref
   useImperativeHandle(ref, () => ({
     fetchDinhVi,
+    getEditedPacks: () => editedPacks,
   }));
 
   useEffect(() => {
@@ -114,6 +145,7 @@ const DinhViTable = forwardRef((props, ref) => {
     setSku("");
     setName("");
     setPack("");
+    setKhoiluong("");
     setMaNCC("");
     setMaNH("");
     setDept("");
@@ -121,7 +153,65 @@ const DinhViTable = forwardRef((props, ref) => {
     setSearch("");
   };
 
-  // Định nghĩa các cột cố định
+  // ✅ Kiểm tra xem có được phép edit không (pack = "1")
+  const isPackEditable = (row) => {
+    return String(row.pack).trim() === "1";
+  };
+  // ✅ Kiểm tra xem ô này đã được chỉnh sửa chưa
+  const isPackEdited = (row) => {
+    const rowId = row.id || row._id;
+    return editedPacks[rowId] !== undefined;
+  };
+
+  // ✅ Lấy giá trị pack hiển thị (ưu tiên giá trị đã edit)
+  const getPackValue = (row) => {
+    const rowId = row.id || row._id;
+    return editedPacks[rowId] !== undefined ? editedPacks[rowId] : row.pack;
+  };
+
+  // ✅ Bắt đầu chỉnh sửa
+  const handleStartEdit = (row) => {
+    const rowId = row.id || row._id;
+    setEditingRowId(rowId);
+    setEditingValue(getPackValue(row));
+  };
+
+  // ✅ Hủy chỉnh sửa
+  const handleCancelEdit = () => {
+    setEditingRowId(null);
+    setEditingValue("");
+  };
+
+  // ✅ Lưu chỉnh sửa
+  const handleSaveEdit = async (row) => {
+    const rowId = row.id || row._id;
+
+    setIsSaving(true);
+    try {
+      await dinhViService.updatePackBySKU(row.sku, editingValue);
+
+      // ✅ CHỈ cập nhật state local, KHÔNG fetch lại
+      setEditedPacks((prev) => ({
+        ...prev,
+        [rowId]: editingValue,
+      }));
+
+      // ❌ XÓA DÒNG NÀY
+      // await fetchDinhVi();
+
+      setEditingRowId(null);
+      setEditingValue("");
+
+      alert("✅ Đã lưu thay đổi!");
+    } catch (err) {
+      console.error("Lỗi khi lưu:", err);
+      alert("❌ Không thể lưu thay đổi. Vui lòng thử lại.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ✅ Cột hiển thị
   const columns = [
     { key: "maNCC", label: "Mã NCC" },
     { key: "maNH", label: "Mã NH" },
@@ -131,16 +221,16 @@ const DinhViTable = forwardRef((props, ref) => {
     { key: "sku", label: "SKU" },
     { key: "name", label: "Tên hàng" },
     { key: "pack", label: "Quy cách" },
+    { key: "khoiluong", label: "Khối lượng" },
     { key: "loaiHinh", label: "Loại hình" },
     { key: "ngay_import", label: "Ngày Import" },
   ];
 
   const maxPage = Math.max(1, Math.ceil(total / limit));
 
-  // Format ngày tháng (chỉ hiển thị ngày)
+  // Format ngày tháng
   const formatDate = (dateValue) => {
     if (!dateValue) return "";
-
     try {
       const date = new Date(dateValue);
       if (isNaN(date.getTime())) return dateValue;
@@ -159,94 +249,87 @@ const DinhViTable = forwardRef((props, ref) => {
       {/* Filter card */}
       <div className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-4 md:p-5 shadow-sm">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="relative">
-            <input
-              value={maNCC}
-              onChange={(e) => {
-                setPage(1);
-                setMaNCC(e.target.value);
-              }}
-              className="h-10 w-full rounded-xl border border-slate-300 px-3 focus:ring-2 focus:ring-slate-200 outline-none shadow-sm placeholder:text-slate-400"
-              placeholder="Mã NCC"
-            />
-          </div>
-          <div className="relative">
-            <input
-              value={maNH}
-              onChange={(e) => {
-                setPage(1);
-                setMaNH(e.target.value);
-              }}
-              className="h-10 w-full rounded-xl border border-slate-300 px-3 focus:ring-2 focus:ring-slate-200 outline-none shadow-sm placeholder:text-slate-400"
-              placeholder="Mã NH"
-            />
-          </div>
-          <div className="relative">
-            <input
-              value={Dept}
-              onChange={(e) => {
-                setPage(1);
-                setDept(e.target.value);
-              }}
-              className="h-10 w-full rounded-xl border border-slate-300 px-3 focus:ring-2 focus:ring-slate-200 outline-none shadow-sm placeholder:text-slate-400"
-              placeholder="Dept"
-            />
-          </div>
-          <div className="relative">
-            <input
-              value={SubDept}
-              onChange={(e) => {
-                setPage(1);
-                setSubDept(e.target.value);
-              }}
-              className="h-10 w-full rounded-xl border border-slate-300 px-3 focus:ring-2 focus:ring-slate-200 outline-none shadow-sm placeholder:text-slate-400"
-              placeholder="Sub Dept"
-            />
-          </div>
-          <div className="relative">
-            <input
-              value={slot}
-              onChange={(e) => {
-                setPage(1);
-                setSlot(e.target.value);
-              }}
-              className="h-10 w-full rounded-xl border border-slate-300 px-3 focus:ring-2 focus:ring-slate-200 outline-none shadow-sm placeholder:text-slate-400"
-              placeholder="Slot"
-            />
-          </div>
-          <div className="relative">
-            <input
-              value={sku}
-              onChange={(e) => {
-                setPage(1);
-                setSku(e.target.value);
-              }}
-              className="h-10 w-full rounded-xl border border-slate-300 px-3 focus:ring-2 focus:ring-slate-200 outline-none shadow-sm placeholder:text-slate-400"
-              placeholder="SKU"
-            />
-          </div>
-          <div className="relative">
-            <input
-              value={name}
-              onChange={(e) => {
-                setPage(1);
-                setName(e.target.value);
-              }}
-              className="h-10 w-full rounded-xl border border-slate-300 px-3 focus:ring-2 focus:ring-slate-200 outline-none shadow-sm placeholder:text-slate-400"
-              placeholder="Tên hàng"
-            />
-          </div>
-          <div className="relative">
-            <input
-              value={pack}
-              onChange={(e) => {
-                setPage(1);
-                setPack(e.target.value);
-              }}
-              className="h-10 w-full rounded-xl border border-slate-300 px-3 focus:ring-2 focus:ring-slate-200 outline-none shadow-sm placeholder:text-slate-400"
-              placeholder="Quy cách (Pack)"
-            />
-          </div>
+          <input
+            value={maNCC}
+            onChange={(e) => {
+              setPage(1);
+              setMaNCC(e.target.value);
+            }}
+            className="h-10 w-full rounded-xl border border-slate-300 px-3"
+            placeholder="Mã NCC"
+          />
+          <input
+            value={maNH}
+            onChange={(e) => {
+              setPage(1);
+              setMaNH(e.target.value);
+            }}
+            className="h-10 w-full rounded-xl border border-slate-300 px-3"
+            placeholder="Mã NH"
+          />
+          <input
+            value={Dept}
+            onChange={(e) => {
+              setPage(1);
+              setDept(e.target.value);
+            }}
+            className="h-10 w-full rounded-xl border border-slate-300 px-3"
+            placeholder="Dept"
+          />
+          <input
+            value={SubDept}
+            onChange={(e) => {
+              setPage(1);
+              setSubDept(e.target.value);
+            }}
+            className="h-10 w-full rounded-xl border border-slate-300 px-3"
+            placeholder="Sub Dept"
+          />
+          <input
+            value={slot}
+            onChange={(e) => {
+              setPage(1);
+              setSlot(e.target.value);
+            }}
+            className="h-10 w-full rounded-xl border border-slate-300 px-3"
+            placeholder="Slot"
+          />
+          <input
+            value={sku}
+            onChange={(e) => {
+              setPage(1);
+              setSku(e.target.value);
+            }}
+            className="h-10 w-full rounded-xl border border-slate-300 px-3"
+            placeholder="SKU"
+          />
+          <input
+            value={name}
+            onChange={(e) => {
+              setPage(1);
+              setName(e.target.value);
+            }}
+            className="h-10 w-full rounded-xl border border-slate-300 px-3"
+            placeholder="Tên hàng"
+          />
+          <input
+            value={pack}
+            onChange={(e) => {
+              setPage(1);
+              setPack(e.target.value);
+            }}
+            className="h-10 w-full rounded-xl border border-slate-300 px-3"
+            placeholder="Quy cách (Pack)"
+          />
+          <input
+            value={khoiluong}
+            onChange={(e) => {
+              setPage(1);
+              setKhoiluong(e.target.value);
+            }}
+            className="h-10 w-full rounded-xl border border-slate-300 px-3"
+            placeholder="Khối lượng"
+          />
 
           <div className="md:col-span-2 relative">
             <input
@@ -261,31 +344,21 @@ const DinhViTable = forwardRef((props, ref) => {
           </div>
         </div>
 
-        {/* Quick chips */}
+        {/* Nút nhanh */}
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-slate-500">Phím nhanh:</span>
-          {[
-            { label: "Slot trống", on: () => setSlot("-") },
-            { label: "SKU rỗng", on: () => setSku("") },
-            { label: "Pack thùng", on: () => setPack("THUNG") },
-          ].map((c) => (
-            <button
-              key={c.label}
-              onClick={() => {
-                setPage(1);
-                c.on();
-              }}
-              className="rounded-full bg-slate-100 px-3 py-1 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200"
-            >
-              {c.label}
-            </button>
-          ))}
           <button
             onClick={resetFilters}
             className="ml-auto rounded-xl bg-white px-3 py-1.5 text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
           >
             Làm mới
           </button>
+          {/* ✅ Hiển thị số lượng đã chỉnh sửa */}
+          {Object.keys(editedPacks).length > 0 && (
+            <span className="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-800 ring-1 ring-amber-200 font-medium">
+              Đã sửa: {Object.keys(editedPacks).length}
+            </span>
+          )}
         </div>
       </div>
 
@@ -344,36 +417,101 @@ const DinhViTable = forwardRef((props, ref) => {
             {!loading &&
               !error &&
               rows?.length > 0 &&
-              rows.map((row, idx) => (
-                <tr
-                  key={row.id || row._id || idx}
-                  className="border-b border-slate-100 even:bg-slate-50/60 hover:bg-blue-200"
-                >
-                  <td className="px-3 py-2">{(page - 1) * limit + idx + 1}</td>
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className="px-3 py-2 whitespace-nowrap text-slate-700"
-                    >
-                      {col.key === "ngay_import" ? (
-                        formatDate(row?.[col.key])
-                      ) : col.key === "loaiHinh" ? (
-                        <span
-                          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                            row?.[col.key] === "Hàng Đặc Thù"
-                              ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200"
-                              : "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
-                          }`}
-                        >
-                          {row?.[col.key] || "N/A"}
-                        </span>
-                      ) : (
-                        String(row?.[col.key] ?? "")
-                      )}
+              rows.map((row, idx) => {
+                const rowId = row.id || row._id;
+                const isEditing = editingRowId === rowId;
+
+                return (
+                  <tr
+                    key={rowId || idx}
+                    className="border-b border-slate-100 even:bg-slate-50/60 hover:bg-blue-100/60"
+                  >
+                    <td className="px-3 py-2">
+                      {(page - 1) * limit + idx + 1}
                     </td>
-                  ))}
-                </tr>
-              ))}
+                    {columns.map((col) => (
+                      <td
+                        key={col.key}
+                        className={`px-3 py-2 whitespace-nowrap text-slate-700 ${
+                          col.key === "pack" && isPackEdited(row)
+                            ? "bg-amber-50 ring-2 ring-inset ring-amber-300"
+                            : ""
+                        }`}
+                      >
+                        {col.key === "ngay_import" ? (
+                          formatDate(row?.[col.key])
+                        ) : col.key === "loaiHinh" ? (
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                              row?.[col.key] === "Hàng Đặc Thù"
+                                ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200"
+                                : "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
+                            }`}
+                          >
+                            {row?.[col.key] || "N/A"}
+                          </span>
+                        ) : col.key === "pack" && isPackEditable(row) ? (
+                          // ✅ Chế độ chỉnh sửa cho pack = "1"
+                          <div className="flex items-center gap-1">
+                            {isEditing ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={editingValue}
+                                  onChange={(e) =>
+                                    setEditingValue(e.target.value)
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      handleSaveEdit(row);
+                                    } else if (e.key === "Escape") {
+                                      handleCancelEdit();
+                                    }
+                                  }}
+                                  disabled={isSaving}
+                                  className="flex-1 min-w-0 px-2 py-1 text-xs border border-blue-300 rounded focus:ring-2 focus:ring-blue-200 outline-none disabled:opacity-50"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => handleSaveEdit(row)}
+                                  disabled={isSaving}
+                                  className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Lưu (Enter)"
+                                >
+                                  {isSaving ? "⏳" : "✓"}
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  disabled={isSaving}
+                                  className="px-2 py-1 text-xs bg-slate-400 text-white rounded hover:bg-slate-500 disabled:opacity-50"
+                                  title="Hủy (Esc)"
+                                >
+                                  ✕
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="flex-1 min-w-0">
+                                  {getPackValue(row)}
+                                </span>
+                                <button
+                                  onClick={() => handleStartEdit(row)}
+                                  className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                                  title="Chỉnh sửa"
+                                >
+                                  ✏️
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          String(row?.[col.key] ?? "")
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>
@@ -409,7 +547,7 @@ const DinhViTable = forwardRef((props, ref) => {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="h-10 px-3 rounded-xl bg-white ring-1 ring-slate-300 disabled:opacity-50 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+              className="h-10 px-3 rounded-xl bg-white ring-1 ring-slate-300 disabled:opacity-50 hover:bg-slate-50"
             >
               Trước
             </button>
@@ -429,7 +567,7 @@ const DinhViTable = forwardRef((props, ref) => {
             <button
               onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
               disabled={page >= maxPage}
-              className="h-10 px-3 rounded-xl bg-white ring-1 ring-slate-300 disabled:opacity-50 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+              className="h-10 px-3 rounded-xl bg-white ring-1 ring-slate-300 disabled:opacity-50 hover:bg-slate-50"
             >
               Sau
             </button>

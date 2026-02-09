@@ -121,12 +121,77 @@ const importManyDinhVi = async (data) => {
   }
 };
 
+/** PATCH: cập nhật pack theo SKU */
+const updatePackBySKU = async (sku, newPack) => {
+  try {
+    const path = `${URL.phieusoan.dinhvi}/update-pack`;
+    const results = await requestService.patch(path, { sku, pack: newPack });
+    return results;
+  } catch (error) {
+    console.error("Lỗi updatePackBySKU:", error);
+    throw error;
+  }
+};
+
+/** POST: lấy khối lượng theo nhiều SKU (bulk) */
+const getKhoiLuongByMultipleSKU = async (skus) => {
+  try {
+    const path = `${URL.phieusoan.dinhvi}/khoi-luong/bulk`;
+    const results = await requestService.post(path, { skus });
+    return results;
+  } catch (error) {
+    console.error("Lỗi getKhoiLuongByMultipleSKU:", error);
+    throw error;
+  }
+};
+
+/** GET: lấy khối lượng theo 1 SKU */
+const getKhoiLuongBySKU = async (sku) => {
+  try {
+    const path = `${URL.phieusoan.dinhvi}/khoi-luong/${sku}`;
+    const results = await requestService.get(path);
+    return results;
+  } catch (error) {
+    console.error("Lỗi getKhoiLuongBySKU:", error);
+    throw error;
+  }
+};
+
+// ✅ THÊM MỚI: Lấy pack theo nhiều SKU (bulk)
+const getPackByMultipleSKU = async (skus) => {
+  try {
+    const path = `${URL.phieusoan.dinhvi}/pack/bulk`;
+    const results = await requestService.post(path, { skus });
+    return results;
+  } catch (error) {
+    console.error("Lỗi getPackByMultipleSKU:", error);
+    throw error;
+  }
+};
+
+// ✅ THÊM MỚI: Lấy pack theo 1 SKU
+const getPackBySKU = async (sku) => {
+  try {
+    const path = `${URL.phieusoan.dinhvi}/pack/${sku}`;
+    const results = await requestService.get(path);
+    return results;
+  } catch (error) {
+    console.error("Lỗi getPackBySKU:", error);
+    throw error;
+  }
+};
+
 export const dinhViService = {
-  getAllDinhVi, // GET /dinhvi?page=1&limit=10&slot=...&search=...
-  getDinhViById, // GET /dinhvi/:id
-  createDinhVi, // POST /dinhvi
-  updateDinhVi, // PUT /dinhvi/:id
-  deleteDinhVi, // DELETE /dinhvi/:id
-  clearAllDinhVi, // POST /dinhvi/clear-all (với confirmation)
-  importManyDinhVi, // POST /dinhvi/import
+  getAllDinhVi,           // GET /dinhvi?page=1&limit=10&slot=...&search=...
+  getDinhViById,          // GET /dinhvi/:id
+  createDinhVi,           // POST /dinhvi
+  updateDinhVi,           // PUT /dinhvi/:id
+  deleteDinhVi,           // DELETE /dinhvi/:id
+  clearAllDinhVi,         // POST /dinhvi/clear-all (với confirmation)
+  importManyDinhVi,       // POST /dinhvi/import
+  updatePackBySKU,        // PATCH /dinhvi/update-pack
+  getKhoiLuongByMultipleSKU,  // POST /dinhvi/khoi-luong/bulk
+  getKhoiLuongBySKU,      // GET /dinhvi/khoi-luong/:sku
+  getPackByMultipleSKU,   // ✅ POST /dinhvi/pack/bulk
+  getPackBySKU,           // ✅ GET /dinhvi/pack/:sku
 };

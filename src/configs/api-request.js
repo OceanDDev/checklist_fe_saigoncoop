@@ -74,6 +74,10 @@ const URL = {
     ttb: ENDPOINT_PREFIX + "/ttb",
     thietbi: ENDPOINT_PREFIX + "/thietbi",
   },
+   phieule: {
+    phieule: ENDPOINT_PREFIX + "/phieule",
+    dataCH: ENDPOINT_PREFIX + "/dataCH",
+  },
 };
 
 export { URL, ApiServer, DEF_HEADERS };

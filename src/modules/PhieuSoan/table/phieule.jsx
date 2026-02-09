@@ -1,0 +1,879 @@
+/* eslint-disable react/prop-types */
+import React from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+  useCallback,
+} from "react";
+import { phieuLeService } from "@/services/phieusoan/phieule.service";
+import ChiTietModal from "./component/phieule/ChiTietPhieuLe";
+import ImportProcessModal from "./component/phieule/ImportPhieuLe";
+import PrintMultiplePhieuLe from "./component/phieule/PrintMultiplePhieuLe";
+import NoteBeforePrintModal from "./component/phieule/NoteBeforePrintModal";
+import PhieuLeFilters from "./component/phieule/Phieulefilters";
+import ImportHDDaXuat from "./component/phieule/ImportHDDaXuat";
+import dayjs from "dayjs";
+import "react-date-range/dist/styles.css";
+import "react-date-range/dist/theme/default.css";
+
+// ✅ OPTIMIZATION 1: Tách EmptyState ra component riêng với memo
+const EmptyState = ({
+  title = "Không có dữ liệu",
+  subtitle = "Nhập dữ liệu hoặc điều chỉnh bộ lọc để thấy kết quả.",
+}) => (
+  <div className="flex flex-col items-center justify-center py-16 text-center">
+    <div className="h-16 w-16 rounded-full bg-slate-100 ring-1 ring-slate-200 grid place-items-center">
+      <div className="h-8 w-8 rounded-full bg-slate-200" />
+    </div>
+    <div className="mt-4 text-lg font-semibold text-slate-700">{title}</div>
+    <p className="mt-1 text-slate-500 max-w-md text-sm">{subtitle}</p>
+  </div>
+);
+
+// ✅ OPTIMIZATION 2: Tách TableRow ra component riêng với memo
+const TableRow = ({
+  row,
+  idx,
+  page,
+  limit,
+  columns,
+  isSelected,
+  isEditing,
+  editValue,
+  savingGhiChu,
+  onSelectOne,
+  onStartEdit,
+  onSaveGhiChu,
+  onCancelEdit,
+  onViewDetail,
+  setEditValue,
+  formatDate,
+}) => {
+  const chiTietCount = row.chi_tiet?.length || 0;
+  const phieuId = row._id;
+
+  return (
+    <tr
+      className={`border-b border-slate-100 even:bg-slate-50/60 hover:bg-blue-50 transition-colors ${
+        isSelected ? "bg-blue-100 hover:bg-blue-150" : ""
+      }`}
+    >
+      <td className="px-3 py-2 text-center">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onSelectOne(phieuId)}
+          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-200 cursor-pointer"
+        />
+      </td>
+      <td className="px-3 py-2">{(page - 1) * limit + idx + 1}</td>
+      {columns.map((col) => (
+        <td
+          key={col.key}
+          className="px-3 py-2 whitespace-nowrap text-slate-700"
+        >
+          {(() => {
+            const value = row?.[col.key];
+
+            if (col.key === "ngay_import") {
+              return formatDate(value);
+            } else if (col.editable && col.key === "ghi_chu_phieu") {
+              return (
+                <div className="flex items-center gap-2">
+                  {isEditing ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            onSaveGhiChu(row);
+                          } else if (e.key === "Escape") {
+                            onCancelEdit();
+                          }
+                        }}
+                        disabled={savingGhiChu}
+                        className="flex-1 min-w-0 px-2 py-1 text-xs border border-blue-300 rounded focus:ring-2 focus:ring-blue-200 outline-none disabled:opacity-50"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => onSaveGhiChu(row)}
+                        disabled={savingGhiChu}
+                        className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Lưu (Enter)"
+                      >
+                        {savingGhiChu ? "⏳" : "✓"}
+                      </button>
+                      <button
+                        onClick={onCancelEdit}
+                        disabled={savingGhiChu}
+                        className="px-2 py-1 text-xs bg-slate-400 text-white rounded hover:bg-slate-500 disabled:opacity-50"
+                        title="Hủy (Esc)"
+                      >
+                        ✕
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 min-w-0">
+                        {String(value ?? "")}
+                      </span>
+                      <button
+                        onClick={() => onStartEdit(row)}
+                        className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                        title="Chỉnh sửa"
+                      >
+                        ✏️
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            } else if (col.key === "so_lan_in_phieu") {
+              return (
+                <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  {value || 0}
+                </span>
+              );
+            } else if (col.key === "tong_kien") {
+              return (
+                <span className="font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
+                  {value || 0}
+                </span>
+              );
+            } else if (col.key === "tong_khoi_luong") {
+              return (
+                <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  {value || 0} kg
+                </span>
+              );
+            } else if (col.key === "trang_thai") {
+              const statusColors = {
+                "Chờ xử lý":
+                  "text-yellow-700 bg-yellow-50 border border-yellow-200",
+                "Đã xử lý": "text-blue-700 bg-blue-50 border border-blue-200",
+                "Đã Xuất": "text-green-700 bg-green-50 border border-green-200",
+              };
+              const colorClass =
+                statusColors[value] ||
+                "text-slate-600 bg-slate-50 border border-slate-200";
+              return (
+                <span
+                  className={`font-medium px-2.5 py-1 rounded-lg whitespace-nowrap ${colorClass}`}
+                >
+                  {value || ""}
+                </span>
+              );
+            } else {
+              return String(value ?? "");
+            }
+          })()}
+        </td>
+      ))}
+      <td className="px-3 py-2 text-center">
+        <button
+          onClick={() => onViewDetail(row)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+          title="Xem chi tiết"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+            />
+          </svg>
+          Chi tiết ({chiTietCount})
+        </button>
+      </td>
+    </tr>
+  );
+};
+
+// ✅ OPTIMIZATION 3: Memo TableRow để tránh re-render không cần thiết
+const MemoizedTableRow = React.memo(TableRow);
+
+const PhieuLeTable = forwardRef((props, ref) => {
+  // --- States ---
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [search, setSearch] = useState("");
+  const [soDocument, setSoDocument] = useState("");
+  const [sku, setSku] = useState("");
+  const [slot, setSlot] = useState("");
+  const [trangThai, setTrangThai] = useState("");
+  const [maCH, setMaCH] = useState("");
+  const [chuyen, setChuyen] = useState("");
+  const [dateRange, setDateRange] = useState([
+    {
+      startDate: new Date(),
+      endDate: new Date(),
+      key: "selection",
+    },
+  ]);
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  // Debounced values
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSoDocument, setDebouncedSoDocument] = useState("");
+  const [debouncedSku, setDebouncedSku] = useState("");
+  const [debouncedSlot, setDebouncedSlot] = useState("");
+  const [debouncedMaCH, setDebouncedMaCH] = useState("");
+  const [debouncedChuyen, setDebouncedChuyen] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+
+  // Modals
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [showImportHDModal, setShowImportHDModal] = useState(false);
+  const [selectedPhieu, setSelectedPhieu] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [tempNote, setTempNote] = useState("");
+
+  // Filter panel
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Edit ghi chú
+  const [editingPhieuId, setEditingPhieuId] = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const [savingGhiChu, setSavingGhiChu] = useState(false);
+
+  // Checkbox selection
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  // ✅ OPTIMIZATION 4: useMemo cho hasActiveFilter
+  const hasActiveFilter = useMemo(() => {
+    return !!(
+      debouncedSearch ||
+      debouncedSoDocument ||
+      debouncedSku ||
+      debouncedSlot ||
+      trangThai ||
+      debouncedMaCH ||
+      debouncedChuyen ||
+      (dateRange[0].startDate &&
+        dateRange[0].endDate &&
+        (dayjs(dateRange[0].startDate).format("YYYY-MM-DD") !==
+          dayjs().format("YYYY-MM-DD") ||
+          dayjs(dateRange[0].endDate).format("YYYY-MM-DD") !==
+            dayjs().format("YYYY-MM-DD")))
+    );
+  }, [
+    debouncedSearch,
+    debouncedSoDocument,
+    debouncedSku,
+    debouncedSlot,
+    trangThai,
+    debouncedMaCH,
+    debouncedChuyen,
+    dateRange,
+  ]);
+
+  // ✅ OPTIMIZATION 5: Tự động tăng limit khi có filter active
+  useEffect(() => {
+    if (hasActiveFilter) {
+      setLimit(9999);
+      setPage(1);
+    } else {
+      setLimit(20);
+    }
+  }, [hasActiveFilter]);
+
+  // ✅ OPTIMIZATION 6: Gộp các debounce useEffect
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setDebouncedSearch(search), 350),
+      setTimeout(() => setDebouncedSoDocument(soDocument), 350),
+      setTimeout(() => setDebouncedSku(sku), 350),
+      setTimeout(() => setDebouncedSlot(slot), 350),
+      setTimeout(() => setDebouncedMaCH(maCH), 350),
+      setTimeout(() => setDebouncedChuyen(chuyen), 350),
+    ];
+
+    return () => timers.forEach(clearTimeout);
+  }, [search, soDocument, sku, slot, maCH, chuyen]);
+
+  // ✅ OPTIMIZATION 7: useMemo cho params
+  const params = useMemo(
+    () => ({
+      page,
+      limit,
+      search: debouncedSearch,
+      so_document: debouncedSoDocument,
+      sku: debouncedSku,
+      slot: debouncedSlot,
+      trang_thai: trangThai,
+      mach: debouncedMaCH,
+      chuyen: debouncedChuyen,
+      startDate: dayjs(dateRange[0].startDate).format("YYYY-MM-DD"),
+      endDate: dayjs(dateRange[0].endDate).format("YYYY-MM-DD"),
+    }),
+    [
+      page,
+      limit,
+      debouncedSearch,
+      debouncedSoDocument,
+      debouncedSku,
+      debouncedSlot,
+      trangThai,
+      debouncedMaCH,
+      debouncedChuyen,
+      dateRange,
+    ],
+  );
+
+  // ✅ OPTIMIZATION 8: useCallback cho fetchPhieuLe
+  const fetchPhieuLe = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await phieuLeService.getAllPhieuLe(params);
+      const data = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
+      setRows(data);
+      setTotal(Number(res?.pagination?.total ?? res?.total ?? data.length));
+    } catch (e) {
+      console.error("❌ Error:", e);
+      setError("Không tải được dữ liệu Phiếu Lẻ.");
+    } finally {
+      setLoading(false);
+    }
+  }, [params]);
+
+  useImperativeHandle(ref, () => ({ fetchPhieuLe }));
+
+  useEffect(() => {
+    fetchPhieuLe();
+  }, [fetchPhieuLe]);
+
+  // ✅ OPTIMIZATION 9: useCallback cho các handlers
+  const resetFilters = useCallback(() => {
+    setPage(1);
+    setLimit(20);
+    setSearch("");
+    setSoDocument("");
+    setSku("");
+    setSlot("");
+    setTrangThai("");
+    setMaCH("");
+    setChuyen("");
+    setDateRange([
+      { startDate: new Date(), endDate: new Date(), key: "selection" },
+    ]);
+    setSelectedIds([]);
+  }, []);
+
+  const handleViewDetail = useCallback((row) => {
+    setSelectedPhieu(row);
+    setShowDetailModal(true);
+  }, []);
+
+  const handleImportSuccess = useCallback(() => {
+    fetchPhieuLe();
+  }, [fetchPhieuLe]);
+
+  const handlePrintSuccess = useCallback(() => {
+    console.log("🔄 Refreshing data after print...");
+    fetchPhieuLe();
+  }, [fetchPhieuLe]);
+
+  const handleStartEdit = useCallback((row) => {
+    setEditingPhieuId(row._id);
+    setEditValue(row.ghi_chu_phieu || "");
+  }, []);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingPhieuId(null);
+    setEditValue("");
+  }, []);
+
+  const handleSaveGhiChu = useCallback(
+    async (row) => {
+      const phieuId = row._id;
+      const oldValue = row.ghi_chu_phieu || "";
+
+      if (editValue === oldValue) {
+        handleCancelEdit();
+        return;
+      }
+
+      setSavingGhiChu(true);
+      try {
+        await phieuLeService.updatePhieuLe(phieuId, {
+          ghi_chu_phieu: editValue,
+        });
+        await fetchPhieuLe();
+        handleCancelEdit();
+      } catch (error) {
+        console.error("❌ Lỗi khi cập nhật ghi chú:", error);
+        alert("Không thể cập nhật ghi chú!");
+      } finally {
+        setSavingGhiChu(false);
+      }
+    },
+    [editValue, fetchPhieuLe, handleCancelEdit],
+  );
+
+  const handleSelectAll = useCallback(
+    (e) => {
+      setSelectedIds(e.target.checked ? rows.map((row) => row._id) : []);
+    },
+    [rows],
+  );
+
+  const handleSelectOne = useCallback((phieuId) => {
+    setSelectedIds((prev) =>
+      prev.includes(phieuId)
+        ? prev.filter((id) => id !== phieuId)
+        : [...prev, phieuId],
+    );
+  }, []);
+
+  const handlePrintSelected = useCallback(() => {
+    if (selectedIds.length === 0) {
+      alert("Vui lòng chọn ít nhất 1 phiếu để in!");
+      return;
+    }
+    setShowNoteModal(true);
+  }, [selectedIds.length]);
+
+  const handleContinueFromNote = useCallback(
+    async (note) => {
+      try {
+        if (note) {
+          await phieuLeService.updateManyPhieuLe(selectedIds, {
+            ghi_chu_phieu: note,
+          });
+          await fetchPhieuLe();
+        }
+        setTempNote(note);
+        setShowNoteModal(false);
+        setShowPrintModal(true);
+      } catch (error) {
+        console.error("❌ Lỗi khi xử lý ghi chú:", error);
+        throw error;
+      }
+    },
+    [selectedIds, fetchPhieuLe],
+  );
+
+  // ✅ OPTIMIZATION 10: useCallback cho handleExportExcel và lazy load ExcelJS
+  const handleExportExcel = useCallback(async () => {
+    if (selectedIds.length === 0) {
+      alert("Vui lòng chọn ít nhất 1 phiếu để xuất!");
+      return;
+    }
+
+    const selectedPhieus = rows.filter((row) => selectedIds.includes(row._id));
+    const ExcelJS = (await import("exceljs")).default;
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Danh sách phiếu lẻ");
+
+    worksheet.columns = [
+      { header: "STT", key: "stt", width: 8 },
+      { header: "Số Document", key: "so_document", width: 15 },
+      { header: "Số SD/TF", key: "sd_tf", width: 15 },
+      { header: "Mã Cửa Hàng", key: "mach", width: 15 },
+      { header: "Tên Cửa Hàng", key: "tench", width: 30 },
+      { header: "Quận", key: "quan", width: 15 },
+      { header: "Chuyến", key: "chuyen", width: 12 },
+      { header: "Tổng Kiện", key: "tong_kien", width: 12 },
+      { header: "Tổng Khối Lượng (kg)", key: "tong_khoi_luong", width: 18 },
+      { header: "Ghi Chú Phiếu", key: "ghi_chu_phieu", width: 40 },
+    ];
+
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4472C4" },
+      };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    selectedPhieus.forEach((phieu, index) => {
+      worksheet.addRow({
+        stt: index + 1,
+        so_document: phieu.so_document || "",
+        sd_tf: phieu.sd_tf || "",
+        mach: phieu.mach || "",
+        tench: phieu.tench || "",
+        quan: phieu.quan || "",
+        chuyen: phieu.chuyen || "",
+        tong_kien: phieu.tong_kien || 0,
+        tong_khoi_luong: phieu.tong_khoi_luong || 0,
+        ghi_chu_phieu: phieu.ghi_chu_phieu || "",
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Danh_Sach_Phieu_Le_${new Date().getTime()}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    console.log(`✅ Xuất thành công ${selectedPhieus.length} phiếu!`);
+  }, [selectedIds, rows]);
+
+  // ✅ OPTIMIZATION 11: useMemo cho columns (static data)
+  const columns = useMemo(
+    () => [
+      { key: "so_document", label: "Số document" },
+      { key: "sd_tf", label: "Số SD/TF" },
+      { key: "mach", label: "Mã cửa hàng" },
+      { key: "tench", label: "Tên cửa hàng" },
+      { key: "quan", label: "Quận" },
+      { key: "chuyen", label: "Chuyến" },
+      { key: "tong_kien", label: "Tổng kiện" },
+      { key: "tong_khoi_luong", label: "Tổng khối lượng" },
+      { key: "so_lan_in_phieu", label: "Số lần in" },
+      { key: "ghi_chu_phieu", label: "Ghi Chú Phiếu", editable: true },
+      { key: "trang_thai", label: "Trạng Thái" },
+      { key: "ngay_import", label: "Ngày Import" },
+    ],
+    [],
+  );
+
+  const maxPage = useMemo(
+    () => Math.max(1, Math.ceil(total / limit)),
+    [total, limit],
+  );
+
+  // ✅ OPTIMIZATION 12: useCallback cho formatDate
+  const formatDate = useCallback((dateValue) => {
+    if (!dateValue) return "";
+    try {
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) return dateValue;
+      return new Intl.DateTimeFormat("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
+    } catch {
+      return dateValue;
+    }
+  }, []);
+
+  // ✅ OPTIMIZATION 13: useMemo cho selectedPhieus
+  const selectedPhieus = useMemo(
+    () => rows.filter((row) => selectedIds.includes(row._id)),
+    [rows, selectedIds],
+  );
+
+  return (
+    <>
+      <div className="space-y-4">
+        <PhieuLeFilters
+          onExportExcel={handleExportExcel}
+          search={search}
+          setSearch={setSearch}
+          soDocument={soDocument}
+          setSoDocument={setSoDocument}
+          sku={sku}
+          setSku={setSku}
+          slot={slot}
+          setSlot={setSlot}
+          trangThai={trangThai}
+          setTrangThai={setTrangThai}
+          maCH={maCH}
+          setMaCH={setMaCH}
+          chuyen={chuyen}
+          setChuyen={setChuyen}
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+          showCalendar={showCalendar}
+          setShowCalendar={setShowCalendar}
+          showFilters={showFilters}
+          setShowFilters={setShowFilters}
+          onResetFilters={resetFilters}
+          onImportClick={() => setShowImportModal(true)}
+          onImportHDClick={() => setShowImportHDModal(true)}
+          onPrintSelected={handlePrintSelected}
+          total={total}
+          selectedCount={selectedIds.length}
+          setPage={setPage}
+        />
+
+        <div className="overflow-auto rounded-2xl border border-slate-200 shadow-sm">
+          <table className="min-w-full text-xs md:text-sm">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
+              <tr className="border-b border-slate-200">
+                <th className="px-3 py-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={
+                      selectedIds.length === rows.length && rows.length > 0
+                    }
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-200 cursor-pointer"
+                    title="Chọn tất cả"
+                  />
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-700">
+                  #
+                </th>
+                {columns.map((col) => (
+                  <th
+                    key={col.key}
+                    className="px-3 py-2 text-left font-semibold text-slate-700 whitespace-nowrap"
+                  >
+                    {col.label}
+                  </th>
+                ))}
+                <th className="px-3 py-2 text-center font-semibold text-slate-700 whitespace-nowrap">
+                  Thao tác
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading &&
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr
+                    key={`skeleton-${i}`}
+                    className="border-b border-slate-100"
+                  >
+                    <td className="px-3 py-3">
+                      <div className="h-4 w-4 animate-pulse rounded bg-slate-200 mx-auto" />
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="h-3 w-8 animate-pulse rounded bg-slate-200" />
+                    </td>
+                    {columns.map((col, j) => (
+                      <td key={`sk-${i}-${j}`} className="px-3 py-3">
+                        <div className="h-3 w-28 max-w-full animate-pulse rounded bg-slate-200" />
+                      </td>
+                    ))}
+                    <td className="px-3 py-3">
+                      <div className="h-8 w-20 mx-auto animate-pulse rounded bg-slate-200" />
+                    </td>
+                  </tr>
+                ))}
+
+              {!loading && error && (
+                <tr>
+                  <td
+                    colSpan={columns.length + 3}
+                    className="px-3 py-8 text-center text-rose-600"
+                  >
+                    {error}
+                  </td>
+                </tr>
+              )}
+
+              {!loading && !error && rows?.length === 0 && (
+                <tr>
+                  <td colSpan={columns.length + 3} className="px-3 py-6">
+                    <EmptyState />
+                  </td>
+                </tr>
+              )}
+
+              {!loading &&
+                !error &&
+                rows?.length > 0 &&
+                rows.map((row, idx) => (
+                  <MemoizedTableRow
+                    key={row._id || idx}
+                    row={row}
+                    idx={idx}
+                    page={page}
+                    limit={limit}
+                    columns={columns}
+                    isSelected={selectedIds.includes(row._id)}
+                    isEditing={editingPhieuId === row._id}
+                    editValue={editValue}
+                    savingGhiChu={savingGhiChu}
+                    onSelectOne={handleSelectOne}
+                    onStartEdit={handleStartEdit}
+                    onSaveGhiChu={handleSaveGhiChu}
+                    onCancelEdit={handleCancelEdit}
+                    onViewDetail={handleViewDetail}
+                    setEditValue={setEditValue}
+                    formatDate={formatDate}
+                  />
+                ))}
+            </tbody>
+          </table>
+        </div>
+
+        {!hasActiveFilter ? (
+          <div className="flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
+            <div className="text-sm text-slate-600">
+              Đang hiển thị <b>{rows.length}</b> / <b>{total}</b> bản ghi
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setPage(1);
+                  setLimit(Number(e.target.value));
+                }}
+                className="h-10 rounded-xl border border-slate-300 px-3"
+              >
+                {[10, 20, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}/trang
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={page === 1}
+                  className="h-10 px-2 rounded-xl bg-white ring-1 ring-slate-300 disabled:opacity-50"
+                >
+                  ⏮
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="h-10 px-3 rounded-xl bg-white ring-1 ring-slate-300 disabled:opacity-50 hover:bg-slate-50"
+                >
+                  Trước
+                </button>
+                <span className="px-2 text-sm text-slate-600">Trang</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={maxPage}
+                  value={page}
+                  onChange={(e) => {
+                    const v = Number(e.target.value || 1);
+                    setPage(Math.min(Math.max(1, v), maxPage));
+                  }}
+                  className="h-10 w-16 rounded-xl border border-slate-300 px-2 text-center focus:ring-2 focus:ring-slate-200 outline-none"
+                />
+                <span className="px-1 text-sm text-slate-600">/ {maxPage}</span>
+                <button
+                  onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
+                  disabled={page >= maxPage}
+                  className="h-10 px-3 rounded-xl bg-white ring-1 ring-slate-300 disabled:opacity-50 hover:bg-slate-50"
+                >
+                  Sau
+                </button>
+                <button
+                  onClick={() => setPage(maxPage)}
+                  disabled={page >= maxPage}
+                  className="h-10 px-2 rounded-xl bg-white ring-1 ring-slate-300 disabled:opacity-50"
+                >
+                  ⏭
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-3 text-sm py-4 px-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+            <div className="flex items-center gap-2">
+              <svg
+                className="w-5 h-5 text-blue-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                />
+              </svg>
+              <span className="font-medium text-slate-700">
+                Đang lọc: Hiển thị{" "}
+                <b className="text-blue-600">{rows.length}</b> /{" "}
+                <b className="text-slate-800">{total}</b> kết quả
+              </span>
+            </div>
+            {total > 1000 && (
+              <span className="text-xs text-orange-600 bg-orange-50 px-3 py-1 rounded-full border border-orange-200">
+                ⚠️ Quá nhiều kết quả, hãy thu hẹp bộ lọc
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <ChiTietModal
+        isOpen={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        phieuData={selectedPhieu}
+        onUpdate={fetchPhieuLe}
+      />
+
+      <ImportProcessModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={handleImportSuccess}
+      />
+
+      <ImportHDDaXuat
+        isOpen={showImportHDModal}
+        onClose={() => setShowImportHDModal(false)}
+        onSuccess={handleImportSuccess}
+      />
+
+      <NoteBeforePrintModal
+        isOpen={showNoteModal}
+        onClose={() => setShowNoteModal(false)}
+        selectedCount={selectedIds.length}
+        onContinue={handleContinueFromNote}
+      />
+
+      <PrintMultiplePhieuLe
+        isOpen={showPrintModal}
+        onClose={() => {
+          setShowPrintModal(false);
+          setTempNote("");
+          setSelectedIds([]);
+        }}
+        selectedPhieus={selectedPhieus}
+        onPrintSuccess={handlePrintSuccess}
+      />
+    </>
+  );
+});
+
+PhieuLeTable.displayName = "PhieuLeTable";
+
+export default PhieuLeTable;
