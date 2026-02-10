@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useReactToPrint } from "react-to-print";
 import { phieuLeService } from "@/services/phieusoan/phieule.service";
 
@@ -11,37 +11,41 @@ const PrintMultiplePhieuLe = ({
 }) => {
   const contentRef = useRef(null);
 
+  // ✅ THÊM STATE ĐỂ LƯU THỜI ĐIỂM IN (chỉ tạo 1 lần khi mount)
+  const [printTime] = useState(() => new Date());
+
   const reactToPrintFn = useReactToPrint({
     contentRef,
     documentTitle: `Phieu_Le_${new Date().getTime()}`,
     onAfterPrint: async () => {
-      console.log("✅ In thành công - Đang cập nhật số lần in và trạng thái...");
+      console.log(
+        "✅ In thành công - Đang cập nhật số lần in, ngày in và trạng thái...",
+      );
 
       try {
-        // Cập nhật số lần in VÀ trạng thái cho tất cả phiếu đã in
         const updatePromises = selectedPhieus.map(async (phieu) => {
           const currentCount = phieu.so_lan_in_phieu || 0;
           const newCount = currentCount + 1;
 
           console.log(
-            `📝 Cập nhật phiếu ${phieu.so_document}: Lần in ${currentCount} → ${newCount}, Trạng thái → "Đã xử lý"`
+            `📝 Cập nhật phiếu ${phieu.so_document}: Lần in ${currentCount} → ${newCount}, Ngày in → ${printTime.toISOString()}, Trạng thái → "Đã xử lý"`,
           );
 
           return phieuLeService.updatePhieuLe(phieu._id, {
             so_lan_in_phieu: newCount,
-            trang_thai: "Đã xử lý", // ✅ Cập nhật trạng thái
+            ngay_in_phieu: printTime, // ✅ DÙNG printTime (thời điểm mở modal)
+            trang_thai: "Đã xử lý",
           });
         });
 
         const results = await Promise.all(updatePromises);
         console.log(
-          "✅ Đã cập nhật số lần in và trạng thái cho",
+          "✅ Đã cập nhật số lần in, ngày in và trạng thái cho",
           selectedPhieus.length,
           "phiếu",
-          results
+          results,
         );
 
-        // Callback để refresh data ở component cha
         if (onPrintSuccess) {
           console.log("🔄 Đang refresh data...");
           onPrintSuccess();
@@ -72,10 +76,22 @@ const PrintMultiplePhieuLe = ({
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
+        second: "2-digit",
       }).format(date);
     } catch {
       return dateValue;
     }
+  };
+
+  // ✅ HÀM TÍNH KIỆN DỰ KIẾN CHO TỪNG ITEM
+  const getKienDuKien = (item) => {
+    if (item.packs_to_pick_1 && item.packs_to_pick_1 > 0) {
+      return parseFloat(item.packs_to_pick_1.toFixed(2));
+    }
+    if (item.packs_to_pick && item.packs_to_pick > 0) {
+      return parseFloat(item.packs_to_pick.toFixed(2));
+    }
+    return 0;
   };
 
   return (
@@ -167,6 +183,9 @@ const PrintMultiplePhieuLe = ({
                 const soLanInHienTai = phieu.so_lan_in_phieu || 0;
                 const soLanInDuKien = soLanInHienTai + 1;
 
+                // ✅ LUÔN DÙNG printTime - THỜI ĐIỂM MỞ MODAL IN
+                const ngayHienThi = printTime;
+
                 return (
                   <div
                     key={phieu._id || phieuIndex}
@@ -184,13 +203,20 @@ const PrintMultiplePhieuLe = ({
                           }}
                         />
                         <div className="flex flex-col items-center">
+                          {/* ✅ Hiển thị thời gian in HIỆN TẠI (printTime) */}
                           <h1 className="text-xl font-bold text-slate-800">
-                            PHIẾU NGÀY {formatDate(phieu.ngay_import)}
+                            PHIẾU NGÀY {formatDate(ngayHienThi)}
                           </h1>
                           <div className="text-xs text-slate-500 mt-1">
                             <span className="font-semibold text-orange-600">
                               Lần in thứ: {soLanInDuKien}
                             </span>
+                            {/* ✅ Chỉ hiển thị indicator nếu chưa từng in */}
+                            {soLanInHienTai === 0 && (
+                              <span className="ml-2 text-green-600">
+                                (Lần đầu - sẽ lưu thời gian này)
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="text-xs text-right italic text-slate-500">
@@ -222,9 +248,10 @@ const PrintMultiplePhieuLe = ({
                             <span className="font-bold">Chuyến:</span>{" "}
                             {phieu.chuyen || "N/A"}
                           </p>
+                          {/* ✅ Hiển thị thời gian in HIỆN TẠI */}
                           <p>
-                            <span className="font-bold">Ngày:</span>{" "}
-                            {formatDate(phieu.ngay_import)}
+                            <span className="font-bold">Ngày In:</span>{" "}
+                            {formatDate(ngayHienThi)}
                           </p>
                         </div>
                       </div>
@@ -236,7 +263,9 @@ const PrintMultiplePhieuLe = ({
                         <thead>
                           <tr className="bg-slate-100 text-[11px]">
                             <th className="border border-slate-400 p-1">#</th>
-                            <th className="border border-slate-400 p-1">Slot</th>
+                            <th className="border border-slate-400 p-1">
+                              Slot
+                            </th>
                             <th className="border border-slate-400 p-1">SKU</th>
                             <th className="border border-slate-400 p-1">
                               Tên Sản Phẩm
@@ -253,7 +282,12 @@ const PrintMultiplePhieuLe = ({
                             <th className="border border-slate-400 p-1">
                               Packs To Pick
                             </th>
-                            <th className="border border-slate-400 p-1">Store</th>
+                            <th className="border border-slate-400 p-1">
+                              Store
+                            </th>
+                            <th className="border border-slate-400 p-1 bg-green-50">
+                              Kiện DK
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -286,14 +320,29 @@ const PrintMultiplePhieuLe = ({
                               <td className="border border-slate-400 p-1 text-right">
                                 {item.store}
                               </td>
+                              <td className="border border-slate-400 p-1 text-right font-bold bg-green-50">
+                                {getKienDuKien(item)}
+                              </td>
                             </tr>
                           ))}
+
+                          <tr className="bg-green-100 font-bold">
+                            <td
+                              colSpan="9"
+                              className="border border-slate-400 p-2 text-right text-[13px]"
+                            >
+                              TỔNG KIỆN DỰ KIẾN:
+                            </td>
+                            <td className="border border-slate-400 p-2 text-center text-[15px] bg-green-200">
+                              {phieu.tong_kien || 0} KIỆN
+                            </td>
+                          </tr>
                         </tbody>
                       </table>
                     </div>
 
                     {phieu.ghi_chu_phieu && (
-                      <div className="mb-2 p-2.5 bg-yellow-50 border border-yellow-200 rounded text-[16px]">
+                      <div className="mt-2 p-2.5 bg-yellow-50 border border-yellow-200 rounded text-[35px]">
                         <strong>Ghi chú:</strong> {phieu.ghi_chu_phieu}
                       </div>
                     )}
@@ -308,7 +357,7 @@ const PrintMultiplePhieuLe = ({
             <div className="text-sm text-slate-600">
               Tổng: <strong>{selectedPhieus.length}</strong> phiếu
               <span className="ml-3 text-orange-600">
-                (Số lần in và trạng thái sẽ cập nhật sau khi in)
+                (Số lần in, ngày in và trạng thái sẽ cập nhật sau khi in)
               </span>
             </div>
             <div className="flex gap-3">

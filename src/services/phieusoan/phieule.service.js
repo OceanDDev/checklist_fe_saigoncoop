@@ -24,8 +24,11 @@ const buildQueryString = (params = {}) => {
     trang_thai = "",
     mach = "", // ✅ THÊM
     chuyen = "", // ✅ THÊM
+    quan = "",
     startDate = "",
     endDate = "",
+    printStartDate = "", // ✅ THÊM
+    printEndDate = "", // ✅ THÊM
   } = params;
 
   const qs = new URLSearchParams();
@@ -41,7 +44,9 @@ const buildQueryString = (params = {}) => {
   if (chuyen) qs.set("chuyen", chuyen); // ✅ THÊM
   if (startDate) qs.set("startDate", startDate);
   if (endDate) qs.set("endDate", endDate);
-
+  if (quan) qs.set("quan", quan);
+  if (printStartDate) qs.set("printStartDate", printStartDate); // ✅ THÊM
+  if (printEndDate) qs.set("printEndDate", printEndDate); // ✅ THÊM
   return qs.toString();
 };
 
@@ -320,7 +325,7 @@ const updateMultipleChiTiet = async (data) => {
   try {
     const response = await ApiServer.patch(
       `${URL.phieule.phieule}/${data.id}/chi-tiet/bulk-update`,
-      { updates: data.updates }
+      { updates: data.updates },
     );
     return response.data;
   } catch (error) {
@@ -347,5 +352,5 @@ export const phieuLeService = {
   updateTrangThaiBySDTF,
   updatePackUnit1ForPhieu, // ✅ THÊM MỚI
   getPackUnit1Info,
-  updateMultipleChiTiet
+  updateMultipleChiTiet,
 };

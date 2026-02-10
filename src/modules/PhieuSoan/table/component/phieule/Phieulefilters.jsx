@@ -18,14 +18,20 @@ const PhieuLeFilters = ({
   setSlot,
   trangThai,
   setTrangThai,
+  quan,
+  setQuan,
   maCH,
   setMaCH,
   chuyen,
   setChuyen,
   dateRange,
   setDateRange,
+  printDateRange, // ✅ THÊM
+  setPrintDateRange, // ✅ THÊM
   showCalendar,
   setShowCalendar,
+  showPrintCalendar, // ✅ THÊM
+  setShowPrintCalendar, // ✅ THÊM
 
   // UI state
   showFilters,
@@ -34,7 +40,7 @@ const PhieuLeFilters = ({
   // Actions
   onResetFilters,
   onImportClick,
-  onImportHDClick, // ✅ NEW - Import HD Đã xuất
+  onImportHDClick,
   onPrintSelected,
 
   // Stats
@@ -53,10 +59,27 @@ const PhieuLeFilters = ({
     if (slot) count++;
     if (trangThai) count++;
     if (maCH) count++;
+    if (quan) count++;
     if (chuyen) count++;
     if (dateRange[0].startDate || dateRange[0].endDate) count++;
+    if (
+      printDateRange &&
+      (printDateRange[0].startDate || printDateRange[0].endDate)
+    )
+      count++; // ✅ THÊM
     return count;
-  }, [search, soDocument, sku, slot, trangThai, maCH, chuyen, dateRange]);
+  }, [
+    search,
+    soDocument,
+    sku,
+    slot,
+    trangThai,
+    maCH,
+    chuyen,
+    dateRange,
+    quan,
+    printDateRange,
+  ]); // ✅ THÊM printDateRange
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-4 md:p-5 shadow-sm">
@@ -106,7 +129,7 @@ const PhieuLeFilters = ({
               In {selectedCount} phiếu
             </button>
 
-            {/* ✅ Nút Xuất Excel */}
+            {/* Nút Xuất Excel */}
             <button
               onClick={onExportExcel}
               className="h-10 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-4 text-white hover:from-blue-700 hover:to-cyan-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
@@ -183,7 +206,7 @@ const PhieuLeFilters = ({
           Import & Xử lí
         </button>
 
-        {/* ✅ NÚT IMPORT HD ĐÃ XUẤT */}
+        {/* Nút Import HD Đã Xuất */}
         <button
           onClick={onImportHDClick}
           className="h-10 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 text-white hover:from-emerald-700 hover:to-teal-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
@@ -294,6 +317,23 @@ const PhieuLeFilters = ({
               />
             </div>
 
+            {/* Quận */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Quận
+              </label>
+              <input
+                type="text"
+                value={quan}
+                onChange={(e) => {
+                  setPage(1);
+                  setQuan(e.target.value);
+                }}
+                placeholder="Nhập quận (VD: 1, 2, 12)..."
+                className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+              />
+            </div>
+
             {/* Trạng thái */}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">
@@ -314,21 +354,24 @@ const PhieuLeFilters = ({
               </select>
             </div>
 
-            {/* Date Range Picker */}
+            {/* Date Range Picker - Ngày Import */}
             <div className="md:col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1">
-                Khoảng Ngày
+                Khoảng Ngày Import
               </label>
               <div className="relative">
                 <input
                   readOnly
-                  onClick={() => setShowCalendar(!showCalendar)}
+                  onClick={() => {
+                    setShowCalendar(!showCalendar);
+                    setShowPrintCalendar(false); // ✅ Đóng calendar kia
+                  }}
                   value={
                     dateRange[0].startDate && dateRange[0].endDate
                       ? `${dayjs(dateRange[0].startDate).format("DD/MM/YYYY")} - ${dayjs(dateRange[0].endDate).format("DD/MM/YYYY")}`
                       : ""
                   }
-                  placeholder="📅 Chọn khoảng ngày"
+                  placeholder="📅 Chọn khoảng ngày import"
                   className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none cursor-pointer"
                 />
                 {showCalendar && (
@@ -336,8 +379,46 @@ const PhieuLeFilters = ({
                     <DateRange
                       ranges={dateRange}
                       onChange={(item) => {
-                        setPage(1);
                         setDateRange([item.selection]);
+                        setPage(1);
+                      }}
+                      moveRangeOnFirstSelection={false}
+                      maxDate={new Date()}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ✅ Date Range Picker - Ngày In Phiếu */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Khoảng Ngày In Phiếu
+              </label>
+              <div className="relative">
+                <input
+                  readOnly
+                  onClick={() => {
+                    setShowPrintCalendar(!showPrintCalendar);
+                    setShowCalendar(false); // ✅ Đóng calendar kia
+                  }}
+                  value={
+                    printDateRange &&
+                    printDateRange[0].startDate &&
+                    printDateRange[0].endDate
+                      ? `${dayjs(printDateRange[0].startDate).format("DD/MM/YYYY")} - ${dayjs(printDateRange[0].endDate).format("DD/MM/YYYY")}`
+                      : ""
+                  }
+                  placeholder="🖨️ Chọn khoảng ngày in phiếu"
+                  className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-purple-200 outline-none cursor-pointer"
+                />
+                {showPrintCalendar && (
+                  <div className="absolute z-50 mt-2 bg-white shadow-xl rounded-lg">
+                    <DateRange
+                      ranges={printDateRange}
+                      onChange={(item) => {
+                        setPrintDateRange([item.selection]);
+                        setPage(1);
                       }}
                       moveRangeOnFirstSelection={false}
                       maxDate={new Date()}
@@ -419,6 +500,17 @@ const PhieuLeFilters = ({
                   </button>
                 </span>
               )}
+              {quan && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
+                  Quận: {quan}
+                  <button
+                    onClick={() => setQuan("")}
+                    className="hover:text-blue-900"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
               {trangThai && (
                 <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
                   TT: {trangThai}
@@ -432,14 +524,15 @@ const PhieuLeFilters = ({
               )}
               {dateRange[0].startDate && dateRange[0].endDate && (
                 <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  Ngày: {dayjs(dateRange[0].startDate).format("DD/MM/YYYY")} →{" "}
+                  Ngày Import:{" "}
+                  {dayjs(dateRange[0].startDate).format("DD/MM/YYYY")} →{" "}
                   {dayjs(dateRange[0].endDate).format("DD/MM/YYYY")}
                   <button
                     onClick={() => {
                       setDateRange([
                         {
-                          startDate: new Date(),
-                          endDate: new Date(),
+                          startDate: null, // ✅ ĐỔI THÀNH null
+                          endDate: null, // ✅ ĐỔI THÀNH null
                           key: "selection",
                         },
                       ]);
@@ -450,6 +543,30 @@ const PhieuLeFilters = ({
                   </button>
                 </span>
               )}
+              {/* ✅ Tag cho Print Date Range */}
+              {printDateRange &&
+                printDateRange[0].startDate &&
+                printDateRange[0].endDate && (
+                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded flex items-center gap-1">
+                    Ngày In:{" "}
+                    {dayjs(printDateRange[0].startDate).format("DD/MM/YYYY")} →{" "}
+                    {dayjs(printDateRange[0].endDate).format("DD/MM/YYYY")}
+                    <button
+                      onClick={() => {
+                        setPrintDateRange([
+                          {
+                            startDate: null, // ✅ ĐỔI THÀNH null
+                            endDate: null, // ✅ ĐỔI THÀNH null
+                            key: "selection",
+                          },
+                        ]);
+                      }}
+                      className="hover:text-purple-900"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
             </div>
           )}
         </div>

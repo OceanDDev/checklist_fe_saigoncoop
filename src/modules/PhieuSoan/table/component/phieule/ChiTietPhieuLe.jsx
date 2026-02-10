@@ -110,7 +110,7 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
       }
 
       fetchKhoiLuong(phieuData.chi_tiet);
-      
+
       // ✅ Chỉ cần packUnit1Map cho update
       fetchPackUnit1(phieuData.chi_tiet).then((fetchedPackMap) => {
         if (fetchedPackMap) {
@@ -169,7 +169,6 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
         value: editSlotValue,
       });
 
-
       const updated = [...localChiTiet];
       updated[itemIndex] = { ...item, slot: editSlotValue };
       setLocalChiTiet(updated);
@@ -215,44 +214,40 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
       const updates = [];
 
       for (const item of phieuData.chi_tiet) {
-        // Chỉ xử lý item có pack_unit === 1 và chưa có packs_to_pick_1
-        if (item.pack_unit === 1 && !item.packs_to_pick_1) {
+        // ✅ CHỈ xử lý item có pack_unit === 1 và THỰC SỰ chưa có packs_to_pick_1
+        if (
+          item.pack_unit === 1 && 
+          (item.packs_to_pick_1 === undefined || item.packs_to_pick_1 === null)
+        ) {
           const packFromDinhVi = packMap[item.sku];
 
           if (packFromDinhVi && packFromDinhVi > 0) {
+            // ✅ TÍNH TOÁN VỚI 2 CHỮ SỐ THẬP PHÂN (KHÔNG LÀM TRÒN)
             const rawValue = item.quantity / packFromDinhVi;
-            const decimalPart = rawValue % 1;
+            const picksValue = parseFloat(rawValue.toFixed(2)); // ✅ Lưu 1.67, 2.33, v.v.
 
-            let picksValue;
-            if (decimalPart === 0) {
-              picksValue = rawValue;
-            } else if (decimalPart > 0.5) {
-              picksValue = Math.ceil(rawValue);
-            } else {
-              picksValue = Math.floor(rawValue) + 1;
-            }
             updates.push({
               sku: item.sku,
-              packs_to_pick_1: picksValue,
+              packs_to_pick_1: picksValue, // ✅ VD: 1.67 thay vì 2
             });
           } else {
-            console.log(`  ⚠️ SKU ${item.sku}: Không có pack hợp lệ từ DinhVi (${packFromDinhVi})`);
+            console.log(
+              `  ⚠️ SKU ${item.sku}: Không có pack hợp lệ từ DinhVi (${packFromDinhVi})`,
+            );
           }
-        } else {
-          const reasons = [];
-          if (item.pack_unit !== 1) reasons.push(`pack_unit=${item.pack_unit}`);
-          if (item.packs_to_pick_1) reasons.push(`đã có packs_to_pick_1=${item.packs_to_pick_1}`);
         }
       }
 
       if (updates.length > 0) {
+        console.log(`📤 Updating ${updates.length} items with packs_to_pick_1:`, updates);
+        
         try {
           await phieuLeService.updateMultipleChiTiet({
             id: phieuData._id,
             updates: updates,
           });
 
-
+          
           if (onUpdate) await onUpdate();
         } catch (apiError) {
           console.error("❌ API Error Details:", {
@@ -263,17 +258,20 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
             requestData: {
               id: phieuData._id,
               updates: updates,
-            }
+            },
           });
-          
+
           if (apiError.response?.data) {
-            console.error("📝 Server Error Message:", JSON.stringify(apiError.response.data, null, 2));
+            console.error(
+              "📝 Server Error Message:",
+              JSON.stringify(apiError.response.data, null, 2),
+            );
           }
-          
-          throw apiError; // Re-throw để outer catch xử lý
+
+          throw apiError;
         }
       } else {
-        console.log("⚠️ Không có item nào cần update");
+        console.log("⚠️ Không có item nào cần update packs_to_pick_1");
       }
     } catch (error) {
       console.error("❌ Lỗi khi cập nhật packs_to_pick_1:", error);
@@ -292,31 +290,18 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
       // ✅ Ưu tiên dùng packs_to_pick_1 đã lưu trong DB
       if (item.packs_to_pick_1) {
         return {
-          pack_unit_1: packFromDinhVi, // Luôn lấy từ DinhVi
-          packs_to_pick_1: item.packs_to_pick_1, // Lấy từ DB
+          pack_unit_1: packFromDinhVi,
+          packs_to_pick_1: item.packs_to_pick_1, // ✅ Hiển thị số thập phân từ DB (VD: 1.67)
         };
       }
 
-      // ✅ Nếu chưa có trong DB, tính toán mới
+      // ✅ Nếu chưa có trong DB, tính toán với 2 chữ số thập phân
       const rawValue = item.quantity / packFromDinhVi;
-      const decimalPart = rawValue % 1;
-
-      // ✅ Quy tắc làm tròn:
-      // - Nếu chia hết (decimalPart = 0): giữ nguyên
-      // - Nếu phần thập phân > 0.5: làm tròn lên (Math.ceil)
-      // - Nếu phần thập phân > 0 và <= 0.5: làm tròn lên 1 (Math.floor + 1)
-      let picksValue;
-      if (decimalPart === 0) {
-        picksValue = rawValue;
-      } else if (decimalPart > 0.5) {
-        picksValue = Math.ceil(rawValue);
-      } else {
-        picksValue = Math.floor(rawValue) + 1;
-      }
+      const picksValue = parseFloat(rawValue.toFixed(2)); // ✅ 1.67, 2.33, v.v.
 
       return {
         pack_unit_1: packFromDinhVi,
-        packs_to_pick_1: picksValue,
+        packs_to_pick_1: picksValue, // ✅ Hiển thị số thập phân (chưa làm tròn)
       };
     }
 
@@ -352,15 +337,15 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
               {" • "}Ghi chú CH:{" "}
               <span className="font-semibold">{phieuData?.ghi_chu_ch}</span>
             </p>
-             <p className="text-sm text-slate-600 mt-2">
-      <span className="font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
-        📦 Tổng khối lượng: {phieuData?.tong_khoi_luong || 0} kg
-      </span>
-      {" • "}
-      <span className="font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded-lg">
-        📊 Tổng kiện: {phieuData?.tong_kien || 0}
-      </span>
-    </p>
+            <p className="text-sm text-slate-600 mt-2">
+              <span className="font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
+                📦 Tổng khối lượng: {phieuData?.tong_khoi_luong || 0} kg
+              </span>
+              {" • "}
+              <span className="font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded-lg">
+                📊 Tổng kiện: {phieuData?.tong_kien || 0}
+              </span>
+            </p>
             <div className="mt-2 flex items-center gap-2">
               <span className="text-sm text-slate-600">Trạng thái:</span>
               <span

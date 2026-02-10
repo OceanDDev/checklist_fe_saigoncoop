@@ -5,6 +5,24 @@ import ExcelJS from "exceljs";
 const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
   const [exporting, setExporting] = useState(false);
 
+  // ✅ HÀM FORMAT NGÀY GIỜ
+  const formatDate = (dateValue) => {
+    if (!dateValue) return "";
+    try {
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) return "";
+      return new Intl.DateTimeFormat("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
+    } catch {
+      return "";
+    }
+  };
+
   const handleExportExcel = async () => {
     if (!selectedPhieus || selectedPhieus.length === 0) {
       alert("Vui lòng chọn ít nhất 1 phiếu để xuất!");
@@ -17,7 +35,7 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Danh sách phiếu lẻ");
 
-      // ✅ Định nghĩa các cột
+      // ✅ Định nghĩa các cột (THÊM ngay_in_phieu)
       worksheet.columns = [
         { header: "STT", key: "stt", width: 8 },
         { header: "Số Document", key: "so_document", width: 15 },
@@ -28,6 +46,8 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
         { header: "Chuyến", key: "chuyen", width: 12 },
         { header: "Tổng Kiện", key: "tong_kien", width: 12 },
         { header: "Tổng Khối Lượng (kg)", key: "tong_khoi_luong", width: 18 },
+        { header: "Số Lần In", key: "so_lan_in_phieu", width: 12 }, // ✅ THÊM
+        { header: "Ngày In Phiếu", key: "ngay_in_phieu", width: 20 }, // ✅ THÊM
         { header: "Ghi Chú Phiếu", key: "ghi_chu_phieu", width: 40 },
       ];
 
@@ -60,6 +80,8 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
           chuyen: phieu.chuyen || "",
           tong_kien: phieu.tong_kien || 0,
           tong_khoi_luong: phieu.tong_khoi_luong || 0,
+          so_lan_in_phieu: phieu.so_lan_in_phieu || 0, // ✅ THÊM
+          ngay_in_phieu: formatDate(phieu.ngay_in_phieu), // ✅ THÊM (format ngày)
           ghi_chu_phieu: phieu.ghi_chu_phieu || "",
         });
 
@@ -73,8 +95,8 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
           };
           cell.alignment = { vertical: "middle" };
 
-          // Center align cho STT, số lượng
-          if ([1, 8, 9].includes(colNumber)) {
+          // ✅ Center align cho STT, số lượng, số lần in (CẬP NHẬT)
+          if ([1, 8, 9, 10].includes(colNumber)) {
             cell.alignment = { ...cell.alignment, horizontal: "center" };
           }
         });
@@ -89,6 +111,13 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FFF0F8FF" }, // Light blue
+        };
+
+        // ✅ Highlight số lần in (màu vàng nhạt)
+        row.getCell("so_lan_in_phieu").fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFF4E6" }, // Light orange
         };
       });
 
@@ -109,6 +138,8 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
           (sum, p) => sum + (p.tong_khoi_luong || 0),
           0,
         ),
+        so_lan_in_phieu: "", // ✅ THÊM (để trống)
+        ngay_in_phieu: "", // ✅ THÊM (để trống)
         ghi_chu_phieu: "",
       });
 

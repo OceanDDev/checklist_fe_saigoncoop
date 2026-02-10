@@ -77,9 +77,15 @@ const TableRow = ({
         >
           {(() => {
             const value = row?.[col.key];
-
             if (col.key === "ngay_import") {
               return formatDate(value);
+            } else if (col.key === "ngay_in_phieu") {
+              // ✅ Chỉ hiển thị nếu đã in (so_lan_in_phieu > 0)
+              const soLanIn = row?.so_lan_in_phieu || 0;
+              if (soLanIn === 0) {
+                return ""; // ✅ Chưa in → không hiển thị gì
+              }
+              return formatDate(value); // ✅ Đã in → hiển thị ngày in
             } else if (col.editable && col.key === "ghi_chu_phieu") {
               return (
                 <div className="flex items-center gap-2">
@@ -210,6 +216,7 @@ const TableRow = ({
 const MemoizedTableRow = React.memo(TableRow);
 
 const PhieuLeTable = forwardRef((props, ref) => {
+  const [loading, setLoading] = useState(false);
   // --- States ---
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -227,17 +234,29 @@ const PhieuLeTable = forwardRef((props, ref) => {
       key: "selection",
     },
   ]);
+  const [quan, setQuan] = useState("");
   const [showCalendar, setShowCalendar] = useState(false);
+  const [printDateRange, setPrintDateRange] = useState([
+    {
+      startDate: null,
+      endDate: null,
+      key: "selection",
+    },
+  ]);
+  const [showPrintCalendar, setShowPrintCalendar] = useState(false);
 
   // Debounced values
+  const [debouncedPrintStartDate, setDebouncedPrintStartDate] = useState(""); // ✅ THÊM
+  const [debouncedPrintEndDate, setDebouncedPrintEndDate] = useState(""); // ✅ THÊM
+
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [debouncedSoDocument, setDebouncedSoDocument] = useState("");
   const [debouncedSku, setDebouncedSku] = useState("");
   const [debouncedSlot, setDebouncedSlot] = useState("");
   const [debouncedMaCH, setDebouncedMaCH] = useState("");
   const [debouncedChuyen, setDebouncedChuyen] = useState("");
+  const [debouncedQuan, setDebouncedQuan] = useState("");
 
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -252,6 +271,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
   // eslint-disable-next-line no-unused-vars
   const [tempNote, setTempNote] = useState("");
   const [sortMaCH, setSortMaCH] = useState("");
+  const [sortSDTF, setSortSDTF] = useState("");
   // Filter panel
   const [showFilters, setShowFilters] = useState(false);
 
@@ -273,12 +293,9 @@ const PhieuLeTable = forwardRef((props, ref) => {
       trangThai ||
       debouncedMaCH ||
       debouncedChuyen ||
-      (dateRange[0].startDate &&
-        dateRange[0].endDate &&
-        (dayjs(dateRange[0].startDate).format("YYYY-MM-DD") !==
-          dayjs().format("YYYY-MM-DD") ||
-          dayjs(dateRange[0].endDate).format("YYYY-MM-DD") !==
-            dayjs().format("YYYY-MM-DD")))
+      debouncedQuan ||
+      debouncedPrintStartDate || // ✅ THÊM
+      debouncedPrintEndDate // ✅ THÊM
     );
   }, [
     debouncedSearch,
@@ -288,9 +305,27 @@ const PhieuLeTable = forwardRef((props, ref) => {
     trangThai,
     debouncedMaCH,
     debouncedChuyen,
-    dateRange,
+    debouncedQuan,
+    debouncedPrintStartDate, // ✅ THÊM
+    debouncedPrintEndDate, // ✅ THÊM
   ]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (printDateRange[0].startDate && printDateRange[0].endDate) {
+        setDebouncedPrintStartDate(
+          dayjs(printDateRange[0].startDate).format("YYYY-MM-DD"),
+        );
+        setDebouncedPrintEndDate(
+          dayjs(printDateRange[0].endDate).format("YYYY-MM-DD"),
+        );
+      } else {
+        setDebouncedPrintStartDate("");
+        setDebouncedPrintEndDate("");
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [printDateRange]);
   // ✅ OPTIMIZATION 5: Tự động tăng limit khi có filter active
   useEffect(() => {
     if (hasActiveFilter) {
@@ -310,10 +345,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
       setTimeout(() => setDebouncedSlot(slot), 350),
       setTimeout(() => setDebouncedMaCH(maCH), 350),
       setTimeout(() => setDebouncedChuyen(chuyen), 350),
+      setTimeout(() => setDebouncedQuan(quan), 350),
     ];
 
     return () => timers.forEach(clearTimeout);
-  }, [search, soDocument, sku, slot, maCH, chuyen]);
+  }, [search, soDocument, sku, slot, maCH, chuyen, quan]);
 
   // ✅ OPTIMIZATION 7: useMemo cho params
   const params = useMemo(
@@ -327,8 +363,15 @@ const PhieuLeTable = forwardRef((props, ref) => {
       trang_thai: trangThai,
       mach: debouncedMaCH,
       chuyen: debouncedChuyen,
-      startDate: dayjs(dateRange[0].startDate).format("YYYY-MM-DD"),
-      endDate: dayjs(dateRange[0].endDate).format("YYYY-MM-DD"),
+      quan: debouncedQuan,
+      startDate: dateRange[0].startDate
+        ? dayjs(dateRange[0].startDate).format("YYYY-MM-DD")
+        : "",
+      endDate: dateRange[0].endDate
+        ? dayjs(dateRange[0].endDate).format("YYYY-MM-DD")
+        : "",
+      printStartDate: debouncedPrintStartDate, // ✅ THÊM
+      printEndDate: debouncedPrintEndDate, // ✅ THÊM
     }),
     [
       page,
@@ -341,6 +384,9 @@ const PhieuLeTable = forwardRef((props, ref) => {
       debouncedMaCH,
       debouncedChuyen,
       dateRange,
+      debouncedQuan,
+      debouncedPrintStartDate, // ✅ THÊM
+      debouncedPrintEndDate, // ✅ THÊM
     ],
   );
 
@@ -381,10 +427,12 @@ const PhieuLeTable = forwardRef((props, ref) => {
     setSlot("");
     setTrangThai("");
     setMaCH("");
+    setQuan("");
     setChuyen("");
     setDateRange([
       { startDate: new Date(), endDate: new Date(), key: "selection" },
     ]);
+    setPrintDateRange([{ startDate: null, endDate: null, key: "selection" }]);
     setSelectedIds([]);
   }, []);
 
@@ -401,8 +449,17 @@ const PhieuLeTable = forwardRef((props, ref) => {
     console.log("🔄 Refreshing data after print...");
     fetchPhieuLe();
   }, [fetchPhieuLe]);
+
   const handleToggleSortMaCH = useCallback(() => {
     setSortMaCH((prev) => {
+      if (prev === "") return "asc";
+      if (prev === "asc") return "desc";
+      return "";
+    });
+  }, []);
+
+  const handleToggleSortSDTF = useCallback(() => {
+    setSortSDTF((prev) => {
       if (prev === "") return "asc";
       if (prev === "asc") return "desc";
       return "";
@@ -489,19 +546,50 @@ const PhieuLeTable = forwardRef((props, ref) => {
   );
   // ✅ Sort rows theo maCH trên frontend
   const sortedRows = useMemo(() => {
-    if (!sortMaCH) return rows;
+    if (!sortMaCH && !sortSDTF) return rows;
 
     return [...rows].sort((a, b) => {
-      const maCHA = a.mach || "";
-      const maCHB = b.mach || "";
+      if (sortSDTF) {
+        const sdtfA = String(a.sd_tf || ""); // ✅ ÉP KIỂU SANG STRING
+        const sdtfB = String(b.sd_tf || ""); // ✅ ÉP KIỂU SANG STRING
 
-      if (sortMaCH === "asc") {
-        return maCHA.localeCompare(maCHB, "vi", { numeric: true });
-      } else {
-        return maCHB.localeCompare(maCHA, "vi", { numeric: true });
+        if (sortSDTF === "asc") {
+          return sdtfA.localeCompare(sdtfB, "vi", { numeric: true });
+        } else {
+          return sdtfB.localeCompare(sdtfA, "vi", { numeric: true });
+        }
       }
+
+      if (sortMaCH) {
+        const maCHA = String(a.mach || ""); // ✅ ÉP KIỂU SANG STRING (để chắc chắn)
+        const maCHB = String(b.mach || ""); // ✅ ÉP KIỂU SANG STRING (để chắc chắn)
+
+        if (sortMaCH === "asc") {
+          return maCHA.localeCompare(maCHB, "vi", { numeric: true });
+        } else {
+          return maCHB.localeCompare(maCHA, "vi", { numeric: true });
+        }
+      }
+
+      return 0; // ✅ THÊM RETURN MẶC ĐỊNH
     });
-  }, [rows, sortMaCH]);
+  }, [rows, sortMaCH, sortSDTF]);
+  const formatDate = useCallback((dateValue) => {
+    if (!dateValue) return "";
+    try {
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) return dateValue;
+      return new Intl.DateTimeFormat("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
+    } catch {
+      return dateValue;
+    }
+  }, []);
   // ✅ OPTIMIZATION 10: useCallback cho handleExportExcel và lazy load ExcelJS
   const handleExportExcel = useCallback(async () => {
     if (selectedIds.length === 0) {
@@ -515,6 +603,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Danh sách phiếu lẻ");
 
+    // ✅ THÊM 2 cột mới: so_lan_in_phieu và ngay_in_phieu
     worksheet.columns = [
       { header: "STT", key: "stt", width: 8 },
       { header: "Số Document", key: "so_document", width: 15 },
@@ -525,6 +614,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
       { header: "Chuyến", key: "chuyen", width: 12 },
       { header: "Tổng Kiện", key: "tong_kien", width: 12 },
       { header: "Tổng Khối Lượng (kg)", key: "tong_khoi_luong", width: 18 },
+      { header: "Số Lần In", key: "so_lan_in_phieu", width: 12 }, // ✅ THÊM
+      { header: "Ngày In Phiếu", key: "ngay_in_phieu", width: 20 }, // ✅ THÊM
       { header: "Ghi Chú Phiếu", key: "ghi_chu_phieu", width: 40 },
     ];
 
@@ -544,8 +635,9 @@ const PhieuLeTable = forwardRef((props, ref) => {
       };
     });
 
+    // ✅ Thêm dữ liệu với 2 trường mới
     selectedPhieus.forEach((phieu, index) => {
-      worksheet.addRow({
+      const row = worksheet.addRow({
         stt: index + 1,
         so_document: phieu.so_document || "",
         sd_tf: phieu.sd_tf || "",
@@ -555,9 +647,49 @@ const PhieuLeTable = forwardRef((props, ref) => {
         chuyen: phieu.chuyen || "",
         tong_kien: phieu.tong_kien || 0,
         tong_khoi_luong: phieu.tong_khoi_luong || 0,
+        so_lan_in_phieu: phieu.so_lan_in_phieu || 0, // ✅ THÊM
+        ngay_in_phieu: formatDate(phieu.ngay_in_phieu), // ✅ THÊM (sử dụng hàm formatDate)
         ghi_chu_phieu: phieu.ghi_chu_phieu || "",
       });
+
+      // ✅ Style cho data rows - CẬP NHẬT center align
+      row.eachCell((cell, colNumber) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFD0D0D0" } },
+          left: { style: "thin", color: { argb: "FFD0D0D0" } },
+          bottom: { style: "thin", color: { argb: "FFD0D0D0" } },
+          right: { style: "thin", color: { argb: "FFD0D0D0" } },
+        };
+        cell.alignment = { vertical: "middle" };
+
+        // ✅ Center align cho STT, số lượng, số lần in
+        if ([1, 8, 9, 10].includes(colNumber)) {
+          cell.alignment = { ...cell.alignment, horizontal: "center" };
+        }
+      });
+
+      // ✅ Highlight số kiện và khối lượng
+      row.getCell("tong_kien").fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFF0F8FF" },
+      };
+      row.getCell("tong_khoi_luong").fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFF0F8FF" },
+      };
+
+      // ✅ Highlight số lần in (màu cam nhạt)
+      row.getCell("so_lan_in_phieu").fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFFF4E6" },
+      };
     });
+
+    // ✅ Freeze header row
+    worksheet.views = [{ state: "frozen", ySplit: 1 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
@@ -572,7 +704,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
     document.body.removeChild(link);
 
     console.log(`✅ Xuất thành công ${selectedPhieus.length} phiếu!`);
-  }, [selectedIds, rows]);
+  }, [selectedIds, rows, formatDate]); // ✅ THÊM formatDate vào dependencies
 
   // ✅ OPTIMIZATION 11: useMemo cho columns (static data)
   const columns = useMemo(
@@ -586,6 +718,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
       { key: "tong_kien", label: "Tổng kiện" },
       { key: "tong_khoi_luong", label: "Tổng khối lượng" },
       { key: "so_lan_in_phieu", label: "Số lần in" },
+      { key: "ngay_in_phieu", label: "Ngày In Phiếu" },
       { key: "ghi_chu_phieu", label: "Ghi Chú Phiếu", editable: true },
       { key: "trang_thai", label: "Trạng Thái" },
       { key: "ngay_import", label: "Ngày Import" },
@@ -599,27 +732,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
   );
 
   // ✅ OPTIMIZATION 12: useCallback cho formatDate
-  const formatDate = useCallback((dateValue) => {
-    if (!dateValue) return "";
-    try {
-      const date = new Date(dateValue);
-      if (isNaN(date.getTime())) return dateValue;
-      return new Intl.DateTimeFormat("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(date);
-    } catch {
-      return dateValue;
-    }
-  }, []);
 
   // ✅ OPTIMIZATION 13: useMemo cho selectedPhieus
   const selectedPhieus = useMemo(
-    () => rows.filter((row) => selectedIds.includes(row._id)),
-    [rows, selectedIds],
+    () => sortedRows.filter((row) => selectedIds.includes(row._id)),
+    [sortedRows, selectedIds],
   );
 
   return (
@@ -639,10 +756,16 @@ const PhieuLeTable = forwardRef((props, ref) => {
           setTrangThai={setTrangThai}
           maCH={maCH}
           setMaCH={setMaCH}
+          quan={quan} // ✅ THÊM DÒNG NÀY
+          setQuan={setQuan} // ✅ THÊM DÒNG NÀY
           chuyen={chuyen}
           setChuyen={setChuyen}
           dateRange={dateRange}
           setDateRange={setDateRange}
+          printDateRange={printDateRange} // ✅ THÊM
+          setPrintDateRange={setPrintDateRange} // ✅ THÊM
+          showPrintCalendar={showPrintCalendar} // ✅ THÊM
+          setShowPrintCalendar={setShowPrintCalendar} // ✅ THÊM
           showCalendar={showCalendar}
           setShowCalendar={setShowCalendar}
           showFilters={showFilters}
@@ -702,6 +825,47 @@ const PhieuLeTable = forwardRef((props, ref) => {
                               <path d="M3 3a1 1 0 000 2h11a1 1 0 100-2H3zM3 7a1 1 0 000 2h5a1 1 0 000-2H3zM3 11a1 1 0 100 2h4a1 1 0 100-2H3zM13 16a1 1 0 102 0v-5.586l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 101.414 1.414L13 10.414V16z" />
                             </svg>
                           ) : sortMaCH === "desc" ? (
+                            <svg
+                              className="w-4 h-4 text-blue-600"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M3 3a1 1 0 000 2h11a1 1 0 100-2H3zM3 7a1 1 0 000 2h7a1 1 0 100-2H3zM3 11a1 1 0 100 2h4a1 1 0 100-2H3zM15 8a1 1 0 10-2 0v5.586l-1.293-1.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L15 13.586V8z" />
+                            </svg>
+                          ) : (
+                            <svg
+                              className="w-4 h-4 text-slate-400"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M5 12a1 1 0 102 0V6.414l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L5 6.414V12zM15 8a1 1 0 10-2 0v5.586l-1.293-1.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L15 13.586V8z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    ) : col.key === "sd_tf" ? (
+                      <div className="flex items-center gap-2">
+                        <span>{col.label}</span>
+                        <button
+                          onClick={handleToggleSortSDTF}
+                          className="p-1 hover:bg-slate-200 rounded transition-colors"
+                          title={
+                            sortSDTF === "asc"
+                              ? "Đang sắp xếp: A → Z (Bé → Lớn)"
+                              : sortSDTF === "desc"
+                                ? "Đang sắp xếp: Z → A (Lớn → Bé)"
+                                : "Nhấn để sắp xếp"
+                          }
+                        >
+                          {sortSDTF === "asc" ? (
+                            <svg
+                              className="w-4 h-4 text-blue-600"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M3 3a1 1 0 000 2h11a1 1 0 100-2H3zM3 7a1 1 0 000 2h5a1 1 0 000-2H3zM3 11a1 1 0 100 2h4a1 1 0 100-2H3zM13 16a1 1 0 102 0v-5.586l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 101.414 1.414L13 10.414V16z" />
+                            </svg>
+                          ) : sortSDTF === "desc" ? (
                             <svg
                               className="w-4 h-4 text-blue-600"
                               fill="currentColor"
