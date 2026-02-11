@@ -1,7 +1,5 @@
 /* eslint-disable react/prop-types */
 import { useMemo } from "react";
-import dayjs from "dayjs";
-import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 
@@ -10,32 +8,9 @@ const PhieuLeFilters = ({
   // Search values
   search,
   setSearch,
-  soDocument,
-  setSoDocument,
-  sku,
-  setSku,
-  slot,
-  setSlot,
-  trangThai,
-  setTrangThai,
-  quan,
-  setQuan,
-  maCH,
-  setMaCH,
-  chuyen,
-  setChuyen,
   dateRange,
-  setDateRange,
-  printDateRange, // ✅ THÊM
-  setPrintDateRange, // ✅ THÊM
-  showCalendar,
-  setShowCalendar,
-  showPrintCalendar, // ✅ THÊM
-  setShowPrintCalendar, // ✅ THÊM
+  printDateRange,
 
-  // UI state
-  showFilters,
-  setShowFilters,
 
   // Actions
   onResetFilters,
@@ -54,32 +29,14 @@ const PhieuLeFilters = ({
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (search) count++;
-    if (soDocument) count++;
-    if (sku) count++;
-    if (slot) count++;
-    if (trangThai) count++;
-    if (maCH) count++;
-    if (quan) count++;
-    if (chuyen) count++;
     if (dateRange[0].startDate || dateRange[0].endDate) count++;
     if (
       printDateRange &&
       (printDateRange[0].startDate || printDateRange[0].endDate)
     )
-      count++; // ✅ THÊM
+      count++;
     return count;
-  }, [
-    search,
-    soDocument,
-    sku,
-    slot,
-    trangThai,
-    maCH,
-    chuyen,
-    dateRange,
-    quan,
-    printDateRange,
-  ]); // ✅ THÊM printDateRange
+  }, [search, dateRange, printDateRange]);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-4 md:p-5 shadow-sm">
@@ -108,7 +65,6 @@ const PhieuLeFilters = ({
         {/* Nút In & Xuất Excel - hiện khi có phiếu được chọn */}
         {selectedCount > 0 && (
           <div className="flex items-center gap-2">
-            {/* Nút In */}
             <button
               onClick={onPrintSelected}
               className="h-10 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 text-white hover:from-green-700 hover:to-emerald-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
@@ -129,7 +85,6 @@ const PhieuLeFilters = ({
               In {selectedCount} phiếu
             </button>
 
-            {/* Nút Xuất Excel */}
             <button
               onClick={onExportExcel}
               className="h-10 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-4 text-white hover:from-blue-700 hover:to-cyan-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
@@ -151,33 +106,6 @@ const PhieuLeFilters = ({
             </button>
           </div>
         )}
-
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`h-10 rounded-xl px-4 text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50 whitespace-nowrap flex items-center gap-2 ${
-            showFilters ? "bg-slate-100" : "bg-white"
-          }`}
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-            />
-          </svg>
-          Bộ lọc
-          {activeFilterCount > 0 && (
-            <span className="ml-1 px-2 py-0.5 text-xs bg-blue-500 text-white rounded-full">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
 
         <button
           onClick={onResetFilters}
@@ -206,7 +134,6 @@ const PhieuLeFilters = ({
           Import & Xử lí
         </button>
 
-        {/* Nút Import HD Đã Xuất */}
         <button
           onClick={onImportHDClick}
           className="h-10 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 text-white hover:from-emerald-700 hover:to-teal-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
@@ -227,350 +154,6 @@ const PhieuLeFilters = ({
           Import HD Đã Xuất
         </button>
       </div>
-
-      {/* Advanced Filters Panel - Collapsible */}
-      {showFilters && (
-        <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {/* Số Document */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Số Document
-              </label>
-              <input
-                type="text"
-                value={soDocument}
-                onChange={(e) => {
-                  setPage(1);
-                  setSoDocument(e.target.value);
-                }}
-                placeholder="Nhập số document..."
-                className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-              />
-            </div>
-
-            {/* SKU */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                SKU
-              </label>
-              <input
-                type="text"
-                value={sku}
-                onChange={(e) => {
-                  setPage(1);
-                  setSku(e.target.value);
-                }}
-                placeholder="Nhập SKU..."
-                className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-              />
-            </div>
-
-            {/* Slot */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Slot
-              </label>
-              <input
-                type="text"
-                value={slot}
-                onChange={(e) => {
-                  setPage(1);
-                  setSlot(e.target.value);
-                }}
-                placeholder="Nhập slot..."
-                className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-              />
-            </div>
-
-            {/* Mã CH */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Mã Cửa Hàng
-              </label>
-              <input
-                type="text"
-                value={maCH}
-                onChange={(e) => {
-                  setPage(1);
-                  setMaCH(e.target.value);
-                }}
-                placeholder="Nhập mã CH..."
-                className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-              />
-            </div>
-
-            {/* Chuyến */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Chuyến
-              </label>
-              <input
-                type="text"
-                value={chuyen}
-                onChange={(e) => {
-                  setPage(1);
-                  setChuyen(e.target.value);
-                }}
-                placeholder="Nhập chuyến..."
-                className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-              />
-            </div>
-
-            {/* Quận */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Quận
-              </label>
-              <input
-                type="text"
-                value={quan}
-                onChange={(e) => {
-                  setPage(1);
-                  setQuan(e.target.value);
-                }}
-                placeholder="Nhập quận (VD: 1, 2, 12)..."
-                className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-              />
-            </div>
-
-            {/* Trạng thái */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Trạng Thái
-              </label>
-              <select
-                value={trangThai}
-                onChange={(e) => {
-                  setPage(1);
-                  setTrangThai(e.target.value);
-                }}
-                className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-              >
-                <option value="">-- Tất cả --</option>
-                <option value="Chờ xử lý">Chờ xử lý</option>
-                <option value="Đã xử lý">Đã xử lý</option>
-                <option value="Đã Xuất">Đã Xuất</option>
-              </select>
-            </div>
-
-            {/* Date Range Picker - Ngày Import */}
-            <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Khoảng Ngày Import
-              </label>
-              <div className="relative">
-                <input
-                  readOnly
-                  onClick={() => {
-                    setShowCalendar(!showCalendar);
-                    setShowPrintCalendar(false); // ✅ Đóng calendar kia
-                  }}
-                  value={
-                    dateRange[0].startDate && dateRange[0].endDate
-                      ? `${dayjs(dateRange[0].startDate).format("DD/MM/YYYY")} - ${dayjs(dateRange[0].endDate).format("DD/MM/YYYY")}`
-                      : ""
-                  }
-                  placeholder="📅 Chọn khoảng ngày import"
-                  className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-200 outline-none cursor-pointer"
-                />
-                {showCalendar && (
-                  <div className="absolute z-50 mt-2 bg-white shadow-xl rounded-lg">
-                    <DateRange
-                      ranges={dateRange}
-                      onChange={(item) => {
-                        setDateRange([item.selection]);
-                        setPage(1);
-                      }}
-                      moveRangeOnFirstSelection={false}
-                      maxDate={new Date()}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ✅ Date Range Picker - Ngày In Phiếu */}
-            <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Khoảng Ngày In Phiếu
-              </label>
-              <div className="relative">
-                <input
-                  readOnly
-                  onClick={() => {
-                    setShowPrintCalendar(!showPrintCalendar);
-                    setShowCalendar(false); // ✅ Đóng calendar kia
-                  }}
-                  value={
-                    printDateRange &&
-                    printDateRange[0].startDate &&
-                    printDateRange[0].endDate
-                      ? `${dayjs(printDateRange[0].startDate).format("DD/MM/YYYY")} - ${dayjs(printDateRange[0].endDate).format("DD/MM/YYYY")}`
-                      : ""
-                  }
-                  placeholder="🖨️ Chọn khoảng ngày in phiếu"
-                  className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-purple-200 outline-none cursor-pointer"
-                />
-                {showPrintCalendar && (
-                  <div className="absolute z-50 mt-2 bg-white shadow-xl rounded-lg">
-                    <DateRange
-                      ranges={printDateRange}
-                      onChange={(item) => {
-                        setPrintDateRange([item.selection]);
-                        setPage(1);
-                      }}
-                      moveRangeOnFirstSelection={false}
-                      maxDate={new Date()}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Clear individual filters */}
-          {activeFilterCount > 0 && (
-            <div className="flex items-center gap-2 text-xs flex-wrap">
-              <span className="text-slate-500">Đang lọc:</span>
-              {search && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  Search: {search.substring(0, 20)}
-                  {search.length > 20 && "..."}
-                  <button
-                    onClick={() => setSearch("")}
-                    className="hover:text-blue-900"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {soDocument && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  Doc: {soDocument}
-                  <button
-                    onClick={() => setSoDocument("")}
-                    className="hover:text-blue-900"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {sku && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  SKU: {sku}
-                  <button
-                    onClick={() => setSku("")}
-                    className="hover:text-blue-900"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {slot && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  Slot: {slot}
-                  <button
-                    onClick={() => setSlot("")}
-                    className="hover:text-blue-900"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {maCH && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  Mã CH: {maCH}
-                  <button
-                    onClick={() => setMaCH("")}
-                    className="hover:text-blue-900"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {chuyen && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  Chuyến: {chuyen}
-                  <button
-                    onClick={() => setChuyen("")}
-                    className="hover:text-blue-900"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {quan && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  Quận: {quan}
-                  <button
-                    onClick={() => setQuan("")}
-                    className="hover:text-blue-900"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {trangThai && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  TT: {trangThai}
-                  <button
-                    onClick={() => setTrangThai("")}
-                    className="hover:text-blue-900"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {dateRange[0].startDate && dateRange[0].endDate && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                  Ngày Import:{" "}
-                  {dayjs(dateRange[0].startDate).format("DD/MM/YYYY")} →{" "}
-                  {dayjs(dateRange[0].endDate).format("DD/MM/YYYY")}
-                  <button
-                    onClick={() => {
-                      setDateRange([
-                        {
-                          startDate: null, // ✅ ĐỔI THÀNH null
-                          endDate: null, // ✅ ĐỔI THÀNH null
-                          key: "selection",
-                        },
-                      ]);
-                    }}
-                    className="hover:text-blue-900"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {/* ✅ Tag cho Print Date Range */}
-              {printDateRange &&
-                printDateRange[0].startDate &&
-                printDateRange[0].endDate && (
-                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded flex items-center gap-1">
-                    Ngày In:{" "}
-                    {dayjs(printDateRange[0].startDate).format("DD/MM/YYYY")} →{" "}
-                    {dayjs(printDateRange[0].endDate).format("DD/MM/YYYY")}
-                    <button
-                      onClick={() => {
-                        setPrintDateRange([
-                          {
-                            startDate: null, // ✅ ĐỔI THÀNH null
-                            endDate: null, // ✅ ĐỔI THÀNH null
-                            key: "selection",
-                          },
-                        ]);
-                      }}
-                      className="hover:text-purple-900"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Quick stats */}
       <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">

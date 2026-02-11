@@ -8,6 +8,8 @@ import {
   useImperativeHandle,
   useCallback,
 } from "react";
+import { DateRange } from "react-date-range";
+
 import { phieuLeService } from "@/services/phieusoan/phieule.service";
 import ChiTietModal from "./component/phieule/ChiTietPhieuLe";
 import ImportProcessModal from "./component/phieule/ImportPhieuLe";
@@ -19,7 +21,6 @@ import dayjs from "dayjs";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 
-// ✅ OPTIMIZATION 1: Tách EmptyState ra component riêng với memo
 const EmptyState = ({
   title = "Không có dữ liệu",
   subtitle = "Nhập dữ liệu hoặc điều chỉnh bộ lọc để thấy kết quả.",
@@ -33,7 +34,6 @@ const EmptyState = ({
   </div>
 );
 
-// ✅ OPTIMIZATION 2: Tách TableRow ra component riêng với memo
 const TableRow = ({
   row,
   idx,
@@ -80,12 +80,11 @@ const TableRow = ({
             if (col.key === "ngay_import") {
               return formatDate(value);
             } else if (col.key === "ngay_in_phieu") {
-              // ✅ Chỉ hiển thị nếu đã in (so_lan_in_phieu > 0)
               const soLanIn = row?.so_lan_in_phieu || 0;
               if (soLanIn === 0) {
-                return ""; // ✅ Chưa in → không hiển thị gì
+                return "";
               }
-              return formatDate(value); // ✅ Đã in → hiển thị ngày in
+              return formatDate(value);
             } else if (col.editable && col.key === "ghi_chu_phieu") {
               return (
                 <div className="flex items-center gap-2">
@@ -212,21 +211,23 @@ const TableRow = ({
   );
 };
 
-// ✅ OPTIMIZATION 3: Memo TableRow để tránh re-render không cần thiết
 const MemoizedTableRow = React.memo(TableRow);
 
 const PhieuLeTable = forwardRef((props, ref) => {
   const [loading, setLoading] = useState(false);
-  // --- States ---
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
+
+  // ✅ Column-specific filters
   const [soDocument, setSoDocument] = useState("");
   const [sku, setSku] = useState("");
   const [slot, setSlot] = useState("");
   const [trangThai, setTrangThai] = useState("");
   const [maCH, setMaCH] = useState("");
   const [chuyen, setChuyen] = useState("");
+  const [quan, setQuan] = useState("");
+
   const [dateRange, setDateRange] = useState([
     {
       startDate: new Date(),
@@ -234,7 +235,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
       key: "selection",
     },
   ]);
-  const [quan, setQuan] = useState("");
   const [showCalendar, setShowCalendar] = useState(false);
   const [printDateRange, setPrintDateRange] = useState([
     {
@@ -246,9 +246,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
   const [showPrintCalendar, setShowPrintCalendar] = useState(false);
 
   // Debounced values
-  const [debouncedPrintStartDate, setDebouncedPrintStartDate] = useState(""); // ✅ THÊM
-  const [debouncedPrintEndDate, setDebouncedPrintEndDate] = useState(""); // ✅ THÊM
-
+  const [debouncedPrintStartDate, setDebouncedPrintStartDate] = useState("");
+  const [debouncedPrintEndDate, setDebouncedPrintEndDate] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [debouncedSoDocument, setDebouncedSoDocument] = useState("");
   const [debouncedSku, setDebouncedSku] = useState("");
@@ -272,8 +271,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
   const [tempNote, setTempNote] = useState("");
   const [sortMaCH, setSortMaCH] = useState("");
   const [sortSDTF, setSortSDTF] = useState("");
-  // Filter panel
-  const [showFilters, setShowFilters] = useState(false);
 
   // Edit ghi chú
   const [editingPhieuId, setEditingPhieuId] = useState(null);
@@ -283,7 +280,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
   // Checkbox selection
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // ✅ OPTIMIZATION 4: useMemo cho hasActiveFilter
   const hasActiveFilter = useMemo(() => {
     return !!(
       debouncedSearch ||
@@ -294,8 +290,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
       debouncedMaCH ||
       debouncedChuyen ||
       debouncedQuan ||
-      debouncedPrintStartDate || // ✅ THÊM
-      debouncedPrintEndDate // ✅ THÊM
+      debouncedPrintStartDate ||
+      debouncedPrintEndDate
     );
   }, [
     debouncedSearch,
@@ -306,8 +302,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
     debouncedMaCH,
     debouncedChuyen,
     debouncedQuan,
-    debouncedPrintStartDate, // ✅ THÊM
-    debouncedPrintEndDate, // ✅ THÊM
+    debouncedPrintStartDate,
+    debouncedPrintEndDate,
   ]);
 
   useEffect(() => {
@@ -326,7 +322,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
     }, 350);
     return () => clearTimeout(timer);
   }, [printDateRange]);
-  // ✅ OPTIMIZATION 5: Tự động tăng limit khi có filter active
+
   useEffect(() => {
     if (hasActiveFilter) {
       setLimit(9999);
@@ -336,7 +332,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
     }
   }, [hasActiveFilter]);
 
-  // ✅ OPTIMIZATION 6: Gộp các debounce useEffect
   useEffect(() => {
     const timers = [
       setTimeout(() => setDebouncedSearch(search), 350),
@@ -351,7 +346,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
     return () => timers.forEach(clearTimeout);
   }, [search, soDocument, sku, slot, maCH, chuyen, quan]);
 
-  // ✅ OPTIMIZATION 7: useMemo cho params
   const params = useMemo(
     () => ({
       page,
@@ -370,8 +364,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
       endDate: dateRange[0].endDate
         ? dayjs(dateRange[0].endDate).format("YYYY-MM-DD")
         : "",
-      printStartDate: debouncedPrintStartDate, // ✅ THÊM
-      printEndDate: debouncedPrintEndDate, // ✅ THÊM
+      printStartDate: debouncedPrintStartDate,
+      printEndDate: debouncedPrintEndDate,
     }),
     [
       page,
@@ -385,12 +379,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
       debouncedChuyen,
       dateRange,
       debouncedQuan,
-      debouncedPrintStartDate, // ✅ THÊM
-      debouncedPrintEndDate, // ✅ THÊM
+      debouncedPrintStartDate,
+      debouncedPrintEndDate,
     ],
   );
 
-  // ✅ OPTIMIZATION 8: useCallback cho fetchPhieuLe
   const fetchPhieuLe = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -417,7 +410,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
     fetchPhieuLe();
   }, [fetchPhieuLe]);
 
-  // ✅ OPTIMIZATION 9: useCallback cho các handlers
   const resetFilters = useCallback(() => {
     setPage(1);
     setLimit(20);
@@ -465,6 +457,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
       return "";
     });
   }, []);
+
   const handleStartEdit = useCallback((row) => {
     setEditingPhieuId(row._id);
     setEditValue(row.ghi_chu_phieu || "");
@@ -544,14 +537,14 @@ const PhieuLeTable = forwardRef((props, ref) => {
     },
     [selectedIds, fetchPhieuLe],
   );
-  // ✅ Sort rows theo maCH trên frontend
+
   const sortedRows = useMemo(() => {
     if (!sortMaCH && !sortSDTF) return rows;
 
     return [...rows].sort((a, b) => {
       if (sortSDTF) {
-        const sdtfA = String(a.sd_tf || ""); // ✅ ÉP KIỂU SANG STRING
-        const sdtfB = String(b.sd_tf || ""); // ✅ ÉP KIỂU SANG STRING
+        const sdtfA = String(a.sd_tf || "");
+        const sdtfB = String(b.sd_tf || "");
 
         if (sortSDTF === "asc") {
           return sdtfA.localeCompare(sdtfB, "vi", { numeric: true });
@@ -561,8 +554,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
       }
 
       if (sortMaCH) {
-        const maCHA = String(a.mach || ""); // ✅ ÉP KIỂU SANG STRING (để chắc chắn)
-        const maCHB = String(b.mach || ""); // ✅ ÉP KIỂU SANG STRING (để chắc chắn)
+        const maCHA = String(a.mach || "");
+        const maCHB = String(b.mach || "");
 
         if (sortMaCH === "asc") {
           return maCHA.localeCompare(maCHB, "vi", { numeric: true });
@@ -571,9 +564,10 @@ const PhieuLeTable = forwardRef((props, ref) => {
         }
       }
 
-      return 0; // ✅ THÊM RETURN MẶC ĐỊNH
+      return 0;
     });
   }, [rows, sortMaCH, sortSDTF]);
+
   const formatDate = useCallback((dateValue) => {
     if (!dateValue) return "";
     try {
@@ -590,7 +584,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
       return dateValue;
     }
   }, []);
-  // ✅ OPTIMIZATION 10: useCallback cho handleExportExcel và lazy load ExcelJS
+
   const handleExportExcel = useCallback(async () => {
     if (selectedIds.length === 0) {
       alert("Vui lòng chọn ít nhất 1 phiếu để xuất!");
@@ -603,7 +597,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Danh sách phiếu lẻ");
 
-    // ✅ THÊM 2 cột mới: so_lan_in_phieu và ngay_in_phieu
     worksheet.columns = [
       { header: "STT", key: "stt", width: 8 },
       { header: "Số Document", key: "so_document", width: 15 },
@@ -614,8 +607,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
       { header: "Chuyến", key: "chuyen", width: 12 },
       { header: "Tổng Kiện", key: "tong_kien", width: 12 },
       { header: "Tổng Khối Lượng (kg)", key: "tong_khoi_luong", width: 18 },
-      { header: "Số Lần In", key: "so_lan_in_phieu", width: 12 }, // ✅ THÊM
-      { header: "Ngày In Phiếu", key: "ngay_in_phieu", width: 20 }, // ✅ THÊM
+      { header: "Số Lần In", key: "so_lan_in_phieu", width: 12 },
+      { header: "Ngày In Phiếu", key: "ngay_in_phieu", width: 20 },
       { header: "Ghi Chú Phiếu", key: "ghi_chu_phieu", width: 40 },
     ];
 
@@ -635,7 +628,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
       };
     });
 
-    // ✅ Thêm dữ liệu với 2 trường mới
     selectedPhieus.forEach((phieu, index) => {
       const row = worksheet.addRow({
         stt: index + 1,
@@ -647,12 +639,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
         chuyen: phieu.chuyen || "",
         tong_kien: phieu.tong_kien || 0,
         tong_khoi_luong: phieu.tong_khoi_luong || 0,
-        so_lan_in_phieu: phieu.so_lan_in_phieu || 0, // ✅ THÊM
-        ngay_in_phieu: formatDate(phieu.ngay_in_phieu), // ✅ THÊM (sử dụng hàm formatDate)
+        so_lan_in_phieu: phieu.so_lan_in_phieu || 0,
+        ngay_in_phieu: formatDate(phieu.ngay_in_phieu),
         ghi_chu_phieu: phieu.ghi_chu_phieu || "",
       });
 
-      // ✅ Style cho data rows - CẬP NHẬT center align
       row.eachCell((cell, colNumber) => {
         cell.border = {
           top: { style: "thin", color: { argb: "FFD0D0D0" } },
@@ -662,13 +653,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
         };
         cell.alignment = { vertical: "middle" };
 
-        // ✅ Center align cho STT, số lượng, số lần in
         if ([1, 8, 9, 10].includes(colNumber)) {
           cell.alignment = { ...cell.alignment, horizontal: "center" };
         }
       });
 
-      // ✅ Highlight số kiện và khối lượng
       row.getCell("tong_kien").fill = {
         type: "pattern",
         pattern: "solid",
@@ -679,8 +668,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
         pattern: "solid",
         fgColor: { argb: "FFF0F8FF" },
       };
-
-      // ✅ Highlight số lần in (màu cam nhạt)
       row.getCell("so_lan_in_phieu").fill = {
         type: "pattern",
         pattern: "solid",
@@ -688,7 +675,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
       };
     });
 
-    // ✅ Freeze header row
     worksheet.views = [{ state: "frozen", ySplit: 1 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -704,24 +690,33 @@ const PhieuLeTable = forwardRef((props, ref) => {
     document.body.removeChild(link);
 
     console.log(`✅ Xuất thành công ${selectedPhieus.length} phiếu!`);
-  }, [selectedIds, rows, formatDate]); // ✅ THÊM formatDate vào dependencies
+  }, [selectedIds, rows, formatDate]);
 
-  // ✅ OPTIMIZATION 11: useMemo cho columns (static data)
   const columns = useMemo(
     () => [
-      { key: "so_document", label: "Số document" },
-      { key: "sd_tf", label: "Số SD/TF" },
-      { key: "mach", label: "Mã cửa hàng" },
-      { key: "tench", label: "Tên cửa hàng" },
-      { key: "quan", label: "Quận" },
-      { key: "chuyen", label: "Chuyến" },
-      { key: "tong_kien", label: "Tổng kiện" },
-      { key: "tong_khoi_luong", label: "Tổng khối lượng" },
-      { key: "so_lan_in_phieu", label: "Số lần in" },
-      { key: "ngay_in_phieu", label: "Ngày In Phiếu" },
-      { key: "ghi_chu_phieu", label: "Ghi Chú Phiếu", editable: true },
-      { key: "trang_thai", label: "Trạng Thái" },
-      { key: "ngay_import", label: "Ngày Import" },
+      { key: "so_document", label: "Số document", searchable: true },
+      { key: "sd_tf", label: "Số SD/TF", searchable: false },
+      { key: "mach", label: "Mã cửa hàng", searchable: true },
+      { key: "tench", label: "Tên cửa hàng", searchable: false },
+      { key: "quan", label: "Quận", searchable: true },
+      { key: "chuyen", label: "Chuyến", searchable: true },
+      { key: "tong_kien", label: "Tổng kiện", searchable: false },
+      { key: "tong_khoi_luong", label: "Tổng khối lượng", searchable: false },
+      { key: "so_lan_in_phieu", label: "Số lần in", searchable: false },
+      { key: "ngay_in_phieu", label: "Ngày In Phiếu", searchable: false, isDateRange: true },
+      {
+        key: "ghi_chu_phieu",
+        label: "Ghi Chú Phiếu",
+        editable: true,
+        searchable: false,
+      },
+      {
+        key: "trang_thai",
+        label: "Trạng Thái",
+        searchable: true,
+        isSelect: true,
+      },
+      { key: "ngay_import", label: "Ngày Import", searchable: false, isDateRange: true },
     ],
     [],
   );
@@ -731,9 +726,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
     [total, limit],
   );
 
-  // ✅ OPTIMIZATION 12: useCallback cho formatDate
-
-  // ✅ OPTIMIZATION 13: useMemo cho selectedPhieus
   const selectedPhieus = useMemo(
     () => sortedRows.filter((row) => selectedIds.includes(row._id)),
     [sortedRows, selectedIds],
@@ -746,30 +738,14 @@ const PhieuLeTable = forwardRef((props, ref) => {
           onExportExcel={handleExportExcel}
           search={search}
           setSearch={setSearch}
-          soDocument={soDocument}
-          setSoDocument={setSoDocument}
-          sku={sku}
-          setSku={setSku}
-          slot={slot}
-          setSlot={setSlot}
-          trangThai={trangThai}
-          setTrangThai={setTrangThai}
-          maCH={maCH}
-          setMaCH={setMaCH}
-          quan={quan} // ✅ THÊM DÒNG NÀY
-          setQuan={setQuan} // ✅ THÊM DÒNG NÀY
-          chuyen={chuyen}
-          setChuyen={setChuyen}
           dateRange={dateRange}
           setDateRange={setDateRange}
-          printDateRange={printDateRange} // ✅ THÊM
-          setPrintDateRange={setPrintDateRange} // ✅ THÊM
-          showPrintCalendar={showPrintCalendar} // ✅ THÊM
-          setShowPrintCalendar={setShowPrintCalendar} // ✅ THÊM
+          printDateRange={printDateRange}
+          setPrintDateRange={setPrintDateRange}
+          showPrintCalendar={showPrintCalendar}
+          setShowPrintCalendar={setShowPrintCalendar}
           showCalendar={showCalendar}
           setShowCalendar={setShowCalendar}
-          showFilters={showFilters}
-          setShowFilters={setShowFilters}
           onResetFilters={resetFilters}
           onImportClick={() => setShowImportModal(true)}
           onImportHDClick={() => setShowImportHDModal(true)}
@@ -782,6 +758,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
         <div className="overflow-auto rounded-2xl border border-slate-200 shadow-sm">
           <table className="min-w-full text-xs md:text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
+              {/* Header row */}
               <tr className="border-b border-slate-200">
                 <th className="px-3 py-2 text-center">
                   <input
@@ -893,6 +870,138 @@ const PhieuLeTable = forwardRef((props, ref) => {
                   Thao tác
                 </th>
               </tr>
+
+              {/* ✅ Search row - ngay dưới header */}
+              <tr className="border-b border-slate-200 bg-slate-100/50">
+                <th className="px-3 py-1"></th>
+                <th className="px-3 py-1"></th>
+                {columns.map((col) => (
+                  <th key={`search-${col.key}`} className="px-3 py-1">
+                    {col.searchable && !col.isSelect && !col.isDateRange && (
+                      <input
+                        type="text"
+                        value={
+                          col.key === "so_document"
+                            ? soDocument
+                            : col.key === "mach"
+                              ? maCH
+                              : col.key === "quan"
+                                ? quan
+                                : col.key === "chuyen"
+                                  ? chuyen
+                                  : ""
+                        }
+                        onChange={(e) => {
+                          setPage(1);
+                          if (col.key === "so_document") {
+                            setSoDocument(e.target.value);
+                          } else if (col.key === "mach") {
+                            setMaCH(e.target.value);
+                          } else if (col.key === "quan") {
+                            setQuan(e.target.value);
+                          } else if (col.key === "chuyen") {
+                            setChuyen(e.target.value);
+                          }
+                        }}
+                        placeholder={`Lọc...`}
+                        className="w-full h-7 px-2 text-xs rounded border border-slate-300 focus:ring-1 focus:ring-blue-300 outline-none"
+                      />
+                    )}
+                    {col.searchable && col.isSelect && (
+                      <select
+                        value={trangThai}
+                        onChange={(e) => {
+                          setPage(1);
+                          setTrangThai(e.target.value);
+                        }}
+                        className="w-full h-7 px-2 text-xs rounded border border-slate-300 focus:ring-1 focus:ring-blue-300 outline-none"
+                      >
+                        <option value="">Tất cả</option>
+                        <option value="Chờ xử lý">Chờ xử lý</option>
+                        <option value="Đã xử lý">Đã xử lý</option>
+                        <option value="Đã Xuất">Đã Xuất</option>
+                      </select>
+                    )}
+                    {col.isDateRange && col.key === "ngay_import" && (
+                      <div className="relative">
+                        <input
+                          readOnly
+                          onClick={() => {
+                            setShowCalendar(!showCalendar);
+                            setShowPrintCalendar(false);
+                          }}
+                          value={
+                            dateRange[0].startDate && dateRange[0].endDate
+                              ? `${dayjs(dateRange[0].startDate).format("DD/MM/YY")} - ${dayjs(dateRange[0].endDate).format("DD/MM/YY")}`
+                              : ""
+                          }
+                          placeholder="📅 Chọn ngày..."
+                          className="w-full h-7 px-2 text-xs rounded border border-slate-300 focus:ring-1 focus:ring-blue-300 outline-none cursor-pointer"
+                        />
+                        {showCalendar && (
+                          <>
+                            <div 
+                              className="fixed inset-0 z-40" 
+                              onClick={() => setShowCalendar(false)}
+                            />
+                            <div className="absolute left-0 top-full mt-1 z-50 bg-white shadow-2xl rounded-lg border border-slate-200">
+                              <DateRange
+                                ranges={dateRange}
+                                onChange={(item) => {
+                                  setDateRange([item.selection]);
+                                  setPage(1);
+                                }}
+                                moveRangeOnFirstSelection={false}
+                                maxDate={new Date()}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {col.isDateRange && col.key === "ngay_in_phieu" && (
+                      <div className="relative">
+                        <input
+                          readOnly
+                          onClick={() => {
+                            setShowPrintCalendar(!showPrintCalendar);
+                            setShowCalendar(false);
+                          }}
+                          value={
+                            printDateRange &&
+                            printDateRange[0].startDate &&
+                            printDateRange[0].endDate
+                              ? `${dayjs(printDateRange[0].startDate).format("DD/MM/YY")} - ${dayjs(printDateRange[0].endDate).format("DD/MM/YY")}`
+                              : ""
+                          }
+                          placeholder="🖨️ Chọn ngày..."
+                          className="w-full h-7 px-2 text-xs rounded border border-slate-300 focus:ring-1 focus:ring-purple-300 outline-none cursor-pointer"
+                        />
+                        {showPrintCalendar && (
+                          <>
+                            <div 
+                              className="fixed inset-0 z-40" 
+                              onClick={() => setShowPrintCalendar(false)}
+                            />
+                            <div className="absolute left-0 top-full mt-1 z-50 bg-white shadow-2xl rounded-lg border border-slate-200">
+                              <DateRange
+                                ranges={printDateRange}
+                                onChange={(item) => {
+                                  setPrintDateRange([item.selection]);
+                                  setPage(1);
+                                }}
+                                moveRangeOnFirstSelection={false}
+                                maxDate={new Date()}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </th>
+                ))}
+                <th className="px-3 py-1"></th>
+              </tr>
             </thead>
             <tbody>
               {loading &&
@@ -939,33 +1048,28 @@ const PhieuLeTable = forwardRef((props, ref) => {
 
               {!loading &&
                 !error &&
-                sortedRows?.length > 0 && // ✅ ĐÚNG
-                sortedRows.map(
-                  (
-                    row,
-                    idx, // ✅ ĐÚNG
-                  ) => (
-                    <MemoizedTableRow
-                      key={row._id || idx}
-                      row={row}
-                      idx={idx}
-                      page={page}
-                      limit={limit}
-                      columns={columns}
-                      isSelected={selectedIds.includes(row._id)}
-                      isEditing={editingPhieuId === row._id}
-                      editValue={editValue}
-                      savingGhiChu={savingGhiChu}
-                      onSelectOne={handleSelectOne}
-                      onStartEdit={handleStartEdit}
-                      onSaveGhiChu={handleSaveGhiChu}
-                      onCancelEdit={handleCancelEdit}
-                      onViewDetail={handleViewDetail}
-                      setEditValue={setEditValue}
-                      formatDate={formatDate}
-                    />
-                  ),
-                )}
+                sortedRows?.length > 0 &&
+                sortedRows.map((row, idx) => (
+                  <MemoizedTableRow
+                    key={row._id || idx}
+                    row={row}
+                    idx={idx}
+                    page={page}
+                    limit={limit}
+                    columns={columns}
+                    isSelected={selectedIds.includes(row._id)}
+                    isEditing={editingPhieuId === row._id}
+                    editValue={editValue}
+                    savingGhiChu={savingGhiChu}
+                    onSelectOne={handleSelectOne}
+                    onStartEdit={handleStartEdit}
+                    onSaveGhiChu={handleSaveGhiChu}
+                    onCancelEdit={handleCancelEdit}
+                    onViewDetail={handleViewDetail}
+                    setEditValue={setEditValue}
+                    formatDate={formatDate}
+                  />
+                ))}
             </tbody>
           </table>
         </div>
