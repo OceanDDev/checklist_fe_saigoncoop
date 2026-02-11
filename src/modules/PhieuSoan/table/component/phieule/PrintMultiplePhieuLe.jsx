@@ -211,12 +211,6 @@ const PrintMultiplePhieuLe = ({
                             <span className="font-semibold text-orange-600">
                               Lần in thứ: {soLanInDuKien}
                             </span>
-                            {/* ✅ Chỉ hiển thị indicator nếu chưa từng in */}
-                            {soLanInHienTai === 0 && (
-                              <span className="ml-2 text-green-600">
-                                (Lần đầu - sẽ lưu thời gian này)
-                              </span>
-                            )}
                           </div>
                         </div>
                         <div className="text-xs text-right italic text-slate-500">
