@@ -2,7 +2,6 @@
 import { useRef, useState } from "react";
 import DinhViTable from "./table/dinhvi";
 import DinhViImport from "./excel/ImportDinhVi";
-import DinhViClearAll from "./clear/DinhViClearAll";
 import DonHangClearAll from "./clear/DonHangClearAll";
 import DonHangImport from "./excel/ImportDonHang";
 import DonHangTable from "./table/donhang";
@@ -81,11 +80,7 @@ const PhieuSoanHome = () => {
       dinhViTableRef.current.fetchDinhVi();
     }
   };
-  const handleDinhViClearSuccess = () => {
-    if (dinhViTableRef.current?.fetchDinhVi) {
-      dinhViTableRef.current.fetchDinhVi();
-    }
-  };
+
 
   // ===== Đơn Hàng
   const handleDonHangImportSuccess = () => {
@@ -421,7 +416,6 @@ const PhieuSoanHome = () => {
         return (
           <>
             <DinhViImport onImportSuccess={handleDinhViImportSuccess} />
-            <DinhViClearAll onClearSuccess={handleDinhViClearSuccess} />
           </>
         );
       case "donhang":

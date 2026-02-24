@@ -31,6 +31,7 @@ import HomeXuatHang from "./modules/KPI/KPINV/XUATHANG";
 import TableXuatHang from "./modules/KPI/KPINV/XUATHANG/table";
 import HomeBDH from "./modules/KPI/KPIBDH";
 import TableBDH from "./modules/KPI/KPIBDH/table";
+import HandleTonKho from "./modules/Tonkho";
 
 function App() {
   return (
@@ -184,6 +185,19 @@ function App() {
               <MainLayout>
                 {" "}
                 <ToolXuatTra />{" "}
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+ {/* TỒN KHO  */}
+    <Route
+          path="/tonkho"
+          element={
+            <PrivateRoute allowRoles={[25]}>
+              <MainLayout>
+                {" "}
+                <HandleTonKho/>{" "}
               </MainLayout>
             </PrivateRoute>
           }

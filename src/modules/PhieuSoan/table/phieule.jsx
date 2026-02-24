@@ -230,7 +230,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
 
   const [dateRange, setDateRange] = useState([
     {
-      startDate: new Date(),
+      startDate: (() => {
+        const date = new Date();
+        date.setDate(date.getDate() - 6); // 7 ngày gần nhất (bao gồm hôm nay)
+        return date;
+      })(),
       endDate: new Date(),
       key: "selection",
     },
@@ -703,7 +707,12 @@ const PhieuLeTable = forwardRef((props, ref) => {
       { key: "tong_kien", label: "Tổng kiện", searchable: false },
       { key: "tong_khoi_luong", label: "Tổng khối lượng", searchable: false },
       { key: "so_lan_in_phieu", label: "Số lần in", searchable: false },
-      { key: "ngay_in_phieu", label: "Ngày In Phiếu", searchable: false, isDateRange: true },
+      {
+        key: "ngay_in_phieu",
+        label: "Ngày In Phiếu",
+        searchable: false,
+        isDateRange: true,
+      },
       {
         key: "ghi_chu_phieu",
         label: "Ghi Chú Phiếu",
@@ -716,7 +725,12 @@ const PhieuLeTable = forwardRef((props, ref) => {
         searchable: true,
         isSelect: true,
       },
-      { key: "ngay_import", label: "Ngày Import", searchable: false, isDateRange: true },
+      {
+        key: "ngay_import",
+        label: "Ngày Import",
+        searchable: false,
+        isDateRange: true,
+      },
     ],
     [],
   );
@@ -940,8 +954,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
                         />
                         {showCalendar && (
                           <>
-                            <div 
-                              className="fixed inset-0 z-40" 
+                            <div
+                              className="fixed inset-0 z-40"
                               onClick={() => setShowCalendar(false)}
                             />
                             <div className="absolute left-0 top-full mt-1 z-50 bg-white shadow-2xl rounded-lg border border-slate-200">
@@ -979,8 +993,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
                         />
                         {showPrintCalendar && (
                           <>
-                            <div 
-                              className="fixed inset-0 z-40" 
+                            <div
+                              className="fixed inset-0 z-40"
                               onClick={() => setShowPrintCalendar(false)}
                             />
                             <div className="absolute left-0 top-full mt-1 z-50 bg-white shadow-2xl rounded-lg border border-slate-200">

@@ -47,6 +47,7 @@ const DinhViTable = forwardRef((props, ref) => {
   const [editingValue, setEditingValue] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [editedPacks, setEditedPacks] = useState({});
+  const [isExporting, setIsExporting] = useState(false);
 
   // ✅ Khôi phục editedPacks từ localStorage khi component mount
   useEffect(() => {
@@ -196,9 +197,6 @@ const DinhViTable = forwardRef((props, ref) => {
         [rowId]: editingValue,
       }));
 
-      // ❌ XÓA DÒNG NÀY
-      // await fetchDinhVi();
-
       setEditingRowId(null);
       setEditingValue("");
 
@@ -208,6 +206,152 @@ const DinhViTable = forwardRef((props, ref) => {
       alert("❌ Không thể lưu thay đổi. Vui lòng thử lại.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // ✅ Xuất Excel tất cả dữ liệu
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      // Fetch tất cả dữ liệu (không phân trang)
+      const allDataParams = {
+        ...params,
+        page: 1,
+        limit: 999999, // Lấy tất cả
+      };
+
+      const res = await dinhViService.getAllDinhVi(allDataParams);
+      const allData = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
+
+      if (allData.length === 0) {
+        alert("Không có dữ liệu để xuất!");
+        return;
+      }
+
+      // Import ExcelJS
+      const ExcelJS = (await import("exceljs")).default;
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Định Vị");
+
+      // Thiết lập columns
+      worksheet.columns = [
+        { header: "STT", key: "stt", width: 8 },
+        { header: "Mã NCC", key: "maNCC", width: 12 },
+        { header: "Mã NH", key: "maNH", width: 12 },
+        { header: "Dept", key: "dept", width: 10 },
+        { header: "Sub Dept", key: "subDept", width: 12 },
+        { header: "Slot", key: "slot", width: 12 },
+        { header: "SKU", key: "sku", width: 15 },
+        { header: "Tên hàng", key: "name", width: 40 },
+        { header: "Quy cách", key: "pack", width: 12 },
+        { header: "Khối lượng", key: "khoiluong", width: 12 },
+        { header: "Loại hình", key: "loaiHinh", width: 15 },
+        { header: "Ngày Import", key: "ngay_import", width: 15 },
+      ];
+
+      // Style cho header row
+      worksheet.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF4472C4" },
+        };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      // Thêm dữ liệu
+      allData.forEach((item, index) => {
+        const rowId = item.id || item._id;
+        const packValue =
+          editedPacks[rowId] !== undefined ? editedPacks[rowId] : item.pack;
+
+        const row = worksheet.addRow({
+          stt: index + 1,
+          maNCC: item.maNCC || "",
+          maNH: item.maNH || "",
+          dept: item.Dept || "",
+          subDept: item.SubDept || "",
+          slot: item.slot || "",
+          sku: item.sku || "",
+          name: item.name || "",
+          pack: packValue,
+          khoiluong: item.khoiluong || "",
+          loaiHinh: item.loaiHinh || "",
+          ngay_import: formatDate(item.ngay_import),
+        });
+
+        // Style cho data rows
+        row.eachCell((cell, colNumber) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD0D0D0" } },
+            left: { style: "thin", color: { argb: "FFD0D0D0" } },
+            bottom: { style: "thin", color: { argb: "FFD0D0D0" } },
+            right: { style: "thin", color: { argb: "FFD0D0D0" } },
+          };
+          cell.alignment = { vertical: "middle" };
+
+          // Center align cho cột STT, Slot, SKU, Quy cách, Khối lượng
+          if ([1, 6, 7, 9, 10].includes(colNumber)) {
+            cell.alignment = { ...cell.alignment, horizontal: "center" };
+          }
+        });
+
+        // Highlight edited pack cells
+        if (editedPacks[rowId] !== undefined) {
+          row.getCell("pack").fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFFEF3C7" }, // amber-100
+          };
+          row.getCell("pack").font = { bold: true };
+        }
+
+        // Highlight Hàng Đặc Thù
+        if (item.loaiHinh === "Hàng Đặc Thù") {
+          row.getCell("loaiHinh").fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFFEF3C7" }, // amber-100
+          };
+          row.getCell("loaiHinh").font = { bold: true };
+        }
+      });
+
+      // Freeze header row
+      worksheet.views = [{ state: "frozen", ySplit: 1 }];
+
+      // Generate Excel file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      // Download file
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `Dinh_Vi_${new Date().getTime()}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      console.log(`✅ Xuất thành công ${allData.length} bản ghi!`);
+    } catch (error) {
+      console.error("❌ Lỗi khi xuất Excel:", error);
+      alert("Không thể xuất Excel. Vui lòng thử lại!");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -347,12 +491,35 @@ const DinhViTable = forwardRef((props, ref) => {
         {/* Nút nhanh */}
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-slate-500">Phím nhanh:</span>
+
+          <button
+            onClick={handleExportExcel}
+            disabled={isExporting || total === 0}
+            className="h-10 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 text-white hover:from-green-700 hover:to-emerald-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            {isExporting ? "Đang xuất..." : `Xuất Excel (${total})`}
+          </button>
+
           <button
             onClick={resetFilters}
             className="ml-auto rounded-xl bg-white px-3 py-1.5 text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
           >
             Làm mới
           </button>
+
           {/* ✅ Hiển thị số lượng đã chỉnh sửa */}
           {Object.keys(editedPacks).length > 0 && (
             <span className="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-800 ring-1 ring-amber-200 font-medium">
