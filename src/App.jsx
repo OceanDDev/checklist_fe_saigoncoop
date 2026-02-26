@@ -350,7 +350,7 @@ function App() {
         <Route
           path="/phieusoan"
           element={
-            <PrivateRoute allowRoles={[20]}>
+            <PrivateRoute allowRoles={[20,26]}>
               <MainLayout>
                 <PhieuSoanHome />
               </MainLayout>

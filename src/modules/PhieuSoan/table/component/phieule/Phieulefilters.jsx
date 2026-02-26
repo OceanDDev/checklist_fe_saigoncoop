@@ -10,21 +10,28 @@ const PhieuLeFilters = ({
   setSearch,
   dateRange,
   printDateRange,
-
-
+  onImportSodaClick,
   // Actions
   onResetFilters,
   onImportClick,
   onImportHDClick,
   onPrintSelected,
-
   // Stats
   total,
   selectedCount,
-
   // Callbacks
   setPage,
 }) => {
+  // ✅ Lấy role từ localStorage
+  const isLimitedRole = useMemo(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      return user.role === 26;
+    } catch {
+      return false;
+    }
+  }, []);
+
   // Đếm số filter đang active
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -65,26 +72,30 @@ const PhieuLeFilters = ({
         {/* Nút In & Xuất Excel - hiện khi có phiếu được chọn */}
         {selectedCount > 0 && (
           <div className="flex items-center gap-2">
-            <button
-              onClick={onPrintSelected}
-              className="h-10 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 text-white hover:from-green-700 hover:to-emerald-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            {/* ✅ Ẩn nút In với role 26 */}
+            {!isLimitedRole && (
+              <button
+                onClick={onPrintSelected}
+                className="h-10 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 text-white hover:from-green-700 hover:to-emerald-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
-                />
-              </svg>
-              In {selectedCount} phiếu
-            </button>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+                  />
+                </svg>
+                In {selectedCount} phiếu
+              </button>
+            )}
 
+            {/* ✅ Luôn hiện Xuất Excel */}
             <button
               onClick={onExportExcel}
               className="h-10 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-4 text-white hover:from-blue-700 hover:to-cyan-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
@@ -114,26 +125,53 @@ const PhieuLeFilters = ({
           Làm mới
         </button>
 
-        <button
-          onClick={onImportClick}
-          className="h-10 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 px-4 text-white hover:from-blue-700 hover:to-purple-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        {/* ✅ Ẩn Transfer với role 26 */}
+        {!isLimitedRole && (
+          <button
+            onClick={onImportClick}
+            className="h-10 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 px-4 text-white hover:from-blue-700 hover:to-purple-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-            />
-          </svg>
-          Import & Xử lí
-        </button>
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            Transfer
+          </button>
+        )}
 
+        {/* ✅ Ẩn Soda với role 26 */}
+        {!isLimitedRole && (
+          <button
+            onClick={onImportSodaClick}
+            className="h-10 rounded-xl bg-gradient-to-r from-orange-500 to-pink-500 px-4 text-white hover:from-orange-600 hover:to-pink-600 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            Soda
+          </button>
+        )}
+
+        {/* ✅ Luôn hiện Import HD Đã Xuất */}
         <button
           onClick={onImportHDClick}
           className="h-10 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 text-white hover:from-emerald-700 hover:to-teal-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"

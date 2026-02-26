@@ -226,7 +226,7 @@ const PrintMultiplePhieuLe = ({
                           </p>
                           <p>
                             <span className="font-bold">Số SD/TF:</span>{" "}
-                            {phieu.sd_tf || "N/A"}
+                           {phieu.loai_phieu || "N/A"}-{phieu.sd_tf || "N/A"}
                           </p>
                           <p>
                             <span className="font-bold">Mã/Tên CH:</span>{" "}

@@ -12,7 +12,7 @@ import { DateRange } from "react-date-range";
 
 import { phieuLeService } from "@/services/phieusoan/phieule.service";
 import ChiTietModal from "./component/phieule/ChiTietPhieuLe";
-import ImportProcessModal from "./component/phieule/ImportPhieuLe";
+import ImportProcessModal from "./component/phieule/ImportTransferModal";
 import PrintMultiplePhieuLe from "./component/phieule/PrintMultiplePhieuLe";
 import NoteBeforePrintModal from "./component/phieule/NoteBeforePrintModal";
 import PhieuLeFilters from "./component/phieule/Phieulefilters";
@@ -20,6 +20,7 @@ import ImportHDDaXuat from "./component/phieule/ImportHDDaXuat";
 import dayjs from "dayjs";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
+import ImportSodaModal from "./component/phieule/ImportSodaModal";
 
 const EmptyState = ({
   title = "Không có dữ liệu",
@@ -138,6 +139,18 @@ const TableRow = ({
                   )}
                 </div>
               );
+            } else if (col.key === "loai_phieu") {
+              return (
+                <span
+                  className={`font-bold px-2 py-0.5 rounded text-xs ${
+                    value === "SD"
+                      ? "bg-purple-100 text-purple-700"
+                      : "bg-orange-100 text-orange-700"
+                  }`}
+                >
+                  {value || "TF"}
+                </span>
+              );
             } else if (col.key === "so_lan_in_phieu") {
               return (
                 <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">
@@ -227,6 +240,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
   const [maCH, setMaCH] = useState("");
   const [chuyen, setChuyen] = useState("");
   const [quan, setQuan] = useState("");
+  const [loaiPhieu, setLoaiPhieu] = useState("");
+  const [showImportSodaModal, setShowImportSodaModal] = useState(false);
 
   const [dateRange, setDateRange] = useState([
     {
@@ -359,6 +374,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
       sku: debouncedSku,
       slot: debouncedSlot,
       trang_thai: trangThai,
+      loai_phieu: loaiPhieu,
       mach: debouncedMaCH,
       chuyen: debouncedChuyen,
       quan: debouncedQuan,
@@ -379,6 +395,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
       debouncedSku,
       debouncedSlot,
       trangThai,
+      loaiPhieu,
       debouncedMaCH,
       debouncedChuyen,
       dateRange,
@@ -419,6 +436,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
     setLimit(20);
     setSearch("");
     setSoDocument("");
+    setLoaiPhieu("");
     setSku("");
     setSlot("");
     setTrangThai("");
@@ -699,6 +717,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
   const columns = useMemo(
     () => [
       { key: "so_document", label: "Số document", searchable: true },
+      { key: "loai_phieu", label: "Loại", searchable: true, isSelect: true }, // ✅
       { key: "sd_tf", label: "Số SD/TF", searchable: false },
       { key: "mach", label: "Mã cửa hàng", searchable: true },
       { key: "tench", label: "Tên cửa hàng", searchable: false },
@@ -761,12 +780,15 @@ const PhieuLeTable = forwardRef((props, ref) => {
           showCalendar={showCalendar}
           setShowCalendar={setShowCalendar}
           onResetFilters={resetFilters}
+          onImportSodaClick={() => setShowImportSodaModal(true)}
           onImportClick={() => setShowImportModal(true)}
           onImportHDClick={() => setShowImportHDModal(true)}
           onPrintSelected={handlePrintSelected}
           total={total}
           selectedCount={selectedIds.length}
           setPage={setPage}
+          loaiPhieu={loaiPhieu} // ✅
+          setLoaiPhieu={setLoaiPhieu}
         />
 
         <div className="overflow-auto rounded-2xl border border-slate-200 shadow-sm">
@@ -921,21 +943,37 @@ const PhieuLeTable = forwardRef((props, ref) => {
                         className="w-full h-7 px-2 text-xs rounded border border-slate-300 focus:ring-1 focus:ring-blue-300 outline-none"
                       />
                     )}
-                    {col.searchable && col.isSelect && (
-                      <select
-                        value={trangThai}
-                        onChange={(e) => {
-                          setPage(1);
-                          setTrangThai(e.target.value);
-                        }}
-                        className="w-full h-7 px-2 text-xs rounded border border-slate-300 focus:ring-1 focus:ring-blue-300 outline-none"
-                      >
-                        <option value="">Tất cả</option>
-                        <option value="Chờ xử lý">Chờ xử lý</option>
-                        <option value="Đã xử lý">Đã xử lý</option>
-                        <option value="Đã Xuất">Đã Xuất</option>
-                      </select>
-                    )}
+                    {col.searchable &&
+                      col.isSelect &&
+                      col.key === "trang_thai" && (
+                        <select
+                          value={trangThai}
+                          onChange={(e) => {
+                            setPage(1);
+                            setTrangThai(e.target.value);
+                          }}
+                          className="w-full h-7 px-2 text-xs rounded border border-slate-300 focus:ring-1 focus:ring-blue-300 outline-none"
+                        >
+                          <option value="">Tất cả</option>
+                          <option value="Chờ xử lý">Chờ xử lý</option>
+                          <option value="Đã xử lý">Đã xử lý</option>
+                          <option value="Đã Xuất">Đã Xuất</option>
+                        </select>
+                      )}
+
+                    {col.searchable &&
+                      col.isSelect &&
+                      col.key === "loai_phieu" && (
+                        <select
+                          value={loaiPhieu}
+                          onChange={(e) => setLoaiPhieu(e.target.value)}
+                          className="w-full h-7 px-2 text-xs rounded border border-slate-300 focus:ring-1 focus:ring-purple-300 outline-none"
+                        >
+                          <option value="">Tất cả</option>
+                          <option value="SD">SD</option>
+                          <option value="TF">TF</option>
+                        </select>
+                      )}
                     {col.isDateRange && col.key === "ngay_import" && (
                       <div className="relative">
                         <input
@@ -1200,6 +1238,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
       <ImportHDDaXuat
         isOpen={showImportHDModal}
         onClose={() => setShowImportHDModal(false)}
+        onSuccess={handleImportSuccess}
+      />
+      <ImportSodaModal
+        isOpen={showImportSodaModal}
+        onClose={() => setShowImportSodaModal(false)}
         onSuccess={handleImportSuccess}
       />
 

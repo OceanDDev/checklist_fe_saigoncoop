@@ -136,15 +136,15 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
     { key: "packs_to_pick_1", label: "Packs to Pick 1" },
   ];
 
-  const handleStartEditSlot = (index, currentSlot) => {
-    if (!canEdit) {
-      alert("Chỉ có thể chỉnh sửa slot khi phiếu ở trạng thái 'Chờ xử lý'!");
-      return;
-    }
+  // const handleStartEditSlot = (index, currentSlot) => {
+  //   if (!canEdit) {
+  //     alert("Chỉ có thể chỉnh sửa slot khi phiếu ở trạng thái 'Chờ xử lý'!");
+  //     return;
+  //   }
 
-    setEditingItemIndex(index);
-    setEditSlotValue(currentSlot || "");
-  };
+  //   setEditingItemIndex(index);
+  //   setEditSlotValue(currentSlot || "");
+  // };
 
   const handleCancelEditSlot = () => {
     setEditingItemIndex(null);
@@ -515,7 +515,7 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
                                     <span className="flex-1 min-w-0">
                                       {String(item?.[col.key] ?? "")}
                                     </span>
-                                    <button
+                                    {/* <button
                                       onClick={() =>
                                         handleStartEditSlot(idx, item[col.key])
                                       }
@@ -532,7 +532,7 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
                                       }
                                     >
                                       ✏️
-                                    </button>
+                                    </button> */}
                                   </>
                                 )}
                               </div>
