@@ -198,7 +198,7 @@ const PhieuLeFilters = ({
         <div className="flex items-center gap-2 text-slate-600">
           <div className="h-2 w-2 rounded-full bg-blue-500"></div>
           <span>
-            Tổng: <b>{total}</b> phiếu lẻ
+            Tổng: <b>{total}</b> phiếu soạn
           </span>
         </div>
         {selectedCount > 0 && (

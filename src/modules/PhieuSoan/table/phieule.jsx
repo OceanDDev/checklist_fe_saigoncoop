@@ -617,7 +617,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
     const ExcelJS = (await import("exceljs")).default;
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Danh sách phiếu lẻ");
+    const worksheet = workbook.addWorksheet("Danh sách phiếu soạn");
 
     worksheet.columns = [
       { header: "STT", key: "stt", width: 8 },

@@ -4,20 +4,20 @@ import DinhViTable from "./table/dinhvi";
 import DinhViImport from "./excel/ImportDinhVi";
 import PhieuLeTable from "./table/phieule";
 import DataCHTable from "./table/dataCH";
+import SodaTransferDashboard from "./table/component/dashboard/DashboardTab";
 
 const TABS = [
-  { key: "dinhvi", label: "Định Vị" },
-  { key: "phieule", label: "Phiếu Lẻ" },
-  { key: "dataCH", label: "Cửa Hàng" },
+  { key: "dashboard", label: "Dashboard" }, // ← tab mới ở đầu
+  { key: "dinhvi",    label: "Định Vị"   },
+  { key: "phieule",   label: "Phiếu Lẻ"  },
+  { key: "dataCH",    label: "Cửa Hàng"  },
 ];
 
 const PhieuSoanHome = () => {
-  const [activeTab, setActiveTab] = useState("phieule");
-  const dinhViTableRef = useRef(null);
+  const [activeTab, setActiveTab] = useState("phieule"); // mặc định mở dashboard
+  const dinhViTableRef  = useRef(null);
   const phieuLeTableRef = useRef(null);
-  const dataCHTableRef = useRef(null);
-
-  // ==== Modal state
+  const dataCHTableRef  = useRef(null);
 
   // ===== Định Vị
   const handleDinhViImportSuccess = () => {
@@ -28,19 +28,14 @@ const PhieuSoanHome = () => {
 
   const renderActions = () => {
     switch (activeTab) {
-      case "dinhvi":
-        return (
-          <>
-            <DinhViImport onImportSuccess={handleDinhViImportSuccess} />
-          </>
-        );
-
-      case "phieusoan":
+      case "dashboard":
         return (
           <div className="text-sm text-slate-500 italic">
-            Quản lý danh sách phiếu soạn
+            Tổng quan hệ thống
           </div>
         );
+      case "dinhvi":
+        return <DinhViImport onImportSuccess={handleDinhViImportSuccess} />;
       case "phieule":
         return (
           <div className="text-sm text-slate-500 italic">
@@ -91,21 +86,21 @@ const PhieuSoanHome = () => {
                 : "text-slate-600 hover:text-slate-800"
             }`}
           >
+            {/* Icon nhỏ cho dashboard */}
+            {t.key === "dashboard" && (
+              <span className="mr-1.5">📊</span>
+            )}
             {t.label}
           </button>
         ))}
       </div>
 
       {/* Content */}
-      {activeTab === "dinhvi" && <DinhViTable ref={dinhViTableRef} />}
+      {activeTab === "dashboard" && <SodaTransferDashboard />}
 
-      {activeTab === "phieule" && <PhieuLeTable ref={phieuLeTableRef} />}
-
-      {activeTab === "dataCH" && <DataCHTable ref={dataCHTableRef} />}
-
-      {/* Modal hiển thị kết quả/lỗi/chi tiết */}
-
-      {/* ✅ Modal Upload TXT */}
+      {activeTab === "dinhvi"   && <DinhViTable  ref={dinhViTableRef}  />}
+      {activeTab === "phieule"  && <PhieuLeTable ref={phieuLeTableRef} />}
+      {activeTab === "dataCH"   && <DataCHTable  ref={dataCHTableRef}  />}
     </div>
   );
 };

@@ -33,7 +33,7 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
 
     try {
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Danh sách phiếu lẻ");
+      const worksheet = workbook.addWorksheet("Danh sách phiếu soạn");
 
       // ✅ Định nghĩa các cột (THÊM ngay_in_phieu)
       worksheet.columns = [

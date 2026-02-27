@@ -142,7 +142,7 @@ const PrintMultiplePhieuLe = ({
           <div className="flex items-center justify-between p-6 border-b border-slate-200">
             <div>
               <h2 className="text-2xl font-bold text-slate-800">
-                In Nhiều Phiếu Lẻ (A4 Ngang)
+                In Nhiều Phiếu Soạn (A4 Ngang)
               </h2>
               <p className="text-sm text-slate-500 mt-1">
                 Đã chọn{" "}
