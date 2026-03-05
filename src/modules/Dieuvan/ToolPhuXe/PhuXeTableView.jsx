@@ -44,6 +44,7 @@ const PhuXeTableView = ({
   canEditPhuXeName,
   canEditDieuVan,
   isRole24,
+  isRole21,
   onToggleSort,
   onDelete,
   onRefresh,
@@ -60,6 +61,18 @@ const PhuXeTableView = ({
   const [editValue, setEditValue] = useState("");
   const [printModalVisible, setPrintModalVisible] = useState(false);
   const [selectedPrintRecord, setSelectedPrintRecord] = useState(null);
+
+  // Role 21: khóa nếu đã chọn rồi + đã qua 6 tiếng kể từ thoi_gian_di
+  // Chưa chọn thì luôn cho chọn bình thường
+  const canRole21EditRecord = (record) => {
+    if (!isRole21) return canEditDieuVan;
+    if (record.dieu_van_xac_nhan && record.thoi_gian_di) {
+      const thoiGianDi = dayjs(record.thoi_gian_di).tz(VN_TIMEZONE);
+      const now = dayjs().tz(VN_TIMEZONE);
+      if (now.diff(thoiGianDi, "hour") >= 6) return false; // đã qua 6 tiếng → khóa
+    }
+    return true;
+  };
 
   // Color functions
   const getColorForPhuXeName = (tenPhuXe) => {
@@ -211,9 +224,9 @@ const PhuXeTableView = ({
     }
   };
 
-  const handleOpenSelectDieuVanModal = (recordId) => {
-    if (!canEditDieuVan) {
-      message.warning("Bạn không có quyền chỉnh sửa điều vận xác nhận!");
+  const handleOpenSelectDieuVanModal = (recordId, canEdit) => {
+    if (!canEdit) {
+      message.warning("Không thể chỉnh sửa điều vận xác nhận này!");
       return;
     }
     setCurrentDieuVanRecordId(recordId);
@@ -422,7 +435,6 @@ const PhuXeTableView = ({
       render: (text, record) =>
         renderEditableCell(text, record, "bien_so_xe", isRole24),
     },
-
     !isRole24 && {
       title: "Tên Phụ Xe",
       key: "ten_phu_xe",
@@ -459,8 +471,6 @@ const PhuXeTableView = ({
         </Tooltip>
       ),
     },
-    // Replace the "Xác Nhận" column render function with this:
-
     {
       title: "Xác Nhận",
       key: "dieu_van_xac_nhan",
@@ -470,30 +480,32 @@ const PhuXeTableView = ({
         style: { backgroundColor: getColorForKhungGio(record.khung_gio) },
       }),
       render: (_, record) => {
-        const tooltipContent = !canEditDieuVan
-          ? "Bạn không có quyền chỉnh sửa"
-          : record.thoi_gian_di
+        const canEdit = canRole21EditRecord(record);
+
+        const tooltipContent = record.thoi_gian_di
           ? `Thời gian đi: ${formatVietnameseTime(record.thoi_gian_di)}`
-          : "Click để chọn điều vận xác nhận";
+          : !canEdit
+            ? "Bạn không có quyền chỉnh sửa"
+            : "Click để chọn điều vận xác nhận";
 
         return (
           <Tooltip title={tooltipContent} placement="top">
             <Button
-              onClick={() => handleOpenSelectDieuVanModal(record._id)}
+              onClick={() => handleOpenSelectDieuVanModal(record._id, canEdit)}
               style={{
                 backgroundColor: getColorForPhuXeName(record.dieu_van_xac_nhan),
                 borderColor: getColorForPhuXeName(record.dieu_van_xac_nhan),
                 color: "#000",
                 fontWeight: "600",
                 width: "100%",
-                cursor: !canEditDieuVan ? "not-allowed" : "pointer",
-                opacity: !canEditDieuVan ? 0.6 : 1,
+                cursor: !canEdit ? "not-allowed" : "pointer",
+                opacity: !canEdit ? 0.6 : 1,
                 height: "auto",
                 minHeight: "32px",
                 whiteSpace: "normal",
                 padding: "4px 8px",
               }}
-              disabled={!canEditDieuVan}
+              disabled={!canEdit}
               size="small"
               className="min-w-[80px] max-w-full text-xs sm:text-sm leading-tight"
             >

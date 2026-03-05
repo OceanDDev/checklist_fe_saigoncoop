@@ -78,6 +78,10 @@ const URL = {
     phieule: ENDPOINT_PREFIX + "/phieule",
     dataCH: ENDPOINT_PREFIX + "/dataCH",
   },
+    chamcong: {
+    chamcong: ENDPOINT_PREFIX + "/chamcong",
+     nhanvien: ENDPOINT_PREFIX + "/nhanvien",
+  },
 };
 
 export { URL, ApiServer, DEF_HEADERS };

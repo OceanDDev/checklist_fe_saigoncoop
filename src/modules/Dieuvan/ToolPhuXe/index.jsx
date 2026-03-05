@@ -7,7 +7,7 @@ import CaptureTable from "./CaptureTable";
 import SearchFilter from "./SearchPhuXe";
 import PhuXeTableView from "./PhuXeTableView";
 import ExportExcelPhuXe from "./ExportExcelPhuXe";
-import ChbxModal from "./ChbxModal"; // ⬅️ Import Modal mới
+import ChbxModal from "./ChbxModal";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -39,8 +39,8 @@ const HomePhuXe = () => {
   const [canEditPhuXeName, setCanEditPhuXeName] = useState(false);
   const [canEditDieuVan, setCanEditDieuVan] = useState(false);
   const [isRole24, setIsRole24] = useState(false);
+  const [isRole21, setIsRole21] = useState(false); // ⬅️ thêm state isRole21
 
-  // ⬅️ State mới cho Modal
   const [showChbxModal, setShowChbxModal] = useState(false);
 
   const tableRef = useRef(null);
@@ -72,16 +72,19 @@ const HomePhuXe = () => {
         setCanEditPhuXeName(userRole === 22);
         setCanEditDieuVan(userRole === 21 || userRole === 22);
         setIsRole24(userRole === 24);
+        setIsRole21(userRole === 21); // ⬅️ set isRole21
       } else {
         setCanEditPhuXeName(false);
         setCanEditDieuVan(false);
         setIsRole24(false);
+        setIsRole21(false);
       }
     } catch (error) {
       console.error("Lỗi khi kiểm tra role:", error);
       setCanEditPhuXeName(false);
       setCanEditDieuVan(false);
       setIsRole24(false);
+      setIsRole21(false);
     }
   };
 
@@ -134,7 +137,9 @@ const HomePhuXe = () => {
     setData((prev) => [...prev].sort(sortFn));
     setFilteredData((prev) => [...prev].sort(sortFn));
     message.success(
-      newOrder === "asc" ? "Sắp xếp giờ nhỏ đến lớn" : "Sắp xếp giờ lớn đến nhỏ"
+      newOrder === "asc"
+        ? "Sắp xếp giờ nhỏ đến lớn"
+        : "Sắp xếp giờ lớn đến nhỏ",
     );
   };
 
@@ -173,7 +178,6 @@ const HomePhuXe = () => {
           />
 
           <div className="flex flex-wrap gap-2 justify-end">
-            {/* ⬅️ Nút mới: CH PX-BX */}
             {!isRole24 && (
               <Button
                 type="default"
@@ -191,8 +195,7 @@ const HomePhuXe = () => {
               fileName={`phuxe_${dayjs(dateRange[0].startDate)
                 .tz(VN_TIMEZONE)
                 .format("YYYY-MM-DD")}`}
-                isRole24={isRole24}
-
+              isRole24={isRole24}
             />
 
             {isSearchingOneDay && (
@@ -213,6 +216,7 @@ const HomePhuXe = () => {
             canEditPhuXeName={canEditPhuXeName}
             canEditDieuVan={canEditDieuVan}
             isRole24={isRole24}
+            isRole21={isRole21} // ⬅️ truyền prop isRole21
             onToggleSort={handleToggleSort}
             onDelete={handleDelete}
             onRefresh={fetchPhuXe}
@@ -221,7 +225,6 @@ const HomePhuXe = () => {
         </div>
       </Card>
 
-      {/* ⬅️ Modal Quản Lý Cửa Hàng */}
       <ChbxModal
         visible={showChbxModal}
         onClose={() => setShowChbxModal(false)}

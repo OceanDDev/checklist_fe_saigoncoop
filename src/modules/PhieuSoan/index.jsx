@@ -9,7 +9,7 @@ import SodaTransferDashboard from "./table/component/dashboard/DashboardTab";
 const TABS = [
   { key: "dashboard", label: "Dashboard" }, // ← tab mới ở đầu
   { key: "dinhvi",    label: "Định Vị"   },
-  { key: "phieule",   label: "Phiếu Lẻ"  },
+  { key: "phieule",   label: "Phiếu Soạn"  },
   { key: "dataCH",    label: "Cửa Hàng"  },
 ];
 
@@ -39,7 +39,7 @@ const PhieuSoanHome = () => {
       case "phieule":
         return (
           <div className="text-sm text-slate-500 italic">
-            Quản lý danh sách phiếu lẻ
+            Quản lý danh sách phiếu soạn
           </div>
         );
       case "dataCH":

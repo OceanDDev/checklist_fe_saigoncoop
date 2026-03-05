@@ -32,6 +32,9 @@ import TableXuatHang from "./modules/KPI/KPINV/XUATHANG/table";
 import HomeBDH from "./modules/KPI/KPIBDH";
 import TableBDH from "./modules/KPI/KPIBDH/table";
 import HandleTonKho from "./modules/Tonkho";
+import ChamCongPage from "./modules/ChamCong";
+import FormCheckInQR from "./modules/ChamCong/FormCheck/FormCheckInQR.jsx";
+import QrDisplay from "./modules/ChamCong/FormCheck/QrDisplay";
 
 function App() {
   return (
@@ -190,14 +193,14 @@ function App() {
           }
         />
 
- {/* TỒN KHO  */}
-    <Route
+        {/* TỒN KHO  */}
+        <Route
           path="/tonkho"
           element={
             <PrivateRoute allowRoles={[25]}>
               <MainLayout>
                 {" "}
-                <HandleTonKho/>{" "}
+                <HandleTonKho />{" "}
               </MainLayout>
             </PrivateRoute>
           }
@@ -264,7 +267,7 @@ function App() {
           element={
             <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
               <MainLayout>
-                <HomeHoTro /> 
+                <HomeHoTro />
               </MainLayout>
             </PrivateRoute>
           }
@@ -280,12 +283,12 @@ function App() {
           }
         />
 
-         <Route
+        <Route
           path="/kpi/homestaff/ban-dieu-hanh"
           element={
             <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
               <MainLayout>
-                <HomeBDH /> 
+                <HomeBDH />
               </MainLayout>
             </PrivateRoute>
           }
@@ -301,13 +304,12 @@ function App() {
           }
         />
 
-
-         <Route
+        <Route
           path="/kpi/homestaff/xuat-hang"
           element={
             <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
               <MainLayout>
-                <HomeXuatHang /> 
+                <HomeXuatHang />
               </MainLayout>
             </PrivateRoute>
           }
@@ -323,34 +325,47 @@ function App() {
           }
         />
 
-         <Route
+        <Route
           path="/kpi/homestaff/nhap-hang"
           element={
             <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
               <MainLayout>
-                <HomeNhapHang /> 
+                <HomeNhapHang />
               </MainLayout>
             </PrivateRoute>
           }
-
         />
-           <Route
+        <Route
           path="/kpi/homestaff/nhap-hang/table/:year"
           element={
             <PrivateRoute allowRoles={[2, 10, 11, 12, 13, 14, 15, 16, 17]}>
               <MainLayout>
-                <TableNhapHang /> 
+                <TableNhapHang />
               </MainLayout>
             </PrivateRoute>
           }
         />
+
+        {/* CHAM CONG*/}
+        <Route
+          path="/chamcong"
+          element={
+            <PrivateRoute allowRoles={[27]}>
+              <MainLayout>
+                <ChamCongPage />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route path="/chamcongform/:token" element={<FormCheckInQR />} />
+        <Route path="/qr-display" element={<QrDisplay />} />
 
         {/* PHIEU SOAN */}
 
         <Route
           path="/phieusoan"
           element={
-            <PrivateRoute allowRoles={[20,26]}>
+            <PrivateRoute allowRoles={[20, 26]}>
               <MainLayout>
                 <PhieuSoanHome />
               </MainLayout>

@@ -419,7 +419,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
       setTotal(Number(res?.pagination?.total ?? res?.total ?? data.length));
     } catch (e) {
       console.error("❌ Error:", e);
-      setError("Không tải được dữ liệu Phiếu Lẻ.");
+      setError("Không tải được dữ liệu Soạn.");
     } finally {
       setLoading(false);
     }
