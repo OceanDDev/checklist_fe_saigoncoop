@@ -127,6 +127,21 @@ const InPhuXe = ({ record, onClose }) => {
                 {record.dich_vu || ""}
               </td>
             </tr>
+            {/* ✅ THÊM HÀNG BIỂN SỐ XE */}
+            <tr>
+              <td
+                style={{
+                  border: "1px solid #000",
+                  padding: "8px 12px",
+                  fontWeight: "bold",
+                }}
+              >
+                BIỂN SỐ XE:
+              </td>
+              <td style={{ border: "1px solid #000", padding: "8px 12px" }}>
+                {record.bien_so_xe || ""}
+              </td>
+            </tr>
             <tr>
               <td
                 style={{
@@ -180,7 +195,7 @@ const InPhuXe = ({ record, onClose }) => {
           <div
             style={{
               border: "1px solid #000",
-              borderBottom: "none", // Bỏ viền dưới để nối liền với khung dưới
+              borderBottom: "none",
               padding: "5px",
               textAlign: "center",
               fontWeight: "bold",

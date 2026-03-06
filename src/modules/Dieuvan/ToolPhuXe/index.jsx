@@ -8,6 +8,7 @@ import SearchFilter from "./SearchPhuXe";
 import PhuXeTableView from "./PhuXeTableView";
 import ExportExcelPhuXe from "./ExportExcelPhuXe";
 import ChbxModal from "./ChbxModal";
+import AddPhuXeModal from "./Addphuxemodal";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -36,10 +37,11 @@ const HomePhuXe = () => {
   ]);
   const [sortOrder, setSortOrder] = useState("asc");
   const [phuXeNames, setPhuXeNames] = useState([]);
+  const [chbxList, setChbxList] = useState([]); // ⬅️ thêm state chbxList
   const [canEditPhuXeName, setCanEditPhuXeName] = useState(false);
   const [canEditDieuVan, setCanEditDieuVan] = useState(false);
   const [isRole24, setIsRole24] = useState(false);
-  const [isRole21, setIsRole21] = useState(false); // ⬅️ thêm state isRole21
+  const [isRole21, setIsRole21] = useState(false);
 
   const [showChbxModal, setShowChbxModal] = useState(false);
 
@@ -59,6 +61,7 @@ const HomePhuXe = () => {
   useEffect(() => {
     fetchPhuXe();
     fetchPhuXeNames();
+    fetchChbxList(); // ⬅️ thêm fetch chbxList
     checkUserRole();
   }, []);
 
@@ -72,7 +75,7 @@ const HomePhuXe = () => {
         setCanEditPhuXeName(userRole === 22);
         setCanEditDieuVan(userRole === 21 || userRole === 22);
         setIsRole24(userRole === 24);
-        setIsRole21(userRole === 21); // ⬅️ set isRole21
+        setIsRole21(userRole === 21);
       } else {
         setCanEditPhuXeName(false);
         setCanEditDieuVan(false);
@@ -112,6 +115,16 @@ const HomePhuXe = () => {
     } catch (error) {
       console.error("Lỗi khi gọi getAllPhuXeNames:", error);
       message.error("Không thể lấy danh sách tên phụ xe");
+    }
+  };
+
+  // ⬅️ fetch danh sách cửa hàng cho AddPhuXeModal
+  const fetchChbxList = async () => {
+    try {
+      const list = await phuXeService.getAllChbx();
+      if (list) setChbxList(list);
+    } catch (error) {
+      console.error("Lỗi khi gọi getAllChbx:", error);
     }
   };
 
@@ -188,6 +201,11 @@ const HomePhuXe = () => {
               </Button>
             )}
 
+            {/* ⬅️ Nút Thêm Phụ Xe - chỉ hiện với role không phải 24 */}
+            {!isRole24 && (
+              <AddPhuXeModal onAdded={fetchPhuXe} chbxList={chbxList} />
+            )}
+
             <ImportPhuXe onImported={fetchPhuXe} isRole24={isRole24} />
 
             <ExportExcelPhuXe
@@ -216,7 +234,7 @@ const HomePhuXe = () => {
             canEditPhuXeName={canEditPhuXeName}
             canEditDieuVan={canEditDieuVan}
             isRole24={isRole24}
-            isRole21={isRole21} // ⬅️ truyền prop isRole21
+            isRole21={isRole21}
             onToggleSort={handleToggleSort}
             onDelete={handleDelete}
             onRefresh={fetchPhuXe}

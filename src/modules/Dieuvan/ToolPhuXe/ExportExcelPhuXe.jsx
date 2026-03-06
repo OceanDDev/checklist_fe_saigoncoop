@@ -47,6 +47,7 @@ const ExportExcelPhuXe = ({
             stt: index + 1,
             hoTen: item.dieu_van_xac_nhan || "",
             dichVu: item.dich_vu || "",
+            bienSoXe: item.bien_so_xe || "", // ✅ THÊM FIELD BIỂN SỐ XE
             thoiGianDi: thoiGianDi,
             maCuaHang: item.ma_cua_hang || "",
             diaDiemDen: item.ten_cua_hang || "",
@@ -58,7 +59,7 @@ const ExportExcelPhuXe = ({
 
       if (dataToExport.length === 0) {
         message.warning(
-          "Không có dữ liệu hợp lệ (thiếu thời gian đi) để xuất!"
+          "Không có dữ liệu hợp lệ (thiếu thời gian đi) để xuất!",
         );
         return;
       }
@@ -69,8 +70,8 @@ const ExportExcelPhuXe = ({
       worksheet.columns = [
         { header: "STT", key: "stt", width: 8 },
         { header: "Họ Tên", key: "hoTen", width: 25 },
-        { header: "Dịch Vụ", key: "dichVu", width: 15 }, // ✅ THÊM DÒNG NÀY
-
+        { header: "Dịch Vụ", key: "dichVu", width: 15 },
+        { header: "Biển Số Xe", key: "bienSoXe", width: 18 }, // ✅ THÊM CỘT BIỂN SỐ XE
         { header: "Thời Gian Đi", key: "thoiGianDi", width: 18 },
         { header: "Mã Cửa Hàng", key: "maCuaHang", width: 15 },
         { header: "Địa Điểm Đến", key: "diaDiemDen", width: 35 },
@@ -79,7 +80,7 @@ const ExportExcelPhuXe = ({
           key: "thoiGianXongChuyen",
           width: 25,
         },
-        { header: "Ghi Chú", key: "ghiChu", width: 30 }, // ✅ THÊM DÒNG NÀY
+        { header: "Ghi Chú", key: "ghiChu", width: 30 },
         { header: "Ngày", key: "ngay", width: 15 },
       ];
 
@@ -111,7 +112,8 @@ const ExportExcelPhuXe = ({
             right: { style: "thin" },
           };
 
-          if ([1, 4, 7].includes(colNumber)) {
+          // Căn giữa: STT (1), Biển Số Xe (4), Thời Gian Đi (5), Thời Gian Xong Chuyến (8)
+          if ([1, 4, 5, 8].includes(colNumber)) {
             cell.alignment = { vertical: "middle", horizontal: "center" };
           } else {
             cell.alignment = { vertical: "middle", horizontal: "left" };
