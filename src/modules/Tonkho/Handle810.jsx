@@ -55,17 +55,18 @@ const Handle810 = () => {
     lines.forEach((line) => {
       if (line.length < 80) return;
 
-      // ✅ FIXED-WIDTH SLICING thay vì regex split
       const zon = line.slice(1, 3).trim();
       const eSlot = line.slice(4, 14).trim();
-      const sku = line.slice(15, 22).trim();
+      const skuStr = line.slice(15, 22).trim(); // validate bằng string trước
       const name = line.slice(23, 53).trim();
       const vendor = line.slice(54, 69).trim();
       const buyer = line.slice(70, 74).trim();
       const rest = line.slice(74).trim();
 
       if (!ALLOWED_ZONES.includes(zon)) return;
-      if (!/^\d{7}$/.test(sku)) return;
+      if (!/^\d{7}$/.test(skuStr)) return; // regex trên string
+
+      const sku = +skuStr; // ép number sau khi đã validate
 
       const nums = rest.split(/\s+/).filter(Boolean);
       if (nums.length < 6) return;

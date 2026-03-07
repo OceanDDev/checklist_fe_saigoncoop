@@ -48,7 +48,7 @@ const parseKho8101 = (line) => {
   if (onHand === 0) return null;
 
   return [
-    sku,
+    +sku, // ← thêm + để ép thành number
     parts[0].trim(),
     onHand,
     formatJdaNumber(parts[2]),

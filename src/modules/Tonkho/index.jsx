@@ -103,7 +103,7 @@ const buildFormattedSheet = (wb, sheetName, headers, rows, colWidths) => {
 export const parseKho8101 = (line) => {
   const skuMatch = line.match(/^\s*(\d{7})\s+(.*)/);
   if (!skuMatch) return null;
-  const sku = skuMatch[1];
+  const sku = +skuMatch[1];
   const rest = skuMatch[2];
   const parts = rest.split(/\s{2,}/);
   if (parts.length < 5) return null;
@@ -174,7 +174,9 @@ export const parseKho810 = (text) => {
     if (line.length < 80) return;
     const zon = line.slice(1, 3).trim();
     const eSlot = line.slice(4, 14).trim();
-    const sku = line.slice(15, 22).trim();
+    const skuStr = line.slice(15, 22).trim();
+    if (!/^\d{7}$/.test(skuStr)) return;
+    const sku = +skuStr;
     const name = line.slice(23, 53).trim();
     const vendor = line.slice(54, 69).trim();
     const buyer = line.slice(70, 74).trim();
@@ -274,7 +276,7 @@ const convert8101ToMerged = (row, reportDate, packMap) => {
   const cost = row[6];
 
   // VLOOKUP: find pack from 810 data by sku
-  const pack = packMap[sku] ||  "";
+  const pack = packMap[sku] || "";
   const cases = pack ? +(onHand / pack).toFixed(4) : "";
 
   return [

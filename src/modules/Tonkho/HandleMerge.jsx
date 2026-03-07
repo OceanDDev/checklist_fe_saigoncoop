@@ -26,7 +26,7 @@ const parseKho8101 = (line) => {
   const skuMatch = line.match(/^\s*(\d{7})\s+(.*)/);
   if (!skuMatch) return null;
 
-  const sku = skuMatch[1];
+  const sku = +skuMatch[1]; // ép number
   const rest = skuMatch[2];
   const parts = rest.split(/\s{2,}/);
 
@@ -36,12 +36,12 @@ const parseKho8101 = (line) => {
 
   return [
     sku,
-    parts[0].trim(), // [1] desc
-    onHand, // [2] onHand
-    formatJdaNumber(parts[2]), // [3] retail1
-    formatJdaNumber(parts[3]), // [4] retail2 = pack (fallback)
+    parts[0].trim(),
+    onHand,
+    formatJdaNumber(parts[2]),
+    formatJdaNumber(parts[3]),
     0,
-    formatJdaNumber(parts[4]), // [6] cost
+    formatJdaNumber(parts[4]),
     0,
     formatJdaNumber(parts[5]),
     formatJdaNumber(parts[6]),
@@ -59,7 +59,7 @@ const parseKho810 = (text) => {
   const dateMatch = text.match(/Date:(\d{2}\/\d{2}\/\d{2})/);
   if (dateMatch) {
     const parts = dateMatch[1].split("/");
-reportDate = new Date(`20${parts[2]}-${parts[1]}-${parts[0]}`);
+    reportDate = new Date(`20${parts[2]}-${parts[1]}-${parts[0]}`);
   }
 
   const ALLOWED_ZONES = [
@@ -85,14 +85,16 @@ reportDate = new Date(`20${parts[2]}-${parts[1]}-${parts[0]}`);
 
     const zon = line.slice(1, 3).trim();
     const eSlot = line.slice(4, 14).trim();
-    const sku = line.slice(15, 22).trim();
+    const skuStr = line.slice(15, 22).trim();
     const name = line.slice(23, 53).trim();
     const vendor = line.slice(54, 69).trim();
     const buyer = line.slice(70, 74).trim();
     const rest = line.slice(74).trim();
 
     if (!ALLOWED_ZONES.includes(zon)) return;
-    if (!/^\d{7}$/.test(sku)) return;
+    if (!/^\d{7}$/.test(skuStr)) return; // validate string trước
+
+    const sku = +skuStr; // ép number sau khi validate
 
     const nums = rest.split(/\s+/).filter(Boolean);
     if (nums.length < 6) return;
@@ -134,8 +136,8 @@ reportDate = new Date(`20${parts[2]}-${parts[1]}-${parts[0]}`);
 const buildPackMap = (rows810) => {
   const map = {};
   for (const row of rows810) {
-    const sku = row[2]; // index 2 = Sku
-    const pack = row[9]; // index 9 = Pack
+    const sku = +row[2]; // ép number để key đồng nhất
+    const pack = row[9];
     if (sku && pack && !map[sku]) {
       map[sku] = parseInt(pack) || pack;
     }
@@ -165,10 +167,8 @@ const HEADERS_MERGED = [
 
 const convert810ToMerged = (row) => row;
 
-// Pack: vlookup từ 810 theo sku, fallback về row8101[4]
-// Cases: onHand / pack
 const convert8101ToMerged = (row8101, reportDate, packMap) => {
-  const sku = row8101[0];
+  const sku = +row8101[0]; // ép number
   const onHand = row8101[2];
   const cost = row8101[6];
   const pack = packMap[sku] || row8101[4] || "";
@@ -212,7 +212,6 @@ const HandleMerge = () => {
       let allRows8101 = [];
       let reportDate = "2026-02-12";
 
-      // Parse 810
       for (const file of files810) {
         const text = await file.text();
         const parsed = parseKho810(text);
@@ -220,17 +219,14 @@ const HandleMerge = () => {
         allRows810 = [...allRows810, ...parsed.map((p) => p.row)];
       }
 
-      // Parse 8101
       for (const file of files8101) {
         const text = await file.text();
         const rows = text.split("\n").map(parseKho8101).filter(Boolean);
         allRows8101 = [...allRows8101, ...rows];
       }
 
-      // Build pack lookup từ 810
       const packMap = buildPackMap(allRows810);
 
-      // Merge: 810 trước, 8101 sau
       const merged = [
         ...allRows810.map(convert810ToMerged),
         ...allRows8101.map((r) => convert8101ToMerged(r, reportDate, packMap)),

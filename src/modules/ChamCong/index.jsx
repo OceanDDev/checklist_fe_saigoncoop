@@ -26,7 +26,6 @@ export default function ChamCongPage() {
           />
         </div>
       </div>
-
       {tab === "chamcong" ? <ChamCongTable /> : <NhanVienTable />}
     </div>
   );
