@@ -45,7 +45,7 @@ const checkChamCong = async (payload) => {
     return results;
   } catch (error) {
     console.error("Lỗi khi gọi checkChamCong:", error);
-    throw error;
+    throw error; // giữ nguyên error.response để component đọc được
   }
 };
 
@@ -95,6 +95,7 @@ const deleteManyChamCong = async (ids) => {
     throw error;
   }
 };
+
 const trangThaiHomNay = async (ma_nhan_vien) => {
   try {
     const results = await requestService.get(
@@ -109,6 +110,7 @@ const trangThaiHomNay = async (ma_nhan_vien) => {
     throw error;
   }
 };
+
 const getCurrentQr = async () => {
   try {
     const results = await requestService.get(
@@ -117,7 +119,7 @@ const getCurrentQr = async () => {
       undefined,
       ApiServer,
     );
-    console.log("🔍 getCurrentQr raw:", results); // ← thêm dòng này
+    console.log("🔍 getCurrentQr raw:", results);
     return results;
   } catch (error) {
     console.error("Lỗi khi gọi getCurrentQr:", error);
@@ -125,22 +127,44 @@ const getCurrentQr = async () => {
   }
 };
 
-// 🔐 Chấm công qua QR (không cần GPS)
+// 🔐 Chấm công qua QR
 const checkChamCongQR = async (payload) => {
-  try {
-    const results = await requestService.post(
-      `${URL.chamcong.chamcong}/check-qr`,
-      payload,
-      undefined,
-      ApiServer,
-    );
-    return results;
-  } catch (error) {
-    console.error("Lỗi khi gọi checkChamCongQR:", error);
-    throw error;
-  }
+  // ⚠️  KHÔNG bọc try/catch ở đây
+  //     Để error.response (chứa blocked_by, message...) đi thẳng lên component
+  //     Component sẽ tự xử lý và hiển thị đúng toast cảnh cáo
+  return await requestService.post(
+    `${URL.chamcong.chamcong}/check-qr`,
+    payload,
+    undefined,
+    ApiServer,
+  );
 };
 
+const validateQrToken = async (token) => {
+  return await requestService.get(
+    `${URL.chamcong.chamcong}/qr/validate`,
+    { qr_token: token },
+    undefined,
+    ApiServer,
+  );
+};
+const adminAddChamCong = async (payload) => {
+  return await requestService.post(
+    `${URL.chamcong.chamcong}/admin-add`,
+    payload,
+    undefined,
+    ApiServer,
+  );
+};
+
+const adminEditChamCong = async (id, payload) => {
+  return await requestService.patch(
+    `${URL.chamcong.chamcong}/${id}/admin-edit`,
+    payload,
+    undefined,
+    ApiServer,
+  );
+};
 export const chamCongService = {
   getAllChamCong,
   getChamCongById,
@@ -151,4 +175,7 @@ export const chamCongService = {
   trangThaiHomNay,
   getCurrentQr,
   checkChamCongQR,
+  validateQrToken,
+  adminAddChamCong,
+  adminEditChamCong
 };

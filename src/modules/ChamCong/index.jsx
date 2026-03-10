@@ -4,29 +4,69 @@ import { useState } from "react";
 import NhanVienTable from "./nhanVienTable";
 import ChamCongTable from "./Table";
 
+const ROLE_FULL = 28; // thấy cả 2 tab
+const ROLE_NV = 27; // chỉ thấy whitelist nhân viên
+
+function getRoleFromStorage() {
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return null;
+    const user = JSON.parse(raw);
+    return user?.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function ChamCongPage() {
-  const [tab, setTab] = useState("chamcong");
+  const role = getRoleFromStorage();
+
+  const canSeeChamCong = role === ROLE_FULL;
+  const canSeeNhanVien = role === ROLE_FULL || role === ROLE_NV;
+
+  // Hooks luôn gọi trước mọi conditional return
+  const [tab, setTab] = useState(canSeeChamCong ? "chamcong" : "nhanvien");
+
+  // Nếu không có quyền gì → không render
+  if (!canSeeNhanVien) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="text-5xl opacity-30">🔒</div>
+          <p className="text-muted-foreground text-sm">
+            Bạn không có quyền truy cập trang này.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Tab Bar */}
+      {/* Tab Bar — chỉ hiện tab mà role được phép */}
       <div className="border-b-2 border-border bg-card px-6 sm:px-8">
         <div className="flex gap-1">
-          <TabBtn
-            active={tab === "chamcong"}
-            onClick={() => setTab("chamcong")}
-            label="Dữ Liệu Chấm Công"
-            icon="⏱"
-          />
-          <TabBtn
-            active={tab === "nhanvien"}
-            onClick={() => setTab("nhanvien")}
-            label="Whitelist Nhân Viên"
-            icon="👥"
-          />
+          {canSeeChamCong && (
+            <TabBtn
+              active={tab === "chamcong"}
+              onClick={() => setTab("chamcong")}
+              label="Dữ Liệu Chấm Công"
+              icon="⏱"
+            />
+          )}
+          {canSeeNhanVien && (
+            <TabBtn
+              active={tab === "nhanvien"}
+              onClick={() => setTab("nhanvien")}
+              label="Whitelist Nhân Viên"
+              icon="👥"
+            />
+          )}
         </div>
       </div>
-      {tab === "chamcong" ? <ChamCongTable /> : <NhanVienTable />}
+
+      {tab === "chamcong" && canSeeChamCong && <ChamCongTable />}
+      {tab === "nhanvien" && canSeeNhanVien && <NhanVienTable />}
     </div>
   );
 }

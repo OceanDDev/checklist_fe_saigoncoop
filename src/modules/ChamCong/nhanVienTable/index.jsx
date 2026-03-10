@@ -1,8 +1,21 @@
 /* eslint-disable react/prop-types */
-// pages/chamcong/FormCheck.jsx
+// pages/chamcong/nhanVienTable.jsx
 import { nhanVienService } from "@/services/nhanvien.service";
 import { useState, useEffect, useCallback } from "react";
 import ImportNhanVien from "./importNhanVien";
+
+const ROLE_FULL = 28;
+
+function getRoleFromStorage() {
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return null;
+    const user = JSON.parse(raw);
+    return user?.role ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Modal Thêm / Sửa ────────────────────────────────────────────────────────
 const NhanVienModal = ({ editData, onClose, onSaved }) => {
@@ -151,9 +164,7 @@ const ImportModal = ({ onClose, onDone }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
     <div className="w-full max-w-2xl bg-card border border-border rounded-2xl p-7 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-base font-bold text-foreground">
-          Import Nhân Viên
-        </h2>
+        <h2 className="text-base font-bold text-foreground">Import Nhân Viên</h2>
         <button
           onClick={onClose}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors text-lg"
@@ -168,24 +179,28 @@ const ImportModal = ({ onClose, onDone }) => (
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function NhanVienTable() {
+  const role = getRoleFromStorage();
+  const isFullAccess = role === ROLE_FULL;
+
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [modal, setModal] = useState(null); // null | "add" | "import" | <rowObj>
+  const [modal, setModal] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await nhanVienService.getDanhSach();
-      setData(res?.data || []);
+      const list = res?.data || [];
+      // Mới nhất lên đầu
+      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setData(list);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const filtered = data.filter((r) => {
     if (!search) return true;
@@ -216,23 +231,15 @@ export default function NhanVienTable() {
     }
   };
 
-  const closeModal = () => setModal(null);
-  const afterSave = () => {
-    closeModal();
-    fetchData();
-  };
-  const afterImport = () => {
-    closeModal();
-    fetchData();
-  };
+  const closeModal  = () => setModal(null);
+  const afterSave   = () => { closeModal(); fetchData(); };
+  const afterImport = () => { closeModal(); fetchData(); };
 
-  const th =
-    "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
+  const th = "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
   const td = "px-5 py-4 text-sm border-b border-border/50 align-middle";
 
   return (
     <>
-      {/* Modal thêm / sửa */}
       {(modal === "add" || (modal && modal !== "import")) && (
         <NhanVienModal
           editData={modal === "add" ? null : modal}
@@ -240,8 +247,6 @@ export default function NhanVienTable() {
           onSaved={afterSave}
         />
       )}
-
-      {/* Modal import */}
       {modal === "import" && (
         <ImportModal onClose={closeModal} onDone={afterImport} />
       )}
@@ -250,37 +255,35 @@ export default function NhanVienTable() {
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold text-foreground">
-              Whitelist Nhân Viên
-            </h1>
+            <h1 className="text-xl font-bold text-foreground">Whitelist Nhân Viên</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Chỉ nhân viên trong danh sách mới được chấm công
             </p>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setModal("import")}
-              className="flex items-center gap-2 px-4 py-2.5 border border-border bg-card hover:bg-muted/60 text-foreground text-sm font-semibold rounded-xl transition-colors"
-            >
-              <span>📥</span>
-              <span>Import</span>
-            </button>
-            <button
-              onClick={() => setModal("add")}
-              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-bold rounded-xl transition-colors"
-            >
-              + Thêm Nhân Viên
-            </button>
-          </div>
+          {/* Buttons — chỉ role 28 mới thấy */}
+          {isFullAccess && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setModal("import")}
+                className="flex items-center gap-2 px-4 py-2.5 border border-border bg-card hover:bg-muted/60 text-foreground text-sm font-semibold rounded-xl transition-colors"
+              >
+                <span>📥</span>
+                <span>Import</span>
+              </button>
+              <button
+                onClick={() => setModal("add")}
+                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-bold rounded-xl transition-colors"
+              >
+                + Thêm Nhân Viên
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Search */}
         <div className="relative w-full sm:w-72">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-            🔍
-          </span>
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">🔍</span>
           <input
             type="text"
             placeholder="Tìm mã / tên / bộ phận..."
@@ -290,12 +293,10 @@ export default function NhanVienTable() {
           />
         </div>
 
-        {/* Table Card */}
+        {/* Table */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-            <span className="text-sm font-semibold text-foreground">
-              Danh sách nhân viên
-            </span>
+            <span className="text-sm font-semibold text-foreground">Danh sách nhân viên</span>
             <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
               {filtered.length} nhân viên
             </span>
@@ -312,16 +313,14 @@ export default function NhanVienTable() {
                   <th className={th}>Chức Vụ</th>
                   <th className={th}>Số ĐT</th>
                   <th className={th}>Trạng Thái</th>
-                  <th className={`${th} text-center`}>Thao Tác</th>
+                  {/* Cột thao tác — chỉ role 28 */}
+                  {isFullAccess && <th className={`${th} text-center`}>Thao Tác</th>}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td
-                      colSpan={8}
-                      className="text-center py-16 text-sm text-muted-foreground"
-                    >
+                    <td colSpan={isFullAccess ? 8 : 7} className="text-center py-16 text-sm text-muted-foreground">
                       <div className="flex items-center justify-center gap-2">
                         <span className="animate-spin">◌</span> Đang tải...
                       </div>
@@ -329,23 +328,15 @@ export default function NhanVienTable() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={8}
-                      className="text-center py-16 text-sm text-muted-foreground"
-                    >
+                    <td colSpan={isFullAccess ? 8 : 7} className="text-center py-16 text-sm text-muted-foreground">
                       <div className="text-4xl mb-3 opacity-30">👥</div>
                       Chưa có nhân viên nào
                     </td>
                   </tr>
                 ) : (
                   filtered.map((r, i) => (
-                    <tr
-                      key={r._id}
-                      className="hover:bg-muted/20 transition-colors"
-                    >
-                      <td
-                        className={`${td} text-muted-foreground text-xs font-mono`}
-                      >
+                    <tr key={r._id} className="hover:bg-muted/20 transition-colors">
+                      <td className={`${td} text-muted-foreground text-xs font-mono`}>
                         {String(i + 1).padStart(2, "0")}
                       </td>
                       <td className={td}>
@@ -353,59 +344,51 @@ export default function NhanVienTable() {
                           {r.ma_nhan_vien}
                         </span>
                       </td>
-                      <td className={`${td} font-medium text-foreground`}>
-                        {r.ten_nhan_vien}
-                      </td>
-                      <td className={`${td} text-muted-foreground`}>
-                        {r.bo_phan}
-                      </td>
-                      <td className={`${td} text-muted-foreground`}>
-                        {r.chuc_vu || "—"}
-                      </td>
-                      <td
-                        className={`${td} font-mono text-sm text-muted-foreground`}
-                      >
-                        {r.so_dien_thoai || "—"}
-                      </td>
+                      <td className={`${td} font-medium text-foreground`}>{r.ten_nhan_vien}</td>
+                      <td className={`${td} text-muted-foreground`}>{r.bo_phan}</td>
+                      <td className={`${td} text-muted-foreground`}>{r.chuc_vu || "—"}</td>
+                      <td className={`${td} font-mono text-sm text-muted-foreground`}>{r.so_dien_thoai || "—"}</td>
                       <td className={td}>
                         {r.active ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            Hoạt động
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Hoạt động
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            Bị khóa
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />Bị khóa
                           </span>
                         )}
                       </td>
-                      <td className={`${td} text-center`}>
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => setModal(r)}
-                            className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:border-ring hover:text-foreground transition-colors"
-                          >
-                            Sửa
-                          </button>
-                          <button
-                            onClick={() => handleToggle(r._id)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                              r.active
-                                ? "text-orange-400 border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/15"
-                                : "text-emerald-400 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/15"
-                            }`}
-                          >
-                            {r.active ? "Khóa" : "Mở"}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(r._id, r.ten_nhan_vien)}
-                            className="px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/30 bg-destructive/5 rounded-lg hover:bg-destructive/15 transition-colors"
-                          >
-                            Xóa
-                          </button>
-                        </div>
-                      </td>
+
+                      {/* Thao tác — chỉ role 28 */}
+                      {isFullAccess && (
+                        <td className={`${td} text-center`}>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setModal(r)}
+                              className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:border-ring hover:text-foreground transition-colors"
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              onClick={() => handleToggle(r._id)}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                                r.active
+                                  ? "text-orange-400 border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/15"
+                                  : "text-emerald-400 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/15"
+                              }`}
+                            >
+                              {r.active ? "Khóa" : "Mở"}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(r._id, r.ten_nhan_vien)}
+                              className="px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/30 bg-destructive/5 rounded-lg hover:bg-destructive/15 transition-colors"
+                            >
+                              Xóa
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}

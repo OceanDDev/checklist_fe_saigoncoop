@@ -35,6 +35,7 @@ import HandleTonKho from "./modules/Tonkho";
 import ChamCongPage from "./modules/ChamCong";
 import FormCheckInQR from "./modules/ChamCong/FormCheck/FormCheckInQR.jsx";
 import QrDisplay from "./modules/ChamCong/FormCheck/QrDisplay";
+import QrScanner from "./modules/ChamCong/AppQuetQR";
 
 function App() {
   return (
@@ -350,7 +351,7 @@ function App() {
         <Route
           path="/chamcong"
           element={
-            <PrivateRoute allowRoles={[27]}>
+            <PrivateRoute allowRoles={[27,28]}>
               <MainLayout>
                 <ChamCongPage />
               </MainLayout>
@@ -359,6 +360,7 @@ function App() {
         />
         <Route path="/chamcongform/:token" element={<FormCheckInQR />} />
         <Route path="/qr-display" element={<QrDisplay />} />
+        <Route path="/qr-scan" element={<QrScanner />} />
 
         {/* PHIEU SOAN */}
 

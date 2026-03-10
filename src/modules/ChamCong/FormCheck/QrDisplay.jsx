@@ -1,29 +1,73 @@
 /* eslint-disable react/prop-types */
-// pages/chamcong/QrDisplay.jsx
-import { useState, useEffect } from "react";
+// pages/chamcong/QrDisplay.jsx  —  TV kiosk layout (Tailwind)
+import { useState, useEffect, useCallback, memo } from "react";
 import { io } from "socket.io-client";
 import QRCode from "react-qr-code";
 import { chamCongService } from "@/services/chamcong.service";
 
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 const SOCKET_URL = import.meta.env.VITE_API || "http://localhost:5173";
-const TOKEN_TTL = 60;
-function LiveClock() {
-  const [now, setNow] = useState(new Date());
+const TOKEN_TTL = 5; // seconds — match your backend
+
+const STEPS = [
+  {
+    n: "01",
+    icon: "📱",
+    label: "Mở camera",
+    sub: "Camera điện thoại hoặc app quét QR",
+  },
+  {
+    n: "02",
+    icon: "🎯",
+    label: "Quét mã QR",
+    sub: "Hướng camera vào mã QR trung tâm",
+  },
+  {
+    n: "03",
+    icon: "🪪",
+    label: "Nhập mã NV",
+    sub: "Điền mã nhân viên vào form",
+  },
+  {
+    n: "04",
+    icon: "✅",
+    label: "Xác nhận",
+    sub: "Chọn Check-In / Out rồi bấm xác nhận",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════
+// ACCENT HELPERS  (dynamic color — must stay inline)
+// ═══════════════════════════════════════════════════════════
+function accentColor(progress) {
+  if (progress > 60) return "#3d9e6e";
+  if (progress > 25) return "#c8841a";
+  return "#c04030";
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIVE CLOCK
+// ═══════════════════════════════════════════════════════════
+const LiveClock = memo(function LiveClock() {
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
   }, []);
+
   return (
-    <div className="text-center select-none">
-      <div className="text-5xl sm:text-6xl font-bold tabular-nums tracking-tight text-foreground leading-none">
+    <div className="select-none leading-none">
+      <div className="font-mono text-[clamp(2.8rem,4.5vw,5.2rem)] font-bold tracking-tight text-neutral-100">
         {now.toLocaleTimeString("vi-VN", {
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
         })}
       </div>
-      <div className="mt-2 text-sm text-muted-foreground capitalize">
+      <div className="font-mono text-[clamp(0.65rem,0.9vw,0.85rem)] text-neutral-600 mt-2 tracking-widest uppercase">
         {now.toLocaleDateString("vi-VN", {
           weekday: "long",
           day: "2-digit",
@@ -33,8 +77,68 @@ function LiveClock() {
       </div>
     </div>
   );
-}
+});
 
+// ═══════════════════════════════════════════════════════════
+// CORNER BRACKETS  (dynamic color — inline required)
+// ═══════════════════════════════════════════════════════════
+const Corners = memo(function Corners({
+  color,
+  size = 36,
+  thickness = 3,
+  offset = 16,
+}) {
+  const base = {
+    position: "absolute",
+    width: size,
+    height: size,
+    transition: "border-color 0.6s ease",
+  };
+  return (
+    <>
+      <div
+        style={{
+          ...base,
+          top: -offset,
+          left: -offset,
+          borderTop: `${thickness}px solid ${color}`,
+          borderLeft: `${thickness}px solid ${color}`,
+        }}
+      />
+      <div
+        style={{
+          ...base,
+          top: -offset,
+          right: -offset,
+          borderTop: `${thickness}px solid ${color}`,
+          borderRight: `${thickness}px solid ${color}`,
+        }}
+      />
+      <div
+        style={{
+          ...base,
+          bottom: -offset,
+          left: -offset,
+          borderBottom: `${thickness}px solid ${color}`,
+          borderLeft: `${thickness}px solid ${color}`,
+        }}
+      />
+      <div
+        style={{
+          ...base,
+          bottom: -offset,
+          right: -offset,
+          borderBottom: `${thickness}px solid ${color}`,
+          borderRight: `${thickness}px solid ${color}`,
+        }}
+      />
+    </>
+  );
+});
+
+// ═══════════════════════════════════════════════════════════
+// MAIN
+// ═══════════════════════════════════════════════════════════
 export default function QrDisplay() {
   const [token, setToken] = useState(null);
   const [expiry, setExpiry] = useState(0);
@@ -44,19 +148,19 @@ export default function QrDisplay() {
 
   const qrUrl = token ? `${BASE_URL}/chamcongform/${token}` : null;
 
-  const applyToken = (newToken, newExpiry) => {
+  const applyToken = useCallback((t, e) => {
     setFlash(true);
-    setTimeout(() => setFlash(false), 400);
-    setToken(newToken);
-    setExpiry(newExpiry);
-  };
+    setTimeout(() => setFlash(false), 480);
+    setToken(t);
+    setExpiry(e);
+  }, []);
 
   useEffect(() => {
     chamCongService
       .getCurrentQr()
       .then((res) => applyToken(res.token, res.expiry))
       .catch(console.error);
-  }, []);
+  }, [applyToken]);
 
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ["websocket"] });
@@ -64,70 +168,220 @@ export default function QrDisplay() {
     socket.on("disconnect", () => setConnected(false));
     socket.on("qr:updated", ({ token: t, expiry: e }) => applyToken(t, e));
     return () => socket.disconnect();
-  }, []);
+  }, [applyToken]);
 
   useEffect(() => {
-    const t = setInterval(() => {
+    const id = setInterval(() => {
       setTimeLeft(Math.max(0, Math.ceil((expiry - Date.now()) / 1000)));
     }, 200);
-    return () => clearInterval(t);
+    return () => clearInterval(id);
   }, [expiry]);
 
-  const progress = (timeLeft / TOKEN_TTL) * 100;
+  const progress = Math.min(100, (timeLeft / TOKEN_TTL) * 100);
+  const accent = accentColor(progress);
+  const qrSize = Math.min(
+    480,
+    Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.38),
+  );
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-8 px-4">
-      <div className="flex flex-col items-center gap-2">
-        <img
-          src="/img/logonew.png"
-          alt="Logo"
-          className="h-12 w-auto object-contain drop-shadow-md"
-          onError={(e) => {
-            e.target.style.display = "none";
+    <div className="h-screen w-screen bg-[#09090a] grid grid-rows-[1fr_auto] overflow-hidden relative font-sans">
+      {/* Dot grid */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+
+      {/* Connection indicator */}
+      <div className="fixed top-5 right-7 z-10 flex items-center gap-2">
+        <div
+          className="w-2 h-2 rounded-full transition-all duration-300"
+          style={{
+            background: connected ? "#3d9e6e" : "#555",
+            boxShadow: connected ? "0 0 10px #3d9e6e88" : "none",
           }}
-        /> 
-      </div>
-
-      <div className="bg-card border border-border rounded-2xl px-8 py-5 shadow-sm w-full max-w-xs">
-        <LiveClock />
-      </div>
-
-      {/* QR Code — bỏ overlay đỏ */}
-      <div
-        className={`bg-white rounded-3xl p-7 shadow-2xl transition-all duration-300 ${flash ? "scale-90 opacity-30" : "scale-100 opacity-100"}`}
-      >
-        {qrUrl ? (
-          <QRCode value={qrUrl} size={240} />
-        ) : (
-          <div className="w-[240px] h-[240px] flex items-center justify-center">
-            <span className="animate-spin text-4xl text-gray-300">◌</span>
-          </div>
-        )}
-      </div>
-
-      {/* Progress bar — không đổi màu đỏ */}
-      <div className="w-72 space-y-2">
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Mã mới sau</span>
-          <span className="font-mono font-bold tabular-nums text-foreground">
-            {timeLeft}s
-          </span>
-        </div>
-        <div className="h-2 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full bg-emerald-500 transition-all duration-200"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-
-      <div
-        className={`flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border ${connected ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-yellow-400 bg-yellow-500/10 border-yellow-500/20"}`}
-      >
-        <span
-          className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-400 animate-pulse" : "bg-yellow-400"}`}
         />
-        {connected ? "Kết nối realtime" : "Đang kết nối lại..."}
+        <span
+          className="font-mono text-[0.6rem] tracking-widest uppercase"
+          style={{ color: connected ? "#3d9e6e" : "#404040" }}
+        >
+          {connected ? "Live" : "Offline"}
+        </span>
+      </div>
+
+      {/* ── MAIN 3-COLUMN GRID ── */}
+      <div className="relative z-10 grid grid-cols-[1fr_2fr_1fr] items-center px-[3vw] py-[2.5vw] gap-[2vw] min-h-0">
+        {/* ── LEFT: Clock + brand ── */}
+        <div className="flex flex-col justify-center gap-[clamp(1.5rem,3vh,3.5rem)] pr-[1.5vw] border-r border-neutral-900">
+          {/* Brand */}
+          <div className="flex items-center gap-3">
+            <img
+              src="/img/logonew.png"
+              alt="logo"
+              className="h-[clamp(2rem,3.2vh,3.5rem)] w-auto object-contain"
+              onError={(e) => {
+                e.target.style.display = "none";
+              }}
+            />
+            <div>
+              <div className="font-semibold text-[clamp(0.75rem,1.1vw,1rem)] text-neutral-300 tracking-wide">
+                Hệ Thống Chấm Công
+              </div>
+              <div className="font-mono text-[clamp(0.55rem,0.75vw,0.7rem)] text-neutral-700 tracking-[0.15em] uppercase mt-0.5">
+                SAIGON COOP
+              </div>
+            </div>
+          </div>
+
+          {/* Clock */}
+          <LiveClock />
+
+          {/* Divider */}
+          <div className="h-px bg-neutral-900" />
+        </div>
+
+        {/* ── CENTER: QR ── */}
+        <div className="flex flex-col items-center justify-center gap-[clamp(1.2rem,2.5vh,2.5rem)]">
+          {/* Label */}
+          <div className="font-mono text-[clamp(0.6rem,0.8vw,0.75rem)] tracking-[0.3em] uppercase text-neutral-700">
+            QUÉT ĐỂ CHẤM CÔNG
+          </div>
+
+          {/* QR box */}
+          <div className="relative">
+            <Corners color={accent} size={40} thickness={3} offset={18} />
+
+            {/* Glow */}
+            <div
+              className="absolute -inset-6 rounded-2xl pointer-events-none transition-all duration-500"
+              style={{
+                background: `radial-gradient(ellipse at center, ${accent}12 0%, transparent 70%)`,
+              }}
+            />
+
+            <div
+              className="bg-white rounded-xl transition-all duration-300"
+              style={{
+                padding: "clamp(14px,1.8vw,24px)",
+                opacity: flash ? 0 : 1,
+                transform: flash ? "scale(0.9)" : "scale(1)",
+                boxShadow: flash
+                  ? "none"
+                  : `0 0 100px ${accent}28, 0 24px 80px rgba(0,0,0,0.7)`,
+              }}
+            >
+              {qrUrl ? (
+                <QRCode value={qrUrl} size={qrSize} level="M" />
+              ) : (
+                <div
+                  className="flex items-center justify-center text-neutral-400"
+                  style={{ width: qrSize, height: qrSize }}
+                >
+                  <span className="text-[clamp(2rem,4vw,4rem)] animate-spin">
+                    ◌
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Progress bar + timer */}
+          <div style={{ width: qrSize + 48 }}>
+            <div className="flex justify-between mb-2">
+              <span className="font-mono text-[clamp(0.55rem,0.72vw,0.68rem)] tracking-[0.15em] uppercase text-neutral-700">
+                Mã mới sau
+              </span>
+              <span
+                className="font-mono text-[clamp(0.6rem,0.78vw,0.72rem)] font-bold min-w-[2.5rem] text-right transition-colors duration-300"
+                style={{ color: accent }}
+              >
+                {timeLeft}s
+              </span>
+            </div>
+            <div className="h-0.5 bg-neutral-900 rounded overflow-hidden">
+              <div
+                className="h-full rounded transition-all duration-200 ease-linear"
+                style={{
+                  width: `${progress}%`,
+                  background: accent,
+                  boxShadow: `0 0 10px ${accent}`,
+                  transition: "width 0.2s linear, background 0.5s ease",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT: How-to ── */}
+        <div className="flex flex-col justify-center gap-[clamp(0.8rem,2vh,1.8rem)] pl-[1.5vw] border-l border-neutral-900">
+          <div className="font-mono text-[clamp(0.55rem,0.72vw,0.65rem)] tracking-[0.25em] uppercase text-neutral-700 mb-1">
+            HƯỚNG DẪN
+          </div>
+
+          {STEPS.map(({ n, icon, label, sub }) => (
+            <div
+              key={n}
+              className="flex gap-[clamp(0.7rem,1.2vw,1.2rem)] items-start"
+            >
+              {/* Step number */}
+              <div className="font-mono text-[clamp(0.65rem,0.9vw,0.85rem)] font-bold text-green-900 shrink-0 min-w-[1.8rem] leading-none pt-0.5">
+                {n}
+              </div>
+              {/* Icon */}
+              <div className="text-[clamp(0.9rem,1.4vw,1.3rem)] shrink-0 leading-none pt-0.5">
+                {icon}
+              </div>
+              {/* Text */}
+              <div>
+                <div className="text-[clamp(0.72rem,1vw,0.92rem)] font-bold text-neutral-300 mb-1 leading-tight">
+                  {label}
+                </div>
+                <div className="text-[clamp(0.6rem,0.82vw,0.75rem)] text-neutral-500 leading-relaxed">
+                  {sub}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Divider */}
+          <div className="h-px bg-neutral-900 my-1" />
+
+          {/* Warning */}
+          <div className="flex gap-2 items-start bg-[#110f0a] border border-yellow-950 rounded-lg p-3">
+            <span className="text-[clamp(0.7rem,1vw,0.9rem)] shrink-0">⚠️</span>
+            <span className="text-[clamp(0.58rem,0.78vw,0.72rem)] text-yellow-800 leading-relaxed">
+              Chấm công hộ sẽ bị xử lý kỷ luật theo nội quy công ty.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── BOTTOM BAR ── */}
+      <div className="relative z-10 border-t border-neutral-900 bg-[#070707] flex items-center justify-between px-[2.5vw] py-3">
+        <div className="font-mono text-[clamp(0.5rem,0.65vw,0.6rem)] tracking-[0.2em] text-neutral-800 uppercase">
+          HỆ THỐNG CHẤM CÔNG — SAIGON COOP
+        </div>
+        <div className="flex items-center gap-6">
+          <div className="font-mono text-[clamp(0.5rem,0.65vw,0.6rem)] tracking-[0.15em] text-neutral-800 uppercase">
+            QR · GPS · DEVICE ID
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div
+              className="w-1.5 h-1.5 rounded-full animate-pulse"
+              style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
+            />
+            <span
+              className="font-mono text-[clamp(0.48rem,0.62vw,0.58rem)] tracking-[0.15em] uppercase transition-colors duration-300"
+              style={{ color: accent }}
+            >
+              LIVE
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -82,7 +82,7 @@ const capNhat = async (id, payload) => {
 const toggleActive = async (id) => {
   try {
     return await requestService.patch(
-      `${URL.chamcong.nhanvien}/${id}/toggle-active`,
+      `${URL.chamcong.nhanvien}/${id}/toggle`,
       {},
       undefined,
       ApiServer,

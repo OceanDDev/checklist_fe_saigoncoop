@@ -36,6 +36,7 @@ const Header = () => {
       22: "PHỤ XE - BỐC XẾP",
       23: "TRANG THIẾT BỊ",
       25: "TỒN KHO",
+      27: "CHẤM CÔNG",
     };
     return roles[role] || "CHECKLIST";
   };
