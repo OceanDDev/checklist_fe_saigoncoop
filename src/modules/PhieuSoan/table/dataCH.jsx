@@ -202,7 +202,7 @@ const DataCHTable = forwardRef((props, ref) => {
               onClick={() => setShowImportModal(true)}
               className="h-10 rounded-xl bg-blue-600 px-4 text-white hover:bg-blue-700 whitespace-nowrap font-medium"
             >
-              📥 Import Excel
+              📥 Import CH
             </button>
             <button
               onClick={async () => {

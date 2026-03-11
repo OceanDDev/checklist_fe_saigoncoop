@@ -4,11 +4,12 @@
 import { chamCongService } from "@/services/chamcong.service";
 import { useState, useEffect, useCallback, useRef } from "react";
 import ExcelJS from "exceljs";
+import ImportNangSuat from "./ImportNangSuat";
 
 // ─── Helpers ngày ─────────────────────────────────────────────────────────────
 function tinhGioThuc(tongGio) {
   if (!tongGio || tongGio <= 0) return 0;
-  return tongGio > 5 ? tongGio - 1 : tongGio;
+  return tongGio >= 5 ? tongGio - 1 : tongGio;
 }
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -1059,15 +1060,12 @@ const GhiChuModal = ({ record, onClose, onSaved }) => {
 const ViPhamModal = ({ record, onClose }) => {
   const fmt = (iso) => {
     if (!iso) return "—";
-    return new Date(iso).toLocaleString("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
+    const d = new Date(new Date(iso).getTime() + 7 * 60 * 60 * 1000);
+    const date = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+    const time = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}:${String(d.getUTCSeconds()).padStart(2, "0")}`;
+    return `${date} ${time}`;
   };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
       <div className="w-full max-w-md bg-card border-2 border-red-500/40 rounded-2xl overflow-hidden shadow-2xl shadow-red-500/10">
@@ -1172,13 +1170,13 @@ const formatTime = (iso) => {
     minute: "2-digit",
   });
 };
+const toVNDate = (iso) =>
+  new Date(new Date(iso).getTime() + 7 * 60 * 60 * 1000);
+
 const formatDate = (iso) => {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const d = toVNDate(iso);
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
 };
 const formatTongGio = (gio) => {
   if (!gio && gio !== 0) return "—";
@@ -1333,6 +1331,7 @@ export default function ChamCongTable() {
             >
               <span className="text-base leading-none">+</span> Thêm Mới
             </button>
+            <ImportNangSuat onSuccess={fetchData} />
             <ExportChamCongMau records={data} />
           </div>
         </div>
@@ -1400,6 +1399,9 @@ export default function ChamCongTable() {
                   <th className={th}>Tổng Giờ</th>
                   <th className={th}>Ngày</th>
                   <th className={th}>Trạng Thái</th>
+                  <th className={`${th} text-center`}>Phiếu</th>
+                  <th className={`${th} text-center`}>Kiện</th>
+                  <th className={`${th} text-center`}>Dòng</th>
                   <th className={th}>Ghi Chú</th>
                   <th className={`${th} text-center`}>Thao Tác</th>
                 </tr>
@@ -1408,7 +1410,7 @@ export default function ChamCongTable() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={12}
+                      colSpan={15}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -1419,7 +1421,7 @@ export default function ChamCongTable() {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={12}
+                      colSpan={15}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="text-4xl mb-3 opacity-30">⏱</div>Chưa có
@@ -1509,6 +1511,39 @@ export default function ChamCongTable() {
                               </button>
                             )}
                           </div>
+                        </td>
+                        <td className={`${td} text-center`}>
+                          {r.so_phieu != null ? (
+                            <span className="font-semibold text-violet-400 bg-violet-500/8 px-2 py-0.5 rounded text-xs">
+                              {r.so_phieu.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/30 text-xs">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td className={`${td} text-center`}>
+                          {r.so_kien != null ? (
+                            <span className="font-semibold text-sky-400 bg-sky-500/8 px-2 py-0.5 rounded text-xs">
+                              {r.so_kien.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/30 text-xs">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td className={`${td} text-center`}>
+                          {r.so_dong != null ? (
+                            <span className="font-semibold text-orange-400 bg-orange-500/8 px-2 py-0.5 rounded text-xs">
+                              {r.so_dong.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/30 text-xs">
+                              —
+                            </span>
+                          )}
                         </td>
                         <td
                           className={`${td} text-muted-foreground max-w-[160px] truncate`}

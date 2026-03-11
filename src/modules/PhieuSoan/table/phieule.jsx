@@ -631,6 +631,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
       { header: "Tổng Khối Lượng (kg)", key: "tong_khoi_luong", width: 18 },
       { header: "Số Lần In", key: "so_lan_in_phieu", width: 12 },
       { header: "Ngày In Phiếu", key: "ngay_in_phieu", width: 20 },
+      { header: "Ngày Import", key: "ngay_import", width: 20 }, // ✅ THÊM
+
       { header: "Ghi Chú Phiếu", key: "ghi_chu_phieu", width: 40 },
     ];
 
@@ -663,6 +665,8 @@ const PhieuLeTable = forwardRef((props, ref) => {
         tong_khoi_luong: phieu.tong_khoi_luong || 0,
         so_lan_in_phieu: phieu.so_lan_in_phieu || 0,
         ngay_in_phieu: formatDate(phieu.ngay_in_phieu),
+        ngay_import: formatDate(phieu.ngay_import), // ✅ THÊM
+
         ghi_chu_phieu: phieu.ghi_chu_phieu || "",
       });
 
@@ -695,6 +699,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
         pattern: "solid",
         fgColor: { argb: "FFFFF4E6" },
       };
+      row.getCell("ngay_import").fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE8F5E9" },
+      }; // ✅ THÊM
     });
 
     worksheet.views = [{ state: "frozen", ySplit: 1 }];

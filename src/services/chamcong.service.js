@@ -165,6 +165,13 @@ const adminEditChamCong = async (id, payload) => {
     ApiServer,
   );
 };
+const importNangSuat = async (payload) =>
+  requestService.post(
+    `${URL.chamcong.chamcong}/import-nang-suat`,
+    payload,
+    undefined,
+    ApiServer,
+  );
 export const chamCongService = {
   getAllChamCong,
   getChamCongById,
@@ -177,5 +184,6 @@ export const chamCongService = {
   checkChamCongQR,
   validateQrToken,
   adminAddChamCong,
-  adminEditChamCong
+  adminEditChamCong,
+  importNangSuat
 };

@@ -5,7 +5,6 @@ import ExcelJS from "exceljs";
 const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
   const [exporting, setExporting] = useState(false);
 
-  // ✅ HÀM FORMAT NGÀY GIỜ
   const formatDate = (dateValue) => {
     if (!dateValue) return "";
     try {
@@ -35,7 +34,6 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Danh sách phiếu soạn");
 
-      // ✅ Định nghĩa các cột (THÊM ngay_in_phieu)
       worksheet.columns = [
         { header: "STT", key: "stt", width: 8 },
         { header: "Số Document", key: "so_document", width: 15 },
@@ -46,12 +44,13 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
         { header: "Chuyến", key: "chuyen", width: 12 },
         { header: "Tổng Kiện", key: "tong_kien", width: 12 },
         { header: "Tổng Khối Lượng (kg)", key: "tong_khoi_luong", width: 18 },
-        { header: "Số Lần In", key: "so_lan_in_phieu", width: 12 }, // ✅ THÊM
-        { header: "Ngày In Phiếu", key: "ngay_in_phieu", width: 20 }, // ✅ THÊM
+        { header: "Số Lần In", key: "so_lan_in_phieu", width: 12 },
+        { header: "Ngày In Phiếu", key: "ngay_in_phieu", width: 20 },
+        { header: "Ngày Import", key: "ngay_import", width: 20 }, // ✅ MỚI
         { header: "Ghi Chú Phiếu", key: "ghi_chu_phieu", width: 40 },
       ];
 
-      // ✅ Style cho header
+      // Style header
       worksheet.getRow(1).eachCell((cell) => {
         cell.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
         cell.fill = {
@@ -68,7 +67,7 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
         };
       });
 
-      // ✅ Thêm dữ liệu
+      // Data rows
       selectedPhieus.forEach((phieu, index) => {
         const row = worksheet.addRow({
           stt: index + 1,
@@ -80,12 +79,12 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
           chuyen: phieu.chuyen || "",
           tong_kien: phieu.tong_kien || 0,
           tong_khoi_luong: phieu.tong_khoi_luong || 0,
-          so_lan_in_phieu: phieu.so_lan_in_phieu || 0, // ✅ THÊM
-          ngay_in_phieu: formatDate(phieu.ngay_in_phieu), // ✅ THÊM (format ngày)
+          so_lan_in_phieu: phieu.so_lan_in_phieu || 0,
+          ngay_in_phieu: formatDate(phieu.ngay_in_phieu),
+          ngay_import: formatDate(phieu.ngay_import), // ✅ MỚI
           ghi_chu_phieu: phieu.ghi_chu_phieu || "",
         });
 
-        // ✅ Style cho data rows
         row.eachCell((cell, colNumber) => {
           cell.border = {
             top: { style: "thin", color: { argb: "FFD0D0D0" } },
@@ -94,34 +93,38 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
             right: { style: "thin", color: { argb: "FFD0D0D0" } },
           };
           cell.alignment = { vertical: "middle" };
-
-          // ✅ Center align cho STT, số lượng, số lần in (CẬP NHẬT)
+          // Center: STT, tong_kien, tong_khoi_luong, so_lan_in_phieu
           if ([1, 8, 9, 10].includes(colNumber)) {
             cell.alignment = { ...cell.alignment, horizontal: "center" };
           }
         });
 
-        // ✅ Highlight số kiện và khối lượng
+        // Highlight tong_kien, tong_khoi_luong
         row.getCell("tong_kien").fill = {
           type: "pattern",
           pattern: "solid",
-          fgColor: { argb: "FFF0F8FF" }, // Light blue
+          fgColor: { argb: "FFF0F8FF" },
         };
         row.getCell("tong_khoi_luong").fill = {
           type: "pattern",
           pattern: "solid",
-          fgColor: { argb: "FFF0F8FF" }, // Light blue
+          fgColor: { argb: "FFF0F8FF" },
         };
-
-        // ✅ Highlight số lần in (màu vàng nhạt)
+        // Highlight so_lan_in_phieu
         row.getCell("so_lan_in_phieu").fill = {
           type: "pattern",
           pattern: "solid",
-          fgColor: { argb: "FFFFF4E6" }, // Light orange
+          fgColor: { argb: "FFFFF4E6" },
+        };
+        // Highlight ngay_import — xanh nhạt để phân biệt
+        row.getCell("ngay_import").fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE8F5E9" },
         };
       });
 
-      // ✅ Thêm tổng cộng ở cuối
+      // Summary row
       const summaryRow = worksheet.addRow({
         stt: "",
         so_document: "",
@@ -138,8 +141,9 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
           (sum, p) => sum + (p.tong_khoi_luong || 0),
           0,
         ),
-        so_lan_in_phieu: "", // ✅ THÊM (để trống)
-        ngay_in_phieu: "", // ✅ THÊM (để trống)
+        so_lan_in_phieu: "",
+        ngay_in_phieu: "",
+        ngay_import: "", // ✅ MỚI
         ghi_chu_phieu: "",
       });
 
@@ -148,7 +152,7 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
         cell.fill = {
           type: "pattern",
           pattern: "solid",
-          fgColor: { argb: "FFFFEB3B" }, // Yellow
+          fgColor: { argb: "FFFFEB3B" },
         };
         cell.border = {
           top: { style: "medium" },
@@ -159,10 +163,8 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
         cell.alignment = { vertical: "middle", horizontal: "center" };
       });
 
-      // ✅ Freeze header row
       worksheet.views = [{ state: "frozen", ySplit: 1 }];
 
-      // ✅ Tạo file và download
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -174,8 +176,6 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      console.log(`✅ Xuất thành công ${selectedPhieus.length} phiếu!`);
     } catch (error) {
       console.error("❌ Lỗi khi xuất Excel:", error);
       alert("Có lỗi xảy ra khi xuất Excel!");
