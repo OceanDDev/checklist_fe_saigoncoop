@@ -11,6 +11,16 @@ const ApiServer = axios.create({
   baseURL: apiEndpoint,
   headers: DEF_HEADERS,
 });
+
+// 👇 Tự động đính kèm token vào mọi request
+ApiServer.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers["Authorization"] = `Bearer ${token}`;
+  }
+  return config;
+});
+
 const ENDPOINT_PREFIX = "/api/saigoncoop";
 
 const URL = {
@@ -62,7 +72,6 @@ const URL = {
     product: ENDPOINT_PREFIX + "/product",
     vendor: ENDPOINT_PREFIX + "/vendor",
     chbx: ENDPOINT_PREFIX + "/chbx",
-
   },
   phieusoan: {
     dinhvi: ENDPOINT_PREFIX + "/dinhvi",
@@ -74,13 +83,13 @@ const URL = {
     ttb: ENDPOINT_PREFIX + "/ttb",
     thietbi: ENDPOINT_PREFIX + "/thietbi",
   },
-   phieule: {
+  phieule: {
     phieule: ENDPOINT_PREFIX + "/phieule",
     dataCH: ENDPOINT_PREFIX + "/dataCH",
   },
-    chamcong: {
+  chamcong: {
     chamcong: ENDPOINT_PREFIX + "/chamcong",
-     nhanvien: ENDPOINT_PREFIX + "/nhanvien",
+    nhanvien: ENDPOINT_PREFIX + "/nhanvien",
   },
 };
 

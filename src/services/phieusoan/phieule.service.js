@@ -66,7 +66,13 @@ const getAllPhieuLe = async (params = {}) => {
     throw error;
   }
 };
-
+FileUploadServer.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers["Authorization"] = `Bearer ${token}`;
+  }
+  return config;
+});
 /** GET: lấy phiếu lẻ theo ID */
 const getPhieuLeById = async (id) => {
   try {
@@ -385,6 +391,6 @@ export const phieuLeService = {
   updatePackUnit1ForPhieu, // ✅ THÊM MỚI
   getPackUnit1Info,
   updateMultipleChiTiet,
-   importSodaTxtPhieuLe,
+  importSodaTxtPhieuLe,
   importSodaTxtPhieuLeMultiple,
 };

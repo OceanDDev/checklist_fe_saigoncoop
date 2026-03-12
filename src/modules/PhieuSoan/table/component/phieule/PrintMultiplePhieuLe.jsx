@@ -244,8 +244,8 @@ const PrintMultiplePhieuLe = ({
                           </p>
                           {/* ✅ Hiển thị thời gian in HIỆN TẠI */}
                           <p>
-                            <span className="font-bold">Ngày In:</span>{" "}
-                            {formatDate(ngayHienThi)}
+                            <span className="font-bold">Ngày Import:</span>{" "}
+                            {formatDate(phieu.ngay_import)}
                           </p>
                         </div>
                       </div>
