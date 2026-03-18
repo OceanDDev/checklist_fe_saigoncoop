@@ -22,6 +22,49 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
     }
   };
 
+  // Gộp danh sách phiếu theo mã cửa hàng
+  const groupByMaCH = (phieus) => {
+    const map = {};
+    phieus.forEach((p) => {
+      const key = p.mach || "UNKNOWN";
+      if (!map[key]) {
+        map[key] = {
+          mach: p.mach || "",
+          tench: p.tench || "",
+          so_phieu: 0,
+          tong_kien: 0,
+          tong_khoi_luong: 0,
+        };
+      }
+      map[key].so_phieu += 1;
+      map[key].tong_kien += p.tong_kien || 0;
+      map[key].tong_khoi_luong += p.tong_khoi_luong || 0;
+    });
+
+    // Sắp xếp theo mã cửa hàng
+    return Object.values(map).sort((a, b) =>
+      String(a.mach).localeCompare(String(b.mach), "vi", { numeric: true }),
+    );
+  };
+
+  const applyHeaderStyle = (row) => {
+    row.eachCell((cell) => {
+      cell.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4472C4" },
+      };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+  };
+
   const handleExportExcel = async () => {
     if (!selectedPhieus || selectedPhieus.length === 0) {
       alert("Vui lòng chọn ít nhất 1 phiếu để xuất!");
@@ -32,9 +75,13 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
 
     try {
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Danh sách phiếu soạn");
 
-      worksheet.columns = [
+      // ────────────────────────────────────────────────
+      // SHEET 1 — Chi tiết từng phiếu
+      // ────────────────────────────────────────────────
+      const ws1 = workbook.addWorksheet("Chi tiết phiếu");
+
+      ws1.columns = [
         { header: "STT", key: "stt", width: 8 },
         { header: "Số Document", key: "so_document", width: 15 },
         { header: "Số SD/TF", key: "sd_tf", width: 15 },
@@ -46,30 +93,14 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
         { header: "Tổng Khối Lượng (kg)", key: "tong_khoi_luong", width: 18 },
         { header: "Số Lần In", key: "so_lan_in_phieu", width: 12 },
         { header: "Ngày In Phiếu", key: "ngay_in_phieu", width: 20 },
-        { header: "Ngày Import", key: "ngay_import", width: 20 }, // ✅ MỚI
+        { header: "Ngày Import", key: "ngay_import", width: 20 },
         { header: "Ghi Chú Phiếu", key: "ghi_chu_phieu", width: 40 },
       ];
 
-      // Style header
-      worksheet.getRow(1).eachCell((cell) => {
-        cell.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
-        cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FF4472C4" },
-        };
-        cell.alignment = { vertical: "middle", horizontal: "center" };
-        cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        };
-      });
+      applyHeaderStyle(ws1.getRow(1));
 
-      // Data rows
       selectedPhieus.forEach((phieu, index) => {
-        const row = worksheet.addRow({
+        const row = ws1.addRow({
           stt: index + 1,
           so_document: phieu.so_document || "",
           sd_tf: phieu.sd_tf || "",
@@ -81,7 +112,7 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
           tong_khoi_luong: phieu.tong_khoi_luong || 0,
           so_lan_in_phieu: phieu.so_lan_in_phieu || 0,
           ngay_in_phieu: formatDate(phieu.ngay_in_phieu),
-          ngay_import: formatDate(phieu.ngay_import), // ✅ MỚI
+          ngay_import: formatDate(phieu.ngay_import),
           ghi_chu_phieu: phieu.ghi_chu_phieu || "",
         });
 
@@ -93,13 +124,11 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
             right: { style: "thin", color: { argb: "FFD0D0D0" } },
           };
           cell.alignment = { vertical: "middle" };
-          // Center: STT, tong_kien, tong_khoi_luong, so_lan_in_phieu
           if ([1, 8, 9, 10].includes(colNumber)) {
             cell.alignment = { ...cell.alignment, horizontal: "center" };
           }
         });
 
-        // Highlight tong_kien, tong_khoi_luong
         row.getCell("tong_kien").fill = {
           type: "pattern",
           pattern: "solid",
@@ -110,13 +139,11 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
           pattern: "solid",
           fgColor: { argb: "FFF0F8FF" },
         };
-        // Highlight so_lan_in_phieu
         row.getCell("so_lan_in_phieu").fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FFFFF4E6" },
         };
-        // Highlight ngay_import — xanh nhạt để phân biệt
         row.getCell("ngay_import").fill = {
           type: "pattern",
           pattern: "solid",
@@ -124,52 +151,77 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
         };
       });
 
-      // Summary row
-      const summaryRow = worksheet.addRow({
-        stt: "",
-        so_document: "",
-        sd_tf: "",
-        mach: "",
-        tench: "",
-        quan: "",
-        chuyen: "TỔNG CỘNG:",
-        tong_kien: selectedPhieus.reduce(
-          (sum, p) => sum + (p.tong_kien || 0),
-          0,
-        ),
-        tong_khoi_luong: selectedPhieus.reduce(
-          (sum, p) => sum + (p.tong_khoi_luong || 0),
-          0,
-        ),
-        so_lan_in_phieu: "",
-        ngay_in_phieu: "",
-        ngay_import: "", // ✅ MỚI
-        ghi_chu_phieu: "",
-      });
+      ws1.views = [{ state: "frozen", ySplit: 1 }];
 
-      summaryRow.eachCell((cell) => {
-        cell.font = { bold: true, size: 11 };
-        cell.fill = {
+      // ────────────────────────────────────────────────
+      // SHEET 2 — Tổng hợp theo mã cửa hàng
+      // ────────────────────────────────────────────────
+      const ws2 = workbook.addWorksheet("Tổng hợp theo cửa hàng");
+
+      ws2.columns = [
+        { header: "STT", key: "stt", width: 8 },
+        { header: "Mã Cửa Hàng", key: "mach", width: 15 },
+        { header: "Tên Cửa Hàng", key: "tench", width: 35 },
+        { header: "Số Phiếu", key: "so_phieu", width: 12 },
+        { header: "Tổng Kiện", key: "tong_kien", width: 14 },
+        { header: "Tổng Khối Lượng (kg)", key: "tong_khoi_luong", width: 20 },
+      ];
+
+      applyHeaderStyle(ws2.getRow(1));
+
+      const grouped = groupByMaCH(selectedPhieus);
+
+      grouped.forEach((item, index) => {
+        const row = ws2.addRow({
+          stt: index + 1,
+          mach: item.mach,
+          tench: item.tench,
+          so_phieu: item.so_phieu,
+          tong_kien: item.tong_kien,
+          tong_khoi_luong: item.tong_khoi_luong,
+        });
+
+        row.eachCell((cell, colNumber) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD0D0D0" } },
+            left: { style: "thin", color: { argb: "FFD0D0D0" } },
+            bottom: { style: "thin", color: { argb: "FFD0D0D0" } },
+            right: { style: "thin", color: { argb: "FFD0D0D0" } },
+          };
+          cell.alignment = { vertical: "middle" };
+          // Căn giữa: STT, Số Phiếu, Tổng Kiện, Tổng KL
+          if ([1, 4, 5, 6].includes(colNumber)) {
+            cell.alignment = { ...cell.alignment, horizontal: "center" };
+          }
+        });
+
+        // Highlight
+        row.getCell("so_phieu").fill = {
           type: "pattern",
           pattern: "solid",
-          fgColor: { argb: "FFFFEB3B" },
+          fgColor: { argb: "FFFFF4E6" },
         };
-        cell.border = {
-          top: { style: "medium" },
-          left: { style: "thin" },
-          bottom: { style: "medium" },
-          right: { style: "thin" },
+        row.getCell("tong_kien").fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFF0F8FF" },
         };
-        cell.alignment = { vertical: "middle", horizontal: "center" };
+        row.getCell("tong_khoi_luong").fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFF0F8FF" },
+        };
       });
 
-      worksheet.views = [{ state: "frozen", ySplit: 1 }];
+      ws2.views = [{ state: "frozen", ySplit: 1 }];
 
+      // ────────────────────────────────────────────────
+      // Download
+      // ────────────────────────────────────────────────
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
-
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = `Danh_Sach_Phieu_Le_${new Date().getTime()}.xlsx`;
@@ -188,7 +240,7 @@ const ExportExcelButton = ({ selectedPhieus, selectedCount }) => {
     <button
       onClick={handleExportExcel}
       disabled={exporting || selectedCount === 0}
-      className="h-10 rounded-xl bg-gradient-to-r from-green-600 to-teal-600 px-4 text-white hover:from-green-700 hover:to-teal-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+      className="h-10 rounded-xl bg-gradient-to-r from-blue-600 to-teal-600 px-4 text-white hover:from-blue-700 hover:to-teal-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
       title="Xuất Excel"
     >
       <svg

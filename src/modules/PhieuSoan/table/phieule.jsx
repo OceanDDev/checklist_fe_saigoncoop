@@ -607,122 +607,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
     }
   }, []);
 
-  const handleExportExcel = useCallback(async () => {
-    if (selectedIds.length === 0) {
-      alert("Vui lòng chọn ít nhất 1 phiếu để xuất!");
-      return;
-    }
-
-    const selectedPhieus = rows.filter((row) => selectedIds.includes(row._id));
-    const ExcelJS = (await import("exceljs")).default;
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Danh sách phiếu soạn");
-
-    worksheet.columns = [
-      { header: "STT", key: "stt", width: 8 },
-      { header: "Số Document", key: "so_document", width: 15 },
-      { header: "Số SD/TF", key: "sd_tf", width: 15 },
-      { header: "Mã Cửa Hàng", key: "mach", width: 15 },
-      { header: "Tên Cửa Hàng", key: "tench", width: 30 },
-      { header: "Quận", key: "quan", width: 15 },
-      { header: "Chuyến", key: "chuyen", width: 12 },
-      { header: "Tổng Kiện", key: "tong_kien", width: 12 },
-      { header: "Tổng Khối Lượng (kg)", key: "tong_khoi_luong", width: 18 },
-      { header: "Số Lần In", key: "so_lan_in_phieu", width: 12 },
-      { header: "Ngày In Phiếu", key: "ngay_in_phieu", width: 20 },
-      { header: "Ngày Import", key: "ngay_import", width: 20 }, // ✅ THÊM
-
-      { header: "Ghi Chú Phiếu", key: "ghi_chu_phieu", width: 40 },
-    ];
-
-    worksheet.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF4472C4" },
-      };
-      cell.alignment = { vertical: "middle", horizontal: "center" };
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" },
-      };
-    });
-
-    selectedPhieus.forEach((phieu, index) => {
-      const row = worksheet.addRow({
-        stt: index + 1,
-        so_document: phieu.so_document || "",
-        sd_tf: phieu.sd_tf || "",
-        mach: phieu.mach || "",
-        tench: phieu.tench || "",
-        quan: phieu.quan || "",
-        chuyen: phieu.chuyen || "",
-        tong_kien: phieu.tong_kien || 0,
-        tong_khoi_luong: phieu.tong_khoi_luong || 0,
-        so_lan_in_phieu: phieu.so_lan_in_phieu || 0,
-        ngay_in_phieu: formatDate(phieu.ngay_in_phieu),
-        ngay_import: formatDate(phieu.ngay_import), // ✅ THÊM
-
-        ghi_chu_phieu: phieu.ghi_chu_phieu || "",
-      });
-
-      row.eachCell((cell, colNumber) => {
-        cell.border = {
-          top: { style: "thin", color: { argb: "FFD0D0D0" } },
-          left: { style: "thin", color: { argb: "FFD0D0D0" } },
-          bottom: { style: "thin", color: { argb: "FFD0D0D0" } },
-          right: { style: "thin", color: { argb: "FFD0D0D0" } },
-        };
-        cell.alignment = { vertical: "middle" };
-
-        if ([1, 8, 9, 10].includes(colNumber)) {
-          cell.alignment = { ...cell.alignment, horizontal: "center" };
-        }
-      });
-
-      row.getCell("tong_kien").fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFF0F8FF" },
-      };
-      row.getCell("tong_khoi_luong").fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFF0F8FF" },
-      };
-      row.getCell("so_lan_in_phieu").fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFFFF4E6" },
-      };
-      row.getCell("ngay_import").fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFE8F5E9" },
-      }; // ✅ THÊM
-    });
-
-    worksheet.views = [{ state: "frozen", ySplit: 1 }];
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `Danh_Sach_Phieu_Le_${new Date().getTime()}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    console.log(`✅ Xuất thành công ${selectedPhieus.length} phiếu!`);
-  }, [selectedIds, rows, formatDate]);
-
   const columns = useMemo(
     () => [
       { key: "so_document", label: "Số document", searchable: true },
@@ -777,7 +661,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
     <>
       <div className="space-y-4">
         <PhieuLeFilters
-          onExportExcel={handleExportExcel}
+          selectedPhieus={selectedPhieus}
           search={search}
           setSearch={setSearch}
           dateRange={dateRange}
@@ -799,7 +683,6 @@ const PhieuLeTable = forwardRef((props, ref) => {
           loaiPhieu={loaiPhieu} // ✅
           setLoaiPhieu={setLoaiPhieu}
         />
-
         <div className="overflow-auto rounded-2xl border border-slate-200 shadow-sm">
           <table className="min-w-full text-xs md:text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">

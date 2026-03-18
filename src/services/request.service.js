@@ -28,6 +28,7 @@ const patch = (path = '', body = {}, headers = DEF_HEADERS, axiosInstance = ApiS
     .then(res => res.data)
     .catch(err => Promise.reject(err.response?.data || err));
 
+     
 // DELETE
 const del = (path = '', headers = DEF_HEADERS, axiosInstance = ApiServer) =>
   axiosInstance

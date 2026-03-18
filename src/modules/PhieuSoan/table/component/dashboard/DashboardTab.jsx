@@ -16,7 +16,7 @@ const usePhieuSoanDashboard = (startDate, endDate) => {
 
       const params = {
         page: 1,
-        limit: 9999,
+        limit: 999999,
         ...(startDate ? { startDate } : {}),
         ...(endDate ? { endDate } : {}),
       };

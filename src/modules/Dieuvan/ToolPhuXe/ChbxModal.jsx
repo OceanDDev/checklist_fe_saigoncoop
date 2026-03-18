@@ -1,14 +1,23 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 import { Modal, Button, Table, Input, Space, message, Popconfirm } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined, CloseOutlined } from "@ant-design/icons";
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  SaveOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
 import { phuXeService } from "@/services/dieuvan/phuxe.service";
 
-const ChbxModal = ({ visible, onClose }) => {
+const ChbxModal = ({ visible, onClose, onStoreAdded }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({ ma_cua_hang: "", ten_cua_hang: "" });
+  const [editForm, setEditForm] = useState({
+    ma_cua_hang: "",
+    ten_cua_hang: "",
+  });
   const [addForm, setAddForm] = useState({ ma_cua_hang: "", ten_cua_hang: "" });
   const [isAdding, setIsAdding] = useState(false);
 
@@ -60,7 +69,7 @@ const ChbxModal = ({ visible, onClose }) => {
 
     try {
       const result = await phuXeService.updateChbx(editingId, editForm);
-      
+
       if (result) {
         message.success("Cập nhật thành công!");
         fetchStores(); // Refresh danh sách
@@ -79,7 +88,7 @@ const ChbxModal = ({ visible, onClose }) => {
   const handleDelete = async (id) => {
     try {
       const result = await phuXeService.deleteChbx(id);
-      
+
       if (result) {
         message.success("Xóa thành công!");
         fetchStores(); // Refresh danh sách
@@ -101,12 +110,13 @@ const ChbxModal = ({ visible, onClose }) => {
 
     try {
       const result = await phuXeService.addChbx(addForm);
-      
+
       if (result) {
         message.success("Thêm mới thành công!");
         fetchStores(); // Refresh danh sách
         setAddForm({ ma_cua_hang: "", ten_cua_hang: "" });
         setIsAdding(false);
+        if (onStoreAdded) onStoreAdded();
       } else {
         message.error("Không thể thêm cửa hàng");
       }
@@ -134,7 +144,12 @@ const ChbxModal = ({ visible, onClose }) => {
           return (
             <Input
               value={editForm.ma_cua_hang}
-              onChange={(e) => setEditForm(prev => ({ ...prev, ma_cua_hang: e.target.value }))}
+              onChange={(e) =>
+                setEditForm((prev) => ({
+                  ...prev,
+                  ma_cua_hang: e.target.value,
+                }))
+              }
               placeholder="VD: CH001"
             />
           );
@@ -151,7 +166,12 @@ const ChbxModal = ({ visible, onClose }) => {
           return (
             <Input
               value={editForm.ten_cua_hang}
-              onChange={(e) => setEditForm(prev => ({ ...prev, ten_cua_hang: e.target.value }))}
+              onChange={(e) =>
+                setEditForm((prev) => ({
+                  ...prev,
+                  ten_cua_hang: e.target.value,
+                }))
+              }
               placeholder="VD: Cửa hàng Quận 1"
             />
           );
@@ -205,12 +225,7 @@ const ChbxModal = ({ visible, onClose }) => {
               cancelText="Hủy"
               okButtonProps={{ danger: true }}
             >
-              <Button
-                type="link"
-                danger
-                size="small"
-                icon={<DeleteOutlined />}
-              >
+              <Button type="link" danger size="small" icon={<DeleteOutlined />}>
                 Xóa
               </Button>
             </Popconfirm>
@@ -223,9 +238,7 @@ const ChbxModal = ({ visible, onClose }) => {
   return (
     <Modal
       title={
-        <div className="text-lg font-semibold">
-          🏪 Quản Lý Cửa Hàng PX-BX
-        </div>
+        <div className="text-lg font-semibold">🏪 Quản Lý Cửa Hàng PX-BX</div>
       }
       open={visible}
       onCancel={onClose}
@@ -238,27 +251,43 @@ const ChbxModal = ({ visible, onClose }) => {
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Mã Cửa Hàng *</label>
+                <label className="block text-sm font-medium mb-1">
+                  Mã Cửa Hàng *
+                </label>
                 <Input
                   value={addForm.ma_cua_hang}
-                  onChange={(e) => setAddForm(prev => ({ ...prev, ma_cua_hang: e.target.value }))}
+                  onChange={(e) =>
+                    setAddForm((prev) => ({
+                      ...prev,
+                      ma_cua_hang: e.target.value,
+                    }))
+                  }
                   placeholder="VD: CH001"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Tên Cửa Hàng *</label>
+                <label className="block text-sm font-medium mb-1">
+                  Tên Cửa Hàng *
+                </label>
                 <Input
                   value={addForm.ten_cua_hang}
-                  onChange={(e) => setAddForm(prev => ({ ...prev, ten_cua_hang: e.target.value }))}
+                  onChange={(e) =>
+                    setAddForm((prev) => ({
+                      ...prev,
+                      ten_cua_hang: e.target.value,
+                    }))
+                  }
                   placeholder="VD: Cửa hàng Quận 1"
                 />
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button onClick={() => {
-                setIsAdding(false);
-                setAddForm({ ma_cua_hang: "", ten_cua_hang: "" });
-              }}>
+              <Button
+                onClick={() => {
+                  setIsAdding(false);
+                  setAddForm({ ma_cua_hang: "", ten_cua_hang: "" });
+                }}
+              >
                 Hủy
               </Button>
               <Button type="primary" onClick={handleAdd}>

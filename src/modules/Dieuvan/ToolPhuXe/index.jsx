@@ -203,7 +203,10 @@ const HomePhuXe = () => {
 
             {/* ⬅️ Nút Thêm Phụ Xe - chỉ hiện với role không phải 24 */}
             {!isRole24 && (
-              <AddPhuXeModal onAdded={fetchPhuXe} chbxList={chbxList} />
+              <AddPhuXeModal
+                onAdded={fetchPhuXe}
+                chbxList={chbxList}
+              />
             )}
 
             <ImportPhuXe onImported={fetchPhuXe} isRole24={isRole24} />
@@ -246,6 +249,8 @@ const HomePhuXe = () => {
       <ChbxModal
         visible={showChbxModal}
         onClose={() => setShowChbxModal(false)}
+onStoreAdded={fetchChbxList}
+
       />
     </div>
   );

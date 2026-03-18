@@ -35,7 +35,7 @@ const createCheckListBDHForm = async (payload) => {
 
 // ✅ Lấy checklist form theo ID
 const getByIdCheckListBDHForm = async (id) => {
-  try {
+  try { 
     const results = await requestService.get(
       `${URL.checklistbdhform.list}/${id}`, // ✅ Sửa từ .create thành .list
       {},

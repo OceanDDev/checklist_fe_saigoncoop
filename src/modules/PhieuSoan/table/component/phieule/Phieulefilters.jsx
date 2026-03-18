@@ -2,9 +2,10 @@
 import { useMemo } from "react";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
+import ExportExcelButton from "./ExportExcelButton";
 
 const PhieuLeFilters = ({
-  onExportExcel,
+  selectedPhieus,  // ✅ Thêm prop này
   // Search values
   search,
   setSearch,
@@ -96,25 +97,10 @@ const PhieuLeFilters = ({
             )}
 
             {/* ✅ Luôn hiện Xuất Excel */}
-            <button
-              onClick={onExportExcel}
-              className="h-10 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-4 text-white hover:from-blue-700 hover:to-cyan-700 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              Xuất Excel
-            </button>
+           <ExportExcelButton
+  selectedPhieus={selectedPhieus}
+  selectedCount={selectedCount}
+/>
           </div>
         )}
 
