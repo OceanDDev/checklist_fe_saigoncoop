@@ -37,6 +37,8 @@ const Header = () => {
       23: "TRANG THIẾT BỊ",
       25: "TỒN KHO",
       27: "CHẤM CÔNG",
+            29: "NĂNG SUẤT PHIẾU",
+
     };
     return roles[role] || "CHECKLIST";
   };

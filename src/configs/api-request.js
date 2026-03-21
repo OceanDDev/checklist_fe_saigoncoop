@@ -91,6 +91,9 @@ const URL = {
     chamcong: ENDPOINT_PREFIX + "/chamcong",
     nhanvien: ENDPOINT_PREFIX + "/nhanvien",
   },
+   nangsuat: {
+    nangsuat: ENDPOINT_PREFIX + "/nangsuat",
+  },
 };
 
 export { URL, ApiServer, DEF_HEADERS };

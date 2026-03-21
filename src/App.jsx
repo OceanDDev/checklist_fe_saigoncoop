@@ -36,6 +36,8 @@ import ChamCongPage from "./modules/ChamCong";
 import FormCheckInQR from "./modules/ChamCong/FormCheck/FormCheckInQR.jsx";
 import QrDisplay from "./modules/ChamCong/FormCheck/QrDisplay";
 import QrScanner from "./modules/ChamCong/AppQuetQR";
+import NangSuatPage from "./modules/NangSuat";
+import DashBoardNangSuat from "./modules/NangSuat/Dashboard";
 
 function App() {
   return (
@@ -351,7 +353,7 @@ function App() {
         <Route
           path="/chamcong"
           element={
-            <PrivateRoute allowRoles={[27,28]}>
+            <PrivateRoute allowRoles={[27, 28]}>
               <MainLayout>
                 <ChamCongPage />
               </MainLayout>
@@ -370,6 +372,28 @@ function App() {
             <PrivateRoute allowRoles={[20, 26]}>
               <MainLayout>
                 <PhieuSoanHome />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        {/* Năng Suất */}
+
+        <Route
+          path="/nangsuat"
+          element={
+            <PrivateRoute allowRoles={[29]}>
+              <MainLayout>
+                <NangSuatPage />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+          <Route
+          path="/nangsuat/dashboard"
+          element={
+            <PrivateRoute allowRoles={[29]}>
+              <MainLayout>
+                <DashBoardNangSuat/>
               </MainLayout>
             </PrivateRoute>
           }
