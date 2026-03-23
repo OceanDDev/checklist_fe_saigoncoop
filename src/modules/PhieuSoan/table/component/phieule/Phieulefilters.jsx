@@ -5,13 +5,14 @@ import "react-date-range/dist/theme/default.css";
 import ExportExcelButton from "./ExportExcelButton";
 
 const PhieuLeFilters = ({
-  selectedPhieus,  // ✅ Thêm prop này
+  selectedPhieus,
   // Search values
   search,
   setSearch,
   dateRange,
   printDateRange,
   onImportSodaClick,
+  onImport8101Click,   // ✅ THÊM
   // Actions
   onResetFilters,
   onImportClick,
@@ -23,7 +24,6 @@ const PhieuLeFilters = ({
   // Callbacks
   setPage,
 }) => {
-  // ✅ Lấy role từ localStorage
   const isLimitedRole = useMemo(() => {
     try {
       const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -33,7 +33,6 @@ const PhieuLeFilters = ({
     }
   }, []);
 
-  // Đếm số filter đang active
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (search) count++;
@@ -70,10 +69,9 @@ const PhieuLeFilters = ({
           )}
         </div>
 
-        {/* Nút In & Xuất Excel - hiện khi có phiếu được chọn */}
+        {/* Nút In & Xuất Excel */}
         {selectedCount > 0 && (
           <div className="flex items-center gap-2">
-            {/* ✅ Ẩn nút In với role 26 */}
             {!isLimitedRole && (
               <button
                 onClick={onPrintSelected}
@@ -95,12 +93,10 @@ const PhieuLeFilters = ({
                 In {selectedCount} phiếu
               </button>
             )}
-
-            {/* ✅ Luôn hiện Xuất Excel */}
-           <ExportExcelButton
-  selectedPhieus={selectedPhieus}
-  selectedCount={selectedCount}
-/>
+            <ExportExcelButton
+              selectedPhieus={selectedPhieus}
+              selectedCount={selectedCount}
+            />
           </div>
         )}
 
@@ -154,6 +150,29 @@ const PhieuLeFilters = ({
               />
             </svg>
             Soda
+          </button>
+        )}
+
+        {/* ✅ THÊM: Ẩn 8101 với role 26 */}
+        {!isLimitedRole && (
+          <button
+            onClick={onImport8101Click}
+            className="h-10 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 px-4 text-white hover:from-indigo-600 hover:to-violet-600 whitespace-nowrap font-medium flex items-center gap-2 shadow-sm"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            8101
           </button>
         )}
 

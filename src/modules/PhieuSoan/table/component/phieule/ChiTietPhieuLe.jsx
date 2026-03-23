@@ -15,10 +15,10 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
   const [packUnit1Map, setPackUnit1Map] = useState({});
   const [loadingPackUnit1, setLoadingPackUnit1] = useState(false);
 
-  // ✅ LƯU SLOT GỐC THẬT SỰ (slot ban đầu khi chưa edit)
   const [originalSlots, setOriginalSlots] = useState({});
 
   const canEdit = phieuData?.trang_thai === "Chờ xử lý";
+  const is8101 = phieuData?.loai_phieu === "8101"; // ✅
 
   const fetchKhoiLuong = async (chiTiet) => {
     if (!chiTiet || chiTiet.length === 0) return null;
@@ -26,7 +26,6 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
     setLoadingKhoiLuong(true);
     try {
       const skuList = chiTiet.map((item) => item.sku).filter(Boolean);
-
       if (skuList.length === 0) {
         setLoadingKhoiLuong(false);
         return null;
@@ -34,7 +33,7 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
 
       const result = await dinhViService.getKhoiLuongByMultipleSKU(skuList);
       setKhoiLuongMap(result || {});
-      return result || {}; // ✅ Trả về kết quả
+      return result || {};
     } catch (error) {
       console.error("❌ Lỗi khi lấy khối lượng:", error);
       setKhoiLuongMap({});
@@ -44,21 +43,18 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
     }
   };
 
-  // ✅ FIX: Trả về kết quả để dùng trực tiếp
   const fetchPackUnit1 = async (chiTiet) => {
     if (!chiTiet || chiTiet.length === 0) return null;
 
     setLoadingPackUnit1(true);
     try {
       const itemsNeedPack = chiTiet.filter((item) => item.pack_unit === 1);
-
       if (itemsNeedPack.length === 0) {
         setLoadingPackUnit1(false);
         return null;
       }
 
       const skuList = itemsNeedPack.map((item) => item.sku).filter(Boolean);
-
       if (skuList.length === 0) {
         setLoadingPackUnit1(false);
         return null;
@@ -66,7 +62,7 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
 
       const result = await dinhViService.getPackByMultipleSKU(skuList);
       setPackUnit1Map(result || {});
-      return result || {}; // ✅ Trả về kết quả
+      return result || {};
     } catch (error) {
       console.error("❌ Lỗi khi lấy pack từ DinhVi:", error);
       setPackUnit1Map({});
@@ -84,15 +80,12 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
       const keyEdited = `edited_${phieuData.so_document}`;
       const keyOriginal = `original_slots_${phieuData.so_document}`;
 
-      // ✅ LẤY HOẶC TẠO SLOT GỐC
       let originalSlotsMap = {};
       const savedOriginal = localStorage.getItem(keyOriginal);
 
       if (savedOriginal) {
-        // Đã có slot gốc trong localStorage → dùng luôn
         originalSlotsMap = JSON.parse(savedOriginal);
       } else {
-        // Chưa có → lưu slot hiện tại làm slot gốc (lần đầu tiên mở)
         phieuData.chi_tiet.forEach((item) => {
           originalSlotsMap[item.sku] = item.slot || "";
         });
@@ -101,7 +94,6 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
 
       setOriginalSlots(originalSlotsMap);
 
-      // ✅ LOAD EDITED SKUS
       const savedEdited = localStorage.getItem(keyEdited);
       if (savedEdited) {
         setEditedSkus(new Set(JSON.parse(savedEdited)));
@@ -109,42 +101,42 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
         setEditedSkus(new Set());
       }
 
-      fetchKhoiLuong(phieuData.chi_tiet);
+      // ✅ 8101 không cần map khối lượng, pack unit 1, packs to pick 1
+      if (!is8101) {
+        fetchKhoiLuong(phieuData.chi_tiet);
 
-      // ✅ Chỉ cần packUnit1Map cho update
-      fetchPackUnit1(phieuData.chi_tiet).then((fetchedPackMap) => {
-        if (fetchedPackMap) {
-          updatePacksToPick1ToDatabase(fetchedPackMap);
-        }
-      });
+        fetchPackUnit1(phieuData.chi_tiet).then((fetchedPackMap) => {
+          if (fetchedPackMap) {
+            updatePacksToPick1ToDatabase(fetchedPackMap);
+          }
+        });
+      }
     }
   }, [isOpen, phieuData]);
 
   if (!isOpen) return null;
 
-  const detailColumns = [
-    { key: "slot", label: "Slot", editable: true },
-    { key: "sku", label: "SKU" },
-    { key: "name", label: "Tên hàng" },
-    { key: "vendor", label: "Vendor" },
-    { key: "quantity", label: "Số lượng" },
-    { key: "pack_unit", label: "Pack Unit" },
-    { key: "pck_um", label: "Pack UM" },
-    { key: "packs_to_pick", label: "Packs to Pick" },
-    { key: "khoi_luong", label: "Khối lượng (Kg)" },
-    { key: "pack_unit_1", label: "Pack Unit 1" },
-    { key: "packs_to_pick_1", label: "Packs to Pick 1" },
-  ];
-
-  // const handleStartEditSlot = (index, currentSlot) => {
-  //   if (!canEdit) {
-  //     alert("Chỉ có thể chỉnh sửa slot khi phiếu ở trạng thái 'Chờ xử lý'!");
-  //     return;
-  //   }
-
-  //   setEditingItemIndex(index);
-  //   setEditSlotValue(currentSlot || "");
-  // };
+  // ✅ Cột hiển thị: 8101 chỉ cần slot, sku, name, quantity
+  const detailColumns = is8101
+    ? [
+        { key: "slot", label: "Slot", editable: true },
+        { key: "sku", label: "SKU" },
+        { key: "name", label: "Tên hàng" },
+        { key: "quantity", label: "Số lượng" },
+      ]
+    : [
+        { key: "slot", label: "Slot", editable: true },
+        { key: "sku", label: "SKU" },
+        { key: "name", label: "Tên hàng" },
+        { key: "vendor", label: "Vendor" },
+        { key: "quantity", label: "Số lượng" },
+        { key: "pack_unit", label: "Pack Unit" },
+        { key: "pck_um", label: "Pack UM" },
+        { key: "packs_to_pick", label: "Packs to Pick" },
+        { key: "khoi_luong", label: "Khối lượng (Kg)" },
+        { key: "pack_unit_1", label: "Pack Unit 1" },
+        { key: "packs_to_pick_1", label: "Packs to Pick 1" },
+      ];
 
   const handleCancelEditSlot = () => {
     setEditingItemIndex(null);
@@ -173,7 +165,6 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
       updated[itemIndex] = { ...item, slot: editSlotValue };
       setLocalChiTiet(updated);
 
-      // ✅ SO SÁNH VỚI SLOT GỐC
       const originalSlot = originalSlots[item.sku] || "";
       const updatedSkus = new Set(editedSkus);
 
@@ -185,7 +176,6 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
 
       setEditedSkus(updatedSkus);
 
-      // ✅ LƯU VÀO LOCALSTORAGE
       const keyEdited = `edited_${phieuData.so_document}`;
       if (updatedSkus.size > 0) {
         localStorage.setItem(keyEdited, JSON.stringify([...updatedSkus]));
@@ -194,7 +184,6 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
       }
 
       if (onUpdate) await onUpdate();
-
       handleCancelEditSlot();
     } catch (error) {
       console.error("❌ Lỗi khi cập nhật slot:", error);
@@ -204,105 +193,56 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
     }
   };
 
-  // ✅ FIX: Nhận packMap làm tham số
   const updatePacksToPick1ToDatabase = async (packMap) => {
-    if (!phieuData?.chi_tiet || !packMap || Object.keys(packMap).length === 0) {
+    if (!phieuData?.chi_tiet || !packMap || Object.keys(packMap).length === 0)
       return;
-    }
 
     try {
       const updates = [];
 
       for (const item of phieuData.chi_tiet) {
-        // ✅ CHỈ xử lý item có pack_unit === 1 và THỰC SỰ chưa có packs_to_pick_1
         if (
-          item.pack_unit === 1 && 
+          item.pack_unit === 1 &&
           (item.packs_to_pick_1 === undefined || item.packs_to_pick_1 === null)
         ) {
           const packFromDinhVi = packMap[item.sku];
-
           if (packFromDinhVi && packFromDinhVi > 0) {
-            // ✅ TÍNH TOÁN VỚI 2 CHỮ SỐ THẬP PHÂN (KHÔNG LÀM TRÒN)
-            const rawValue = item.quantity / packFromDinhVi;
-            const picksValue = parseFloat(rawValue.toFixed(2)); // ✅ Lưu 1.67, 2.33, v.v.
-
-            updates.push({
-              sku: item.sku,
-              packs_to_pick_1: picksValue, // ✅ VD: 1.67 thay vì 2
-            });
-          } else {
-            console.log(
-              `  ⚠️ SKU ${item.sku}: Không có pack hợp lệ từ DinhVi (${packFromDinhVi})`,
+            const picksValue = parseFloat(
+              (item.quantity / packFromDinhVi).toFixed(2),
             );
+            updates.push({ sku: item.sku, packs_to_pick_1: picksValue });
           }
         }
       }
 
       if (updates.length > 0) {
-        console.log(`📤 Updating ${updates.length} items with packs_to_pick_1:`, updates);
-        
-        try {
-          await phieuLeService.updateMultipleChiTiet({
-            id: phieuData._id,
-            updates: updates,
-          });
-
-          
-          if (onUpdate) await onUpdate();
-        } catch (apiError) {
-          console.error("❌ API Error Details:", {
-            message: apiError.message,
-            response: apiError.response?.data,
-            status: apiError.response?.status,
-            statusText: apiError.response?.statusText,
-            requestData: {
-              id: phieuData._id,
-              updates: updates,
-            },
-          });
-
-          if (apiError.response?.data) {
-            console.error(
-              "📝 Server Error Message:",
-              JSON.stringify(apiError.response.data, null, 2),
-            );
-          }
-
-          throw apiError;
-        }
-      } else {
-        console.log("⚠️ Không có item nào cần update packs_to_pick_1");
+        await phieuLeService.updateMultipleChiTiet({
+          id: phieuData._id,
+          updates,
+        });
+        if (onUpdate) await onUpdate();
       }
     } catch (error) {
       console.error("❌ Lỗi khi cập nhật packs_to_pick_1:", error);
     }
   };
 
-  // ✅ TÍNH TOÁN PACK_UNIT_1 VÀ PACKS_TO_PICK_1 VỚI QUY TẮC LÀM TRÒN MỚI
   const calculatePackUnit1Values = (item) => {
-    if (item.pack_unit !== 1) {
+    if (item.pack_unit !== 1)
       return { pack_unit_1: null, packs_to_pick_1: null };
-    }
 
     const packFromDinhVi = packUnit1Map[item.sku];
-
     if (packFromDinhVi && packFromDinhVi > 0) {
-      // ✅ Ưu tiên dùng packs_to_pick_1 đã lưu trong DB
       if (item.packs_to_pick_1) {
         return {
           pack_unit_1: packFromDinhVi,
-          packs_to_pick_1: item.packs_to_pick_1, // ✅ Hiển thị số thập phân từ DB (VD: 1.67)
+          packs_to_pick_1: item.packs_to_pick_1,
         };
       }
-
-      // ✅ Nếu chưa có trong DB, tính toán với 2 chữ số thập phân
-      const rawValue = item.quantity / packFromDinhVi;
-      const picksValue = parseFloat(rawValue.toFixed(2)); // ✅ 1.67, 2.33, v.v.
-
-      return {
-        pack_unit_1: packFromDinhVi,
-        packs_to_pick_1: picksValue, // ✅ Hiển thị số thập phân (chưa làm tròn)
-      };
+      const picksValue = parseFloat(
+        (item.quantity / packFromDinhVi).toFixed(2),
+      );
+      return { pack_unit_1: packFromDinhVi, packs_to_pick_1: picksValue };
     }
 
     return { pack_unit_1: null, packs_to_pick_1: null };
@@ -338,13 +278,18 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
               <span className="font-semibold">{phieuData?.ghi_chu_ch}</span>
             </p>
             <p className="text-sm text-slate-600 mt-2">
-              <span className="font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
-                📦 Tổng khối lượng: {phieuData?.tong_khoi_luong || 0} kg
-              </span>
-              {" • "}
-              <span className="font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded-lg">
-                📊 Tổng kiện: {phieuData?.tong_kien || 0}
-              </span>
+              {/* ✅ 8101 không hiện tổng khối lượng, tổng kiện */}
+              {!is8101 && (
+                <>
+                  <span className="font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
+                    📦 Tổng khối lượng: {phieuData?.tong_khoi_luong || 0} kg
+                  </span>
+                  {" • "}
+                  <span className="font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded-lg">
+                    📊 Tổng kiện: {phieuData?.tong_kien || 0}
+                  </span>
+                </>
+              )}
             </p>
             <div className="mt-2 flex items-center gap-2">
               <span className="text-sm text-slate-600">Trạng thái:</span>
@@ -497,7 +442,6 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
                                       onClick={() => handleSaveSlot(idx)}
                                       disabled={savingSlot}
                                       className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                      title="Lưu (Enter)"
                                     >
                                       {savingSlot ? "⏳" : "✓"}
                                     </button>
@@ -505,35 +449,14 @@ const ChiTietModal = ({ isOpen, onClose, phieuData, onUpdate }) => {
                                       onClick={handleCancelEditSlot}
                                       disabled={savingSlot}
                                       className="px-2 py-1 text-xs bg-slate-400 text-white rounded hover:bg-slate-500 disabled:opacity-50"
-                                      title="Hủy (Esc)"
                                     >
                                       ✕
                                     </button>
                                   </>
                                 ) : (
-                                  <>
-                                    <span className="flex-1 min-w-0">
-                                      {String(item?.[col.key] ?? "")}
-                                    </span>
-                                    {/* <button
-                                      onClick={() =>
-                                        handleStartEditSlot(idx, item[col.key])
-                                      }
-                                      disabled={!canEdit}
-                                      className={`px-2 py-1 text-xs rounded transition-colors ${
-                                        canEdit
-                                          ? "bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer"
-                                          : "bg-slate-100 text-slate-400 cursor-not-allowed opacity-50"
-                                      }`}
-                                      title={
-                                        canEdit
-                                          ? "Chỉnh sửa slot"
-                                          : "Chỉ có thể chỉnh sửa khi trạng thái 'Chờ xử lý'"
-                                      }
-                                    >
-                                      ✏️
-                                    </button> */}
-                                  </>
+                                  <span className="flex-1 min-w-0">
+                                    {String(item?.[col.key] ?? "")}
+                                  </span>
                                 )}
                               </div>
                             ) : (

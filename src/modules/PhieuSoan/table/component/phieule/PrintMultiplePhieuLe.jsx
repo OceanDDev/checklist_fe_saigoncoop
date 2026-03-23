@@ -11,45 +11,25 @@ const PrintMultiplePhieuLe = ({
 }) => {
   const contentRef = useRef(null);
 
-  // ✅ THÊM STATE ĐỂ LƯU THỜI ĐIỂM IN (chỉ tạo 1 lần khi mount)
   const [printTime] = useState(() => new Date());
 
   const reactToPrintFn = useReactToPrint({
     contentRef,
     documentTitle: `Phieu_Le_${new Date().getTime()}`,
     onAfterPrint: async () => {
-      console.log(
-        "✅ In thành công - Đang cập nhật số lần in, ngày in và trạng thái...",
-      );
-
       try {
         const updatePromises = selectedPhieus.map(async (phieu) => {
           const currentCount = phieu.so_lan_in_phieu || 0;
           const newCount = currentCount + 1;
-
-          console.log(
-            `📝 Cập nhật phiếu ${phieu.so_document}: Lần in ${currentCount} → ${newCount}, Ngày in → ${printTime.toISOString()}, Trạng thái → "Đã xử lý"`,
-          );
-
           return phieuLeService.updatePhieuLe(phieu._id, {
             so_lan_in_phieu: newCount,
-            ngay_in_phieu: printTime, // ✅ DÙNG printTime (thời điểm mở modal)
+            ngay_in_phieu: printTime,
             trang_thai: "Đã xử lý",
           });
         });
 
-        const results = await Promise.all(updatePromises);
-        console.log(
-          "✅ Đã cập nhật số lần in, ngày in và trạng thái cho",
-          selectedPhieus.length,
-          "phiếu",
-          results,
-        );
-
-        if (onPrintSuccess) {
-          console.log("🔄 Đang refresh data...");
-          onPrintSuccess();
-        }
+        await Promise.all(updatePromises);
+        if (onPrintSuccess) onPrintSuccess();
       } catch (error) {
         console.error("❌ Lỗi khi cập nhật:", error);
         alert("Có lỗi khi cập nhật. Vui lòng kiểm tra lại!");
@@ -58,9 +38,7 @@ const PrintMultiplePhieuLe = ({
   });
 
   const handlePrint = () => {
-    if (contentRef.current) {
-      reactToPrintFn();
-    }
+    if (contentRef.current) reactToPrintFn();
   };
 
   if (!isOpen) return null;
@@ -83,8 +61,8 @@ const PrintMultiplePhieuLe = ({
     }
   };
 
-  // ✅ HÀM TÍNH KIỆN DỰ KIẾN CHO TỪNG ITEM
-  const getKienDuKien = (item) => {
+  const getKienDuKien = (item, is8101) => {
+    if (is8101) return "-";
     if (item.packs_to_pick_1 && item.packs_to_pick_1 > 0) {
       return parseFloat(item.packs_to_pick_1.toFixed(2));
     }
@@ -96,46 +74,21 @@ const PrintMultiplePhieuLe = ({
 
   return (
     <>
-      {/* ✅ CSS IN ẤN ĐẶC BIỆT: ÉP 1 PHIẾU / 1 TRANG */}
       <style
         dangerouslySetInnerHTML={{
           __html: `
           @media print {
-            @page { 
-              size: A4 landscape; 
-              margin: 10mm;
-            }
-            body { 
-              -webkit-print-color-adjust: exact; 
-              print-color-adjust: exact; 
-              background: white;
-            }
+            @page { size: A4 landscape; margin: 10mm; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
             .no-print { display: none !important; }
-            
-            .phieu-container {
-              page-break-after: always;
-              page-break-inside: avoid;
-              height: 100vh;
-              overflow: hidden;
-              display: flex;
-              flex-direction: column;
-            }
-
-            table { 
-              width: 100%;
-              table-layout: auto;
-              page-break-inside: avoid;
-            }
-
-            .print-content {
-              font-size: 11px;
-            }
+            .phieu-container { page-break-after: always; page-break-inside: avoid; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+            table { width: 100%; table-layout: auto; page-break-inside: avoid; }
+            .print-content { font-size: 11px; }
           }
         `,
         }}
       />
 
-      {/* Modal Overlay */}
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col">
           {/* Header Modal */}
@@ -180,10 +133,8 @@ const PrintMultiplePhieuLe = ({
               style={{ width: "277mm" }}
             >
               {selectedPhieus.map((phieu, phieuIndex) => {
-                const soLanInHienTai = phieu.so_lan_in_phieu || 0;
-                const soLanInDuKien = soLanInHienTai + 1;
-
-                // ✅ LUÔN DÙNG printTime - THỜI ĐIỂM MỞ MODAL IN
+                const is8101 = phieu.loai_phieu === "8101"; // ✅
+                const soLanInDuKien = (phieu.so_lan_in_phieu || 0) + 1;
                 const ngayHienThi = printTime;
 
                 return (
@@ -203,7 +154,11 @@ const PrintMultiplePhieuLe = ({
                           }}
                         />
                         <div className="flex flex-col items-center">
-                          {/* ✅ Hiển thị thời gian in HIỆN TẠI (printTime) */}
+                          {is8101 && (
+                            <span className="px-2 py-0.5 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-bold mb-1">
+                              8101
+                            </span>
+                          )}
                           <h1 className="text-xl font-bold text-slate-800">
                             PHIẾU NGÀY {formatDate(ngayHienThi)}
                           </h1>
@@ -222,11 +177,11 @@ const PrintMultiplePhieuLe = ({
                         <div className="space-y-1">
                           <p>
                             <span className="font-bold">Số Document:</span>{" "}
-                            {phieu.so_document}
+                            {phieu.so_document || "-"}
                           </p>
                           <p>
                             <span className="font-bold">Số SD/TF:</span>{" "}
-                           {phieu.loai_phieu || "N/A"}-{phieu.sd_tf || "N/A"}
+                            {phieu.loai_phieu || "N/A"}-{phieu.sd_tf || "N/A"}
                           </p>
                           <p>
                             <span className="font-bold">Mã/Tên CH:</span>{" "}
@@ -242,7 +197,6 @@ const PrintMultiplePhieuLe = ({
                             <span className="font-bold">Chuyến:</span>{" "}
                             {phieu.chuyen || "N/A"}
                           </p>
-                          {/* ✅ Hiển thị thời gian in HIỆN TẠI */}
                           <p>
                             <span className="font-bold">Ngày Import:</span>{" "}
                             {formatDate(phieu.ngay_import)}
@@ -302,20 +256,21 @@ const PrintMultiplePhieuLe = ({
                               <td className="border border-slate-400 p-1 text-right font-bold">
                                 {item.quantity}
                               </td>
+                              {/* ✅ 8101: hiển thị "-" cho các cột không có data */}
                               <td className="border border-slate-400 p-1 text-right">
-                                {item.pack_unit}
+                                {is8101 ? "-" : item.pack_unit}
                               </td>
                               <td className="border border-slate-400 p-1 text-center">
-                                {item.pck_um}
+                                {is8101 ? "-" : item.pck_um}
                               </td>
                               <td className="border border-slate-400 p-1 text-right">
-                                {item.packs_to_pick}
+                                {is8101 ? "-" : item.packs_to_pick}
                               </td>
                               <td className="border border-slate-400 p-1 text-right">
-                                {item.store}
+                                {is8101 ? "-" : item.store}
                               </td>
                               <td className="border border-slate-400 p-1 text-right font-bold bg-green-50">
-                                {getKienDuKien(item)}
+                                {getKienDuKien(item, is8101)}
                               </td>
                             </tr>
                           ))}
@@ -328,7 +283,8 @@ const PrintMultiplePhieuLe = ({
                               TỔNG KIỆN DỰ KIẾN:
                             </td>
                             <td className="border border-slate-400 p-2 text-center text-[15px] bg-green-200">
-                              {phieu.tong_kien || 0} KIỆN
+                              {/* ✅ 8101 không có tong_kien */}
+                              {is8101 ? "-" : `${phieu.tong_kien || 0} KIỆN`}
                             </td>
                           </tr>
                         </tbody>

@@ -21,6 +21,7 @@ import dayjs from "dayjs";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import ImportSodaModal from "./component/phieule/ImportSodaModal";
+import Import8101Modal from "./component/phieule/Import8101Modal";
 
 const EmptyState = ({
   title = "Không có dữ liệu",
@@ -242,6 +243,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
   const [quan, setQuan] = useState("");
   const [loaiPhieu, setLoaiPhieu] = useState("");
   const [showImportSodaModal, setShowImportSodaModal] = useState(false);
+  const [show8101Modal, setShow8101Modal] = useState(false);
 
   const [dateRange, setDateRange] = useState([
     {
@@ -682,6 +684,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
           setPage={setPage}
           loaiPhieu={loaiPhieu} // ✅
           setLoaiPhieu={setLoaiPhieu}
+          onImport8101Click={() => setShow8101Modal(true)}
         />
         <div className="overflow-auto rounded-2xl border border-slate-200 shadow-sm">
           <table className="min-w-full text-xs md:text-sm">
@@ -864,6 +867,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
                           <option value="">Tất cả</option>
                           <option value="SD">SD</option>
                           <option value="TF">TF</option>
+                          <option value="8101">8101</option>{" "}
                         </select>
                       )}
                     {col.isDateRange && col.key === "ngay_import" && (
@@ -1143,6 +1147,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
         onClose={() => setShowNoteModal(false)}
         selectedCount={selectedIds.length}
         onContinue={handleContinueFromNote}
+      />
+      <Import8101Modal
+        isOpen={show8101Modal}
+        onClose={() => setShow8101Modal(false)}
+        onSuccess={handleImportSuccess}
       />
 
       <PrintMultiplePhieuLe

@@ -370,6 +370,14 @@ const importSodaTxtPhieuLeMultiple = async (files) => {
     throw error;
   }
 };
+const import8101PhieuLe = async (payload) => {
+  const response = await ApiServer.post(
+    `${URL.phieule.phieule}/import-8101`,
+    payload,
+  );
+  return response.data;
+};
+// thêm vào export: import8101PhieuLe,
 
 export const phieuLeService = {
   getAllPhieuLe, // GET  /api/saigoncoop/phieule?page=1&limit=10&search=...
@@ -393,4 +401,5 @@ export const phieuLeService = {
   updateMultipleChiTiet,
   importSodaTxtPhieuLe,
   importSodaTxtPhieuLeMultiple,
+  import8101PhieuLe,
 };
