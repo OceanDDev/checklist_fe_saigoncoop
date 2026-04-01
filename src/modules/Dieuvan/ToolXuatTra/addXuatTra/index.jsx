@@ -677,7 +677,7 @@ const AddXuatTraDialog = ({ cuahangs = [], onSubmit }) => {
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-800">
-                  Số phiếu (nếu có)
+                  Số hóa đơn (nếu có)
                 </label>
                 <Input
                   name="so"

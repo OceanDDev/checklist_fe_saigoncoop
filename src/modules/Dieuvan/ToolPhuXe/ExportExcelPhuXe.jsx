@@ -23,37 +23,39 @@ const ExportExcelPhuXe = ({
         return;
       }
 
-      // ✅ Sửa lại điều kiện: Chỉ cần có thoi_gian_di là cho phép xuất
       const dataToExport = filteredData
         .filter((item) => item.thoi_gian_di)
         .map((item, index) => {
-          // Format thời gian đi
+          // ✅ Thêm ngày vào thời gian đi
           const thoiGianDi = dayjs(item.thoi_gian_di)
             .tz(VN_TIMEZONE)
-            .format("HH:mm:ss");
+            .format("DD/MM/YYYY HH:mm:ss");
 
-          // Format thời gian xong (nếu có)
+          // ✅ Thêm ngày vào thời gian xong chuyến
           const thoiGianXongChuyen = item.thoi_gian_xong_chuyen
             ? dayjs(item.thoi_gian_xong_chuyen)
                 .tz(VN_TIMEZONE)
-                .format("HH:mm:ss")
+                .format("DD/MM/YYYY HH:mm:ss")
             : "";
 
-          // Ưu tiên lấy ngày từ thoi_gian_xong_chuyen, nếu không có thì lấy từ thoi_gian_di
-          const ngayHienTai = item.thoi_gian_xong_chuyen || item.thoi_gian_di;
-          const ngay = dayjs(ngayHienTai).tz(VN_TIMEZONE).format("DD/MM/YYYY");
+          // ✅ Ngày import từ createdAt
+          const ngayImport = item.createdAt
+            ? dayjs(item.createdAt)
+                .tz(VN_TIMEZONE)
+                .format("DD/MM/YYYY HH:mm:ss")
+            : "";
 
           return {
             stt: index + 1,
             hoTen: item.dieu_van_xac_nhan || "",
             dichVu: item.dich_vu || "",
-            bienSoXe: item.bien_so_xe || "", // ✅ THÊM FIELD BIỂN SỐ XE
+            bienSoXe: item.bien_so_xe || "",
             thoiGianDi: thoiGianDi,
             maCuaHang: item.ma_cua_hang || "",
             diaDiemDen: item.ten_cua_hang || "",
             thoiGianXongChuyen: thoiGianXongChuyen,
             ghiChu: item.ghi_chu || "",
-            ngay: ngay,
+            ngayImport: ngayImport,
           };
         });
 
@@ -71,17 +73,17 @@ const ExportExcelPhuXe = ({
         { header: "STT", key: "stt", width: 8 },
         { header: "Họ Tên", key: "hoTen", width: 25 },
         { header: "Dịch Vụ", key: "dichVu", width: 15 },
-        { header: "Biển Số Xe", key: "bienSoXe", width: 18 }, // ✅ THÊM CỘT BIỂN SỐ XE
-        { header: "Thời Gian Đi", key: "thoiGianDi", width: 18 },
+        { header: "Biển Số Xe", key: "bienSoXe", width: 18 },
+        { header: "Thời Gian Đi", key: "thoiGianDi", width: 25 },
         { header: "Mã Cửa Hàng", key: "maCuaHang", width: 15 },
         { header: "Địa Điểm Đến", key: "diaDiemDen", width: 35 },
         {
           header: "Thời Gian Xong Chuyến",
           key: "thoiGianXongChuyen",
-          width: 25,
+          width: 30,
         },
         { header: "Ghi Chú", key: "ghiChu", width: 30 },
-        { header: "Ngày", key: "ngay", width: 15 },
+        { header: "Ngày Import", key: "ngayImport", width: 25 },
       ];
 
       // Style cho header
