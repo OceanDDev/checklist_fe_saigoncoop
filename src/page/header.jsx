@@ -37,7 +37,10 @@ const Header = () => {
       23: "TRANG THIẾT BỊ",
       25: "TỒN KHO",
       27: "CHẤM CÔNG",
-            29: "NĂNG SUẤT PHIẾU",
+      28:"CHẤM CÔNG",
+           29: "NĂNG SUẤT PHIẾU",
+      30:"CHẤM CÔNG",
+       
 
     };
     return roles[role] || "CHECKLIST";

@@ -47,6 +47,7 @@ async function exportChamCongMau(records, { year, month } = {}) {
   const thus = getThuInMonth(y, m, days);
   const byNV = {};
   for (const r of records) {
+    if (r.is_locked) continue; // bỏ qua ngày bị khóa
     const ma = r.ma_nhan_vien;
     if (!byNV[ma]) byNV[ma] = { ...r, ngayMap: {} };
     byNV[ma].ngayMap[new Date(r.ngay).getDate()] = r;
@@ -266,7 +267,6 @@ const MiniCalendar = ({
 
   return (
     <div className="select-none w-full">
-      {/* Nav */}
       <div className="flex items-center justify-between px-1 py-2">
         <button
           onClick={onPrev}
@@ -284,7 +284,6 @@ const MiniCalendar = ({
           ›
         </button>
       </div>
-      {/* Day headers */}
       <div className="grid grid-cols-7 mb-1">
         {DAYS_VI.map((d) => (
           <div
@@ -295,7 +294,6 @@ const MiniCalendar = ({
           </div>
         ))}
       </div>
-      {/* Cells */}
       <div className="grid grid-cols-7">
         {cells.map((day, i) => {
           if (!day) return <div key={`e${i}`} className="h-9" />;
@@ -306,7 +304,6 @@ const MiniCalendar = ({
             rangeEnd && startDate && day > startDate && day < rangeEnd;
           const isToday = isSameDay(day, new Date());
 
-          // range strip
           let stripCls = "absolute inset-y-1 left-0 right-0 ";
           let showStrip = false;
           if (inRange) {
@@ -320,7 +317,6 @@ const MiniCalendar = ({
             showStrip = true;
           }
 
-          // dot
           let dotCls =
             "relative z-10 w-8 h-8 flex items-center justify-center rounded-full text-sm transition-colors ";
           if (isStart || isEnd)
@@ -388,20 +384,17 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
       ? (setViewMonth(0), setViewYear((y) => y + 1))
       : setViewMonth((m) => m + 1);
 
-  // label cho input box
   const fromLabel = startDate ? toDisplayStr(startDate) : "";
   const toLabel = endDate ? toDisplayStr(endDate) : "";
   const hasRange = startDate || endDate;
 
   return (
     <div className="relative" ref={ref}>
-      {/* ── Trigger: 2 input boxes như ảnh mẫu ── */}
       <div
         onClick={() => setOpen((v) => !v)}
         className={`flex items-center gap-0 rounded-xl border cursor-pointer transition-all overflow-hidden
           ${open ? "border-emerald-500/60 ring-2 ring-emerald-500/20" : "border-border hover:border-ring"} bg-card`}
       >
-        {/* From */}
         <div
           className={`flex items-center gap-2 px-3.5 py-2.5 border-r transition-colors ${open || startDate ? "border-emerald-500/20" : "border-border"}`}
         >
@@ -414,11 +407,9 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
             )}
           </div>
         </div>
-        {/* Separator */}
         <span className="px-1 text-muted-foreground text-sm select-none">
           →
         </span>
-        {/* To */}
         <div className="flex items-center gap-2 px-3.5 py-2.5">
           <div className="text-sm min-w-[90px]">
             {toLabel ? (
@@ -441,10 +432,8 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
         </div>
       </div>
 
-      {/* ── Dropdown ── */}
       {open && (
         <div className="absolute z-50 mt-1.5 left-0 bg-card border border-border rounded-2xl shadow-2xl p-4 w-80">
-          {/* Quick selects */}
           <div className="flex flex-wrap gap-1.5 mb-3 pb-3 border-b border-border">
             {[
               {
@@ -507,8 +496,6 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
               </button>
             ))}
           </div>
-
-          {/* Calendar */}
           <MiniCalendar
             viewYear={viewYear}
             viewMonth={viewMonth}
@@ -520,8 +507,6 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
             onPrev={prev}
             onNext={next}
           />
-
-          {/* Hint */}
           {startDate && !endDate && (
             <p className="text-center text-xs text-muted-foreground mt-3 pt-2 border-t border-border">
               Chọn ngày kết thúc...
@@ -542,10 +527,13 @@ const ExportChamCongMau = ({ records = [] }) => {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [donVi, setDonVi] = useState("KHO VỆ TINH BÌNH DƯƠNG");
   const [boPhan, setBoPhan] = useState("XUẤT HÀNG");
+
   const handleExport = async () => {
     setLoading(true);
     try {
+      // Lọc theo tháng/năm VÀ bỏ qua bản ghi bị khóa
       const filtered = records.filter((r) => {
+        if (r.is_locked) return false;
         const d = new Date(r.ngay);
         return d.getFullYear() === year && d.getMonth() + 1 === month;
       });
@@ -557,8 +545,10 @@ const ExportChamCongMau = ({ records = [] }) => {
       setLoading(false);
     }
   };
+
   const inp =
     "w-full bg-muted/40 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-ring transition-all";
+
   return (
     <>
       <button
@@ -651,6 +641,12 @@ const ExportChamCongMau = ({ records = [] }) => {
                   onChange={(e) => setBoPhan(e.target.value)}
                   className={inp}
                 />
+              </div>
+              {/* Ghi chú về bản ghi bị khóa */}
+              <div className="bg-orange-500/8 border border-orange-500/20 rounded-xl px-4 py-3 text-xs text-orange-400">
+                🔒 Các ngày đã khóa sẽ{" "}
+                <span className="font-bold">không được tính công</span> trong
+                file Excel.
               </div>
             </div>
             <div className="flex gap-3 px-6 pb-6">
@@ -748,7 +744,7 @@ const TimePicker24 = ({ value, onChange, minTime, optional }) => {
           type="button"
           onClick={() => onChange("")}
           className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/60 transition-colors text-xs"
-          title="Xóa giờ ra"
+          title="Xóa giờ"
         >
           ✕
         </button>
@@ -757,203 +753,215 @@ const TimePicker24 = ({ value, onChange, minTime, optional }) => {
   );
 };
 
-// ─── Modal Add/Edit ───────────────────────────────────────────────────────────
-const AddEditModal = ({ record, onClose, onSaved, lookupNV }) => {
-  const isEdit = !!record;
+// ─── Icon bút chì ─────────────────────────────────────────────────────────────
+const PencilIcon = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2.5}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+
+// ─── Inline Cell Edit ─────────────────────────────────────────────────────────
+const InlineCellEdit = ({ record, field, minTimeField, onSaved }) => {
   const toTimeStr = (iso) => {
     if (!iso) return "";
     const d = new Date(iso);
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
-  const toDateStr = (iso) => {
-    if (!iso) return new Date().toISOString().slice(0, 10);
-    return new Date(iso).toISOString().slice(0, 10);
-  };
-  const [ma, setMa] = useState(record?.ma_nhan_vien || "");
-  const [nv, setNv] = useState(
-    record
-      ? { ten_nhan_vien: record.ten_nhan_vien, bo_phan: record.bo_phan }
-      : null,
-  );
-  const [ngay, setNgay] = useState(toDateStr(record?.ngay));
-  const [gioVao, setGioVao] = useState(toTimeStr(record?.gio_vao));
-  const [gioRa, setGioRa] = useState(toTimeStr(record?.gio_ra));
-  const [ghiChu, setGhiChu] = useState(record?.ghi_chu || "");
-  const [loading, setLoading] = useState(false);
+
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(toTimeStr(record[field]));
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [looking, setLooking] = useState(false);
+
   useEffect(() => {
-    if (isEdit) return;
-    setNv(null);
-    const trimmed = ma.trim().toUpperCase();
-    if (trimmed.length < 2) return;
-    setLooking(true);
-    const id = setTimeout(async () => {
-      try {
-        const res = await lookupNV(trimmed);
-        setNv(res?.data || null);
-      } catch {
-        setNv(null);
-      } finally {
-        setLooking(false);
-      }
-    }, 400);
-    return () => clearTimeout(id);
-  }, [ma, isEdit, lookupNV]);
-  const handleSubmit = async () => {
+    setVal(toTimeStr(record[field]));
+    setEditing(false);
     setError("");
-    if (!ma.trim()) return setError("Vui lòng nhập mã nhân viên");
-    if (!gioVao) return setError("Vui lòng nhập giờ vào");
-    if (!isEdit && !nv) return setError("Mã nhân viên không tồn tại");
-    setLoading(true);
+  }, [record[field]]);
+
+  const displayVal = record[field]
+    ? new Date(record[field]).toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Asia/Ho_Chi_Minh",
+      })
+    : null;
+
+  const minTime = minTimeField ? toTimeStr(record[minTimeField]) : undefined;
+
+  // ── Nếu bị khóa: chỉ hiển thị giá trị, không cho edit ──
+  if (record.is_locked) {
+    return (
+      <span
+        className={`font-mono text-sm font-semibold ${displayVal ? "text-teal-400/50" : "text-muted-foreground/20"}`}
+      >
+        {displayVal || "—"}
+      </span>
+    );
+  }
+
+  const handleSave = async () => {
+    setError("");
+    setSaving(true);
     try {
-      const payload = {
-        ma_nhan_vien: ma.trim().toUpperCase(),
-        ngay,
-        gio_vao: gioVao,
-        gio_ra: gioRa || "",
-        ghi_chu: ghiChu,
-      };
-      if (isEdit) await chamCongService.adminEditChamCong(record._id, payload);
-      else await chamCongService.adminAddChamCong(payload);
+      const payload = { [field]: val || "" };
+      if (field === "gio_vao_phu" && !val) payload.gio_ra_phu = "";
+      await chamCongService.adminEditChamCong(record._id, payload);
+      setEditing(false);
       onSaved();
     } catch (e) {
-      setError(e?.message || (isEdit ? "Cập nhật thất bại" : "Thêm thất bại"));
+      setError(e?.response?.data?.message || e?.message || "Lưu thất bại");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setVal(toTimeStr(record[field]));
+    setEditing(false);
+    setError("");
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-1.5 group min-w-[80px]">
+        <span
+          className={`font-mono text-sm font-semibold ${displayVal ? "text-teal-400" : "text-muted-foreground/30"}`}
+        >
+          {displayVal || "—"}
+        </span>
+        <button
+          onClick={() => setEditing(true)}
+          className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted-foreground/50 hover:text-amber-400 hover:bg-amber-500/10 transition-all"
+          title="Chỉnh sửa"
+        >
+          <PencilIcon />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 min-w-[160px]">
+      <TimePicker24 value={val} onChange={setVal} minTime={minTime} optional />
+      {error && (
+        <p className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-0.5 leading-tight">
+          ⚠ {error}
+        </p>
+      )}
+      <div className="flex gap-1">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition-colors disabled:opacity-50"
+        >
+          {saving ? <span className="animate-spin text-xs">◌</span> : "💾 Lưu"}
+        </button>
+        <button
+          onClick={handleCancel}
+          className="px-2 py-1 text-[11px] text-muted-foreground border border-border rounded-lg hover:border-ring hover:text-foreground transition-colors"
+        >
+          Hủy
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Modal Khóa / Mở Khóa ────────────────────────────────────────────────────
+const KhoaModal = ({ record, onClose, onSaved }) => {
+  const isLocked = !!record?.is_locked;
+  const [lyDo, setLyDo] = useState(record?.ly_do_khoa || "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!isLocked && !lyDo.trim()) return setError("Vui lòng nhập lý do khóa");
+    setError("");
+    setLoading(true);
+    try {
+      await chamCongService.toggleKhoa(record._id, { ly_do_khoa: lyDo.trim() });
+      onSaved();
+    } catch (e) {
+      setError(e?.response?.data?.message || e?.message || "Thao tác thất bại");
     } finally {
       setLoading(false);
     }
   };
-  const inp =
-    "w-full bg-muted/40 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-ring transition-all";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-border">
-          <div>
-            <h2 className="text-base font-bold text-foreground">
-              {isEdit ? "✏️ Sửa Chấm Công" : "➕ Thêm Chấm Công"}
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {isEdit
-                ? `${record.ma_nhan_vien} — ${record.ten_nhan_vien}`
-                : "Nhập thủ công từ admin"}
-            </p>
+      <div
+        className={`w-full max-w-md bg-card rounded-2xl shadow-2xl overflow-hidden border-2 ${isLocked ? "border-emerald-500/40" : "border-orange-500/40"}`}
+      >
+        <div
+          className={`px-6 py-4 flex items-center justify-between ${isLocked ? "bg-emerald-600" : "bg-orange-500"}`}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{isLocked ? "🔓" : "🔒"}</span>
+            <div>
+              <h2 className="font-black text-white text-sm tracking-wide uppercase">
+                {isLocked ? "Mở Khóa Chấm Công" : "Khóa Chấm Công"}
+              </h2>
+              <p className="text-white/70 text-xs mt-0.5">
+                {record?.ma_nhan_vien} — {record?.ten_nhan_vien}
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            className="text-white/60 hover:text-white transition-colors text-xl leading-none"
           >
             ✕
           </button>
         </div>
         <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-              Mã Nhân Viên
-            </label>
-            <input
-              type="text"
-              value={ma}
-              onChange={(e) => setMa(e.target.value.toUpperCase())}
-              disabled={isEdit}
-              placeholder="VD: NV001"
-              className={`${inp} font-mono tracking-widest text-center ${isEdit ? "opacity-50 cursor-not-allowed" : ""}`}
-            />
-            {!isEdit && (
-              <div className="mt-2 min-h-[2rem]">
-                {looking && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <span className="animate-spin">◌</span> Đang tìm...
-                  </p>
-                )}
-                {!looking && nv && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/8 border border-emerald-500/20">
-                    <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0">
-                      {nv.ten_nhan_vien?.charAt(0)?.toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">
-                        {nv.ten_nhan_vien}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {nv.bo_phan}
-                      </p>
-                    </div>
-                    <span className="ml-auto text-emerald-400 text-sm shrink-0">
-                      ✓
-                    </span>
-                  </div>
-                )}
-                {!looking && ma.trim().length >= 2 && !nv && (
-                  <p className="text-xs text-red-400 flex items-center gap-1">
-                    ⚠ Không tìm thấy nhân viên
-                  </p>
-                )}
+          {isLocked ? (
+            <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm text-emerald-400">
+              Mở khóa sẽ cho phép ngày{" "}
+              <span className="font-bold">
+                {new Date(record.ngay).toLocaleDateString("vi-VN", {
+                  timeZone: "Asia/Ho_Chi_Minh",
+                })}
+              </span>{" "}
+              được tính công trở lại trong Excel.
+            </div>
+          ) : (
+            <>
+              <div className="bg-orange-500/8 border border-orange-500/20 rounded-xl px-4 py-3 text-sm text-orange-400">
+                Khi khóa, ngày{" "}
+                <span className="font-bold">
+                  {new Date(record.ngay).toLocaleDateString("vi-VN", {
+                    timeZone: "Asia/Ho_Chi_Minh",
+                  })}
+                </span>{" "}
+                sẽ <span className="font-bold">không được tính công</span> khi
+                xuất Excel.
               </div>
-            )}
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-              Ngày
-            </label>
-            <input
-              type="date"
-              value={ngay}
-              onChange={(e) => setNgay(e.target.value)}
-              className={`${inp} [color-scheme:dark]`}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                Giờ Vào <span className="text-red-400">*</span>
-              </label>
-              <TimePicker24 value={gioVao} onChange={setGioVao} />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                Giờ Ra{" "}
-                <span className="text-muted-foreground/50">(tuỳ chọn)</span>
-              </label>
-              <TimePicker24
-                value={gioRa}
-                onChange={setGioRa}
-                minTime={gioVao || undefined}
-                optional
-              />
-            </div>
-          </div>
-          {gioVao && gioRa && (
-            <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-violet-500/8 border border-violet-500/20 text-sm">
-              <span className="text-violet-400">⏱</span>
-              <span className="text-muted-foreground">Tổng giờ làm:</span>
-              <span className="font-bold text-violet-400 ml-auto">
-                {(() => {
-                  const [hv, mv] = gioVao.split(":").map(Number);
-                  const [hr, mr] = gioRa.split(":").map(Number);
-                  const diff = hr * 60 + mr - (hv * 60 + mv);
-                  if (diff <= 0) return "⚠ Giờ ra phải sau giờ vào";
-                  const h = Math.floor(diff / 60),
-                    m = diff % 60;
-                  return m === 0
-                    ? `${h}h`
-                    : `${h}h${String(m).padStart(2, "0")}`;
-                })()}
-              </span>
-            </div>
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                  Lý do khóa <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={lyDo}
+                  onChange={(e) => setLyDo(e.target.value)}
+                  rows={3}
+                  placeholder="VD: Nghỉ không phép, vắng mặt không lý do..."
+                  className="w-full bg-muted/40 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-ring transition-all resize-none"
+                />
+              </div>
+            </>
           )}
-          <div>
-            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-              Ghi Chú
-            </label>
-            <textarea
-              value={ghiChu}
-              onChange={(e) => setGhiChu(e.target.value)}
-              rows={2}
-              placeholder="Nhập ghi chú (tuỳ chọn)..."
-              className={`${inp} resize-none`}
-            />
-          </div>
           {error && (
             <p className="text-sm text-destructive bg-destructive/10 border border-destructive/25 rounded-xl px-4 py-2.5">
               ⚠ {error}
@@ -970,16 +978,16 @@ const AddEditModal = ({ record, onClose, onSaved, lookupNV }) => {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${isEdit ? "bg-amber-500 hover:bg-amber-400 text-black" : "bg-emerald-500 hover:bg-emerald-400 text-black"}`}
+            className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${isLocked ? "bg-emerald-500 hover:bg-emerald-400 text-black" : "bg-orange-500 hover:bg-orange-400 text-white"}`}
           >
             {loading ? (
               <>
-                <span className="animate-spin">◌</span> Đang lưu...
+                <span className="animate-spin">◌</span> Đang xử lý...
               </>
-            ) : isEdit ? (
-              "💾 Cập Nhật"
+            ) : isLocked ? (
+              "🔓 Mở Khóa"
             ) : (
-              "➕ Thêm Mới"
+              "🔒 Xác nhận Khóa"
             )}
           </button>
         </div>
@@ -993,6 +1001,7 @@ const GhiChuModal = ({ record, onClose, onSaved }) => {
   const [ghiChu, setGhiChu] = useState(record?.ghi_chu || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
   const handleSubmit = async () => {
     setError("");
     setLoading(true);
@@ -1005,6 +1014,7 @@ const GhiChuModal = ({ record, onClose, onSaved }) => {
       setLoading(false);
     }
   };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
       <div className="w-full max-w-md bg-card border border-border rounded-2xl p-7 shadow-2xl">
@@ -1065,7 +1075,6 @@ const ViPhamModal = ({ record, onClose }) => {
     const time = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}:${String(d.getUTCSeconds()).padStart(2, "0")}`;
     return `${date} ${time}`;
   };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
       <div className="w-full max-w-md bg-card border-2 border-red-500/40 rounded-2xl overflow-hidden shadow-2xl shadow-red-500/10">
@@ -1168,15 +1177,17 @@ const formatTime = (iso) => {
   return new Date(iso).toLocaleTimeString("vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh",
   });
 };
-const toVNDate = (iso) =>
-  new Date(new Date(iso).getTime() + 7 * 60 * 60 * 1000);
-
 const formatDate = (iso) => {
   if (!iso) return "—";
-  const d = toVNDate(iso);
-  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+  return new Date(iso).toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
 };
 const formatTongGio = (gio) => {
   if (!gio && gio !== 0) return "—";
@@ -1187,27 +1198,24 @@ const formatTongGio = (gio) => {
 };
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function ChamCongTable() {
+export default function ChamCongTable({ role }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [ghiChuModal, setGhiChuModal] = useState(null);
   const [viPhamModal, setViPhamModal] = useState(null);
-  const [addEditModal, setAddEditModal] = useState(null);
+  const [khoaModal, setKhoaModal] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [filterViPham] = useState(false);
+  const [filterBoPhan, setFilterBoPhan] = useState("");
+  const [filterChucVu, setFilterChucVu] = useState("");
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
     return {
-      startDate: new Date(now.getFullYear(), now.getMonth(), 1),
-      endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0),
+      startDate: now,
+      endDate: now,
     };
   });
-
-  const lookupNV = useCallback(async (ma) => {
-    const { nhanVienService } = await import("@/services/nhanvien.service");
-    return nhanVienService.traCuu(ma);
-  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -1229,8 +1237,18 @@ export default function ChamCongTable() {
     setSelected(new Set());
   }, [data]);
 
+  const boPhanList = [
+    ...new Set(data.map((r) => r.bo_phan).filter(Boolean)),
+  ].sort();
+  const chucVuList = [
+    ...new Set(data.map((r) => r.chuc_vu).filter(Boolean)),
+  ].sort();
+
   const filtered = data.filter((r) => {
+    if (role === 30 && r.bo_phan?.toLowerCase() !== "ngọc phú") return false;
     if (filterViPham && !r.vi_pham_cham_ho) return false;
+    if (filterBoPhan && r.bo_phan !== filterBoPhan) return false;
+    if (filterChucVu && r.chuc_vu !== filterChucVu) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -1240,40 +1258,157 @@ export default function ChamCongTable() {
   });
 
   const soViPham = data.filter((r) => r.vi_pham_cham_ho).length;
-  const toggleSelect = (id) =>
+
+  // Chỉ cho phép select những row KHÔNG bị khóa
+  const toggleSelect = (id) => {
+    const record = data.find((r) => r._id === id);
+    if (record?.is_locked) return;
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  };
   const toggleAll = () => {
-    if (selected.size === filtered.length) setSelected(new Set());
-    else setSelected(new Set(filtered.map((r) => r._id)));
+    const selectableIds = filtered
+      .filter((r) => !r.is_locked)
+      .map((r) => r._id);
+    if (selected.size === selectableIds.length && selectableIds.length > 0) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(selectableIds));
+    }
   };
 
-  const handleDelete = async (id, label) => {
-    if (!window.confirm(`Xóa bản ghi chấm công của "${label}"?`)) return;
-    try {
-      await chamCongService.deleteChamCong(id);
-      fetchData();
-    } catch {
-      alert("Xóa thất bại");
-    }
-  };
-  const handleDeleteMany = async () => {
-    if (selected.size === 0) return;
-    if (!window.confirm(`Xóa ${selected.size} bản ghi đã chọn?`)) return;
-    try {
-      await chamCongService.deleteManyChamCong([...selected]);
-      fetchData();
-    } catch {
-      alert("Xóa hàng loạt thất bại");
-    }
+  const exportSelected = async () => {
+    const rows = filtered.filter((r) => selected.has(r._id) && !r.is_locked);
+    if (rows.length === 0) return;
+
+    const fmtTime = (iso) => {
+      if (!iso) return "";
+      return new Date(iso).toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Asia/Ho_Chi_Minh",
+      });
+    };
+    const fmtDate = (iso) => {
+      if (!iso) return "";
+      return new Date(iso).toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        timeZone: "Asia/Ho_Chi_Minh",
+      });
+    };
+    const fmtGio = (gio) => {
+      if (!gio && gio !== 0) return "";
+      const h = Math.floor(gio),
+        m = Math.round((gio - h) * 60);
+      return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
+    };
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Chấm Công");
+    const COLS = [
+      { header: "STT", key: "stt", width: 6 },
+      { header: "Mã NV", key: "ma_nhan_vien", width: 10 },
+      { header: "Tên Nhân Viên", key: "ten_nhan_vien", width: 24 },
+      { header: "Bộ Phận", key: "bo_phan", width: 16 },
+      { header: "Chức Vụ", key: "chuc_vu", width: 16 },
+      { header: "Check-In", key: "gio_vao", width: 10 },
+      { header: "Check-Out", key: "gio_ra", width: 10 },
+      { header: "Tổng Giờ", key: "tong_gio", width: 10 },
+      { header: "Vào Phụ", key: "gio_vao_phu", width: 10 },
+      { header: "Ra Phụ", key: "gio_ra_phu", width: 10 },
+      { header: "T.Giờ Phụ", key: "tong_gio_phu", width: 11 },
+      { header: "Ngày", key: "ngay", width: 13 },
+      { header: "Trạng Thái", key: "trang_thai", width: 14 },
+      { header: "Phiếu", key: "so_phieu", width: 8 },
+      { header: "Kiện", key: "so_kien", width: 8 },
+      { header: "Dòng", key: "so_dong", width: 8 },
+      { header: "Ghi Chú", key: "ghi_chu", width: 24 },
+    ];
+    ws.columns = COLS.map(({ header, key, width }) => ({ header, key, width }));
+    const headerRow = ws.getRow(1);
+    headerRow.height = 22;
+    headerRow.eachCell((cell) => {
+      cell.font = {
+        bold: true,
+        size: 10,
+        name: "Arial",
+        color: { argb: "FFFFFFFF" },
+      };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1F7A45" },
+      };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+    rows.forEach((r, idx) => {
+      const hasCheckout = !!r.gio_ra;
+      const row = ws.addRow({
+        stt: idx + 1,
+        ma_nhan_vien: r.ma_nhan_vien,
+        ten_nhan_vien: r.ten_nhan_vien,
+        bo_phan: r.bo_phan || "",
+        chuc_vu: r.chuc_vu || "",
+        gio_vao: fmtTime(r.gio_vao),
+        gio_ra: fmtTime(r.gio_ra),
+        tong_gio: fmtGio(r.tong_gio),
+        gio_vao_phu: fmtTime(r.gio_vao_phu),
+        gio_ra_phu: fmtTime(r.gio_ra_phu),
+        tong_gio_phu: fmtGio(r.tong_gio_phu),
+        ngay: fmtDate(r.ngay),
+        trang_thai: hasCheckout ? "Hợp lệ" : "Chưa hợp lệ",
+        so_phieu: r.so_phieu ?? "",
+        so_kien: r.so_kien ?? "",
+        so_dong: r.so_dong ?? "",
+        ghi_chu: r.ghi_chu || "",
+      });
+      row.height = 18;
+      const bg = idx % 2 === 0 ? "FFFAFAFA" : "FFEDF7ED";
+      row.eachCell((cell) => {
+        cell.font = { size: 10, name: "Arial" };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: bg },
+        };
+        cell.alignment = { vertical: "middle" };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cham-cong_${rows.length}-ban-ghi.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const th =
     "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
   const td = "px-5 py-4 text-sm border-b border-border/50 align-middle";
+
+  // Tính số row có thể select (không bị khóa)
+  const selectableCount = filtered.filter((r) => !r.is_locked).length;
 
   return (
     <>
@@ -1293,15 +1428,14 @@ export default function ChamCongTable() {
           onClose={() => setViPhamModal(null)}
         />
       )}
-      {addEditModal && (
-        <AddEditModal
-          record={addEditModal === "add" ? null : addEditModal}
-          onClose={() => setAddEditModal(null)}
+      {khoaModal && (
+        <KhoaModal
+          record={khoaModal}
+          onClose={() => setKhoaModal(null)}
           onSaved={() => {
-            setAddEditModal(null);
+            setKhoaModal(null);
             fetchData();
           }}
-          lookupNV={lookupNV}
         />
       )}
 
@@ -1319,20 +1453,26 @@ export default function ChamCongTable() {
           <div className="flex items-center gap-3">
             {selected.size > 0 && (
               <button
-                onClick={handleDeleteMany}
-                className="flex items-center gap-2 px-4 py-2.5 bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm font-semibold rounded-xl border border-destructive/30 transition-colors"
+                onClick={exportSelected}
+                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm font-semibold rounded-xl border border-emerald-500/30 transition-colors"
               >
-                🗑 Xóa {selected.size} mục đã chọn
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="12" y1="18" x2="12" y2="12" />
+                  <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
+                Xuất {selected.size} mục
               </button>
             )}
-            <button
-              onClick={() => setAddEditModal("add")}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-bold rounded-xl transition-colors"
-            >
-              <span className="text-base leading-none">+</span> Thêm Mới
-            </button>
-            <ImportNangSuat onSuccess={fetchData} />
-            <ExportChamCongMau records={data} />
+          {role !== 27 && role !== 30 && <ImportNangSuat onSuccess={fetchData} />}
+{role !== 27 && role !== 30 && <ExportChamCongMau records={data} />}
           </div>
         </div>
 
@@ -1350,13 +1490,35 @@ export default function ChamCongTable() {
               className="bg-card border border-border rounded-xl pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-ring transition-all w-64"
             />
           </div>
-
-          {/* DateRange Picker — 2 input boxes + calendar dropdown */}
           <DateRangePicker
             startDate={dateRange.startDate}
             endDate={dateRange.endDate}
             onChange={setDateRange}
           />
+          <select
+            value={filterBoPhan}
+            onChange={(e) => setFilterBoPhan(e.target.value)}
+            className="bg-card border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring transition-all cursor-pointer min-w-[140px]"
+          >
+            <option value="">Tất cả bộ phận</option>
+            {boPhanList.map((bp) => (
+              <option key={bp} value={bp}>
+                {bp}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterChucVu}
+            onChange={(e) => setFilterChucVu(e.target.value)}
+            className="bg-card border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring transition-all cursor-pointer min-w-[140px]"
+          >
+            <option value="">Tất cả chức vụ</option>
+            {chucVuList.map((cv) => (
+              <option key={cv} value={cv}>
+                {cv}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Table */}
@@ -1384,7 +1546,7 @@ export default function ChamCongTable() {
                     <input
                       type="checkbox"
                       checked={
-                        filtered.length > 0 && selected.size === filtered.length
+                        selectableCount > 0 && selected.size === selectableCount
                       }
                       onChange={toggleAll}
                       className="w-4 h-4 rounded accent-emerald-500 cursor-pointer"
@@ -1394,9 +1556,13 @@ export default function ChamCongTable() {
                   <th className={th}>Mã NV</th>
                   <th className={th}>Tên Nhân Viên</th>
                   <th className={th}>Bộ Phận</th>
+                  <th className={th}>Chức Vụ</th>
                   <th className={th}>Check-In</th>
                   <th className={th}>Check-Out</th>
                   <th className={th}>Tổng Giờ</th>
+                  <th className={th}>Vào Phụ</th>
+                  <th className={th}>Ra Phụ</th>
+                  <th className={th}>T.Giờ Phụ</th>
                   <th className={th}>Ngày</th>
                   <th className={th}>Trạng Thái</th>
                   <th className={`${th} text-center`}>Phiếu</th>
@@ -1410,7 +1576,7 @@ export default function ChamCongTable() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={15}
+                      colSpan={19}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -1421,7 +1587,7 @@ export default function ChamCongTable() {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={15}
+                      colSpan={19}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="text-4xl mb-3 opacity-30">⏱</div>Chưa có
@@ -1430,22 +1596,35 @@ export default function ChamCongTable() {
                   </tr>
                 ) : (
                   filtered.map((r, i) => {
-                    const isChecked = selected.has(r._id),
-                      hasCheckout = !!r.gio_ra,
-                      isViPham = !!r.vi_pham_cham_ho;
+                    const isChecked = selected.has(r._id);
+                    const hasCheckout = !!r.gio_ra;
+                    const isViPham = !!r.vi_pham_cham_ho;
+                    const isLocked = !!r.is_locked;
+
                     return (
                       <tr
                         key={r._id}
-                        className={`transition-colors ${isViPham ? "bg-red-500/5 hover:bg-red-500/10" : isChecked ? "bg-emerald-500/5" : "hover:bg-muted/20"}`}
+                        className={`transition-colors ${
+                          isLocked
+                            ? "bg-orange-500/5 hover:bg-orange-500/8 opacity-60"
+                            : isViPham
+                              ? "bg-red-500/5 hover:bg-red-500/10"
+                              : isChecked
+                                ? "bg-emerald-500/5"
+                                : "hover:bg-muted/20"
+                        }`}
                       >
+                        {/* Checkbox — disabled khi bị khóa */}
                         <td className={td}>
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleSelect(r._id)}
-                            className="w-4 h-4 rounded accent-emerald-500 cursor-pointer"
+                            disabled={isLocked}
+                            className="w-4 h-4 rounded accent-emerald-500 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
                           />
                         </td>
+
                         <td
                           className={`${td} text-muted-foreground text-xs font-mono`}
                         >
@@ -1461,6 +1640,9 @@ export default function ChamCongTable() {
                         </td>
                         <td className={`${td} text-muted-foreground`}>
                           {r.bo_phan || "—"}
+                        </td>
+                        <td className={`${td} text-muted-foreground`}>
+                          {r.chuc_vu || "—"}
                         </td>
                         <td className={td}>
                           <span className="font-mono text-sm text-sky-400 font-semibold">
@@ -1481,12 +1663,50 @@ export default function ChamCongTable() {
                             {r.tong_gio > 0 ? formatTongGio(r.tong_gio) : "—"}
                           </span>
                         </td>
+
+                        {/* Vào Phụ — InlineCellEdit tự disable khi is_locked */}
+                        <td className={td}>
+                          <InlineCellEdit
+                            record={r}
+                            field="gio_vao_phu"
+                            onSaved={fetchData}
+                          />
+                        </td>
+                        {/* Ra Phụ */}
+                        <td className={td}>
+                          <InlineCellEdit
+                            record={r}
+                            field="gio_ra_phu"
+                            minTimeField="gio_vao_phu"
+                            onSaved={fetchData}
+                          />
+                        </td>
+                        {/* Tổng Giờ Phụ */}
+                        <td className={td}>
+                          <span
+                            className={`font-mono text-sm font-semibold ${r.tong_gio_phu > 0 ? "text-teal-400" : "text-muted-foreground/30"}`}
+                          >
+                            {r.tong_gio_phu > 0
+                              ? formatTongGio(r.tong_gio_phu)
+                              : "—"}
+                          </span>
+                        </td>
+
                         <td className={`${td} text-muted-foreground`}>
                           {formatDate(r.ngay)}
                         </td>
+
+                        {/* Trạng thái */}
                         <td className={td}>
                           <div className="flex flex-col gap-1.5">
-                            {hasCheckout ? (
+                            {isLocked ? (
+                              <span
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                                title={r.ly_do_khoa}
+                              >
+                                🔒 Đã khóa
+                              </span>
+                            ) : hasCheckout ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                 Hợp lệ
@@ -1512,6 +1732,7 @@ export default function ChamCongTable() {
                             )}
                           </div>
                         </td>
+
                         <td className={`${td} text-center`}>
                           {r.so_phieu != null ? (
                             <span className="font-semibold text-violet-400 bg-violet-500/8 px-2 py-0.5 rounded text-xs">
@@ -1553,27 +1774,27 @@ export default function ChamCongTable() {
                             <span className="opacity-40 italic">Chưa có</span>
                           )}
                         </td>
+
+                        {/* Thao tác — khi khóa chỉ hiện nút mở khóa */}
                         <td className={`${td} text-center`}>
                           <div className="flex items-center justify-center gap-1.5">
+                            {!isLocked && (
+                              <button
+                                onClick={() => setGhiChuModal(r)}
+                                className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:border-ring hover:text-foreground transition-colors"
+                              >
+                                Ghi chú
+                              </button>
+                            )}
                             <button
-                              onClick={() => setAddEditModal(r)}
-                              className="px-3 py-1.5 text-xs font-medium text-amber-400 border border-amber-500/30 bg-amber-500/5 rounded-lg hover:bg-amber-500/15 transition-colors"
+                              onClick={() => setKhoaModal(r)}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                                isLocked
+                                  ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/15"
+                                  : "text-orange-400 border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/15"
+                              }`}
                             >
-                              ✏️ Sửa
-                            </button>
-                            <button
-                              onClick={() => setGhiChuModal(r)}
-                              className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:border-ring hover:text-foreground transition-colors"
-                            >
-                              Ghi chú
-                            </button>
-                            <button
-                              onClick={() =>
-                                handleDelete(r._id, r.ten_nhan_vien)
-                              }
-                              className="px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/30 bg-destructive/5 rounded-lg hover:bg-destructive/15 transition-colors"
-                            >
-                              Xóa
+                              {isLocked ? "🔓 Mở khóa" : "🔒 Khóa"}
                             </button>
                           </div>
                         </td>

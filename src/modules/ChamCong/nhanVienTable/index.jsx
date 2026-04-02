@@ -6,6 +6,27 @@ import ImportNhanVien from "./importNhanVien";
 
 const ROLE_FULL = 28;
 
+// ✅ Single source of truth — phải khớp với schema backend
+const BO_PHAN_CHUC_VU = {
+  "Ngọc Phú": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất"],
+  "Xuất hàng": [
+    "Xử lý đơn hàng TV",
+    "Soạn hàng CT",
+    "Soạn hàng TV",
+    "Xuất hàng TV",
+    "Xuất hàng CT",
+    "Điều vận TV",
+    "Điều vận CT",
+    "Sinh Viên",
+  ],
+  "Nhập hàng": ["Nhập hàng TV", "Nhập hàng CT", "Sinh Viên"],
+
+  "Hỗ trợ Kho": ["Kiểm chéo", "Điều phối Xuất", "Sinh Viên"],
+  "Kế toán": ["Kế toán TV", "Kế Toán CT", "Sinh Viên"],
+};
+
+const ALL_BO_PHAN = Object.keys(BO_PHAN_CHUC_VU);
+
 function getRoleFromStorage() {
   try {
     const raw = localStorage.getItem("user");
@@ -31,7 +52,24 @@ const NhanVienModal = ({ editData, onClose, onSaved }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // Danh sách chức vụ theo bộ phận đang chọn
+  const chucVuOptions = form.bo_phan ? BO_PHAN_CHUC_VU[form.bo_phan] || [] : [];
+
+  const set = (k) => (e) => {
+    const value = e.target.value;
+    setForm((f) => {
+      // Khi đổi bộ phận → reset chức vụ nếu không còn hợp lệ
+      if (k === "bo_phan") {
+        const newChucVuList = BO_PHAN_CHUC_VU[value] || [];
+        return {
+          ...f,
+          bo_phan: value,
+          chuc_vu: newChucVuList.includes(f.chuc_vu) ? f.chuc_vu : "",
+        };
+      }
+      return { ...f, [k]: value };
+    });
+  };
 
   const handleSubmit = async () => {
     setError("");
@@ -53,6 +91,8 @@ const NhanVienModal = ({ editData, onClose, onSaved }) => {
 
   const inputCls =
     "w-full bg-muted/40 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-ring transition-all";
+  const selectCls =
+    "w-full bg-muted/40 border border-border rounded-xl px-4 py-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring transition-all appearance-none cursor-pointer";
   const labelCls =
     "block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5";
 
@@ -83,16 +123,30 @@ const NhanVienModal = ({ editData, onClose, onSaved }) => {
                 className={`${inputCls} ${isEdit ? "opacity-50 cursor-not-allowed" : ""}`}
               />
             </div>
+
+            {/* ✅ Bộ Phận → Select */}
             <div>
               <label className={labelCls}>Bộ Phận *</label>
-              <input
-                value={form.bo_phan}
-                onChange={set("bo_phan")}
-                placeholder="Kỹ Thuật"
-                className={inputCls}
-              />
+              <div className="relative">
+                <select
+                  value={form.bo_phan}
+                  onChange={set("bo_phan")}
+                  className={selectCls}
+                >
+                  <option value="">-- Chọn bộ phận --</option>
+                  {ALL_BO_PHAN.map((bp) => (
+                    <option key={bp} value={bp}>
+                      {bp}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
+                  ▾
+                </span>
+              </div>
             </div>
           </div>
+
           <div>
             <label className={labelCls}>Tên Nhân Viên *</label>
             <input
@@ -102,16 +156,35 @@ const NhanVienModal = ({ editData, onClose, onSaved }) => {
               className={inputCls}
             />
           </div>
+
           <div className="grid grid-cols-2 gap-4">
+            {/* ✅ Chức Vụ → Select, filter theo bộ phận */}
             <div>
               <label className={labelCls}>Chức Vụ</label>
-              <input
-                value={form.chuc_vu}
-                onChange={set("chuc_vu")}
-                placeholder="Nhân viên"
-                className={inputCls}
-              />
+              <div className="relative">
+                <select
+                  value={form.chuc_vu}
+                  onChange={set("chuc_vu")}
+                  disabled={!form.bo_phan}
+                  className={`${selectCls} ${!form.bo_phan ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  <option value="">
+                    {form.bo_phan
+                      ? "-- Chọn chức vụ --"
+                      : "-- Chọn bộ phận trước --"}
+                  </option>
+                  {chucVuOptions.map((cv) => (
+                    <option key={cv} value={cv}>
+                      {cv}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
+                  ▾
+                </span>
+              </div>
             </div>
+
             <div>
               <label className={labelCls}>Số Điện Thoại</label>
               <input
@@ -122,6 +195,7 @@ const NhanVienModal = ({ editData, onClose, onSaved }) => {
               />
             </div>
           </div>
+
           <div>
             <label className={labelCls}>Email</label>
             <input
@@ -164,7 +238,9 @@ const ImportModal = ({ onClose, onDone }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
     <div className="w-full max-w-2xl bg-card border border-border rounded-2xl p-7 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-base font-bold text-foreground">Import Nhân Viên</h2>
+        <h2 className="text-base font-bold text-foreground">
+          Import Nhân Viên
+        </h2>
         <button
           onClick={onClose}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors text-lg"
@@ -192,7 +268,6 @@ export default function NhanVienTable() {
     try {
       const res = await nhanVienService.getDanhSach();
       const list = res?.data || [];
-      // Mới nhất lên đầu
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setData(list);
     } finally {
@@ -200,7 +275,9 @@ export default function NhanVienTable() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const filtered = data.filter((r) => {
     if (!search) return true;
@@ -231,11 +308,18 @@ export default function NhanVienTable() {
     }
   };
 
-  const closeModal  = () => setModal(null);
-  const afterSave   = () => { closeModal(); fetchData(); };
-  const afterImport = () => { closeModal(); fetchData(); };
+  const closeModal = () => setModal(null);
+  const afterSave = () => {
+    closeModal();
+    fetchData();
+  };
+  const afterImport = () => {
+    closeModal();
+    fetchData();
+  };
 
-  const th = "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
+  const th =
+    "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
   const td = "px-5 py-4 text-sm border-b border-border/50 align-middle";
 
   return (
@@ -255,13 +339,14 @@ export default function NhanVienTable() {
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold text-foreground">Whitelist Nhân Viên</h1>
+            <h1 className="text-xl font-bold text-foreground">
+              Whitelist Nhân Viên
+            </h1>
             <p className="text-sm text-muted-foreground mt-1">
               Chỉ nhân viên trong danh sách mới được chấm công
             </p>
           </div>
 
-          {/* Buttons — chỉ role 28 mới thấy */}
           {isFullAccess && (
             <div className="flex items-center gap-2">
               <button
@@ -283,7 +368,9 @@ export default function NhanVienTable() {
 
         {/* Search */}
         <div className="relative w-full sm:w-72">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">🔍</span>
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+            🔍
+          </span>
           <input
             type="text"
             placeholder="Tìm mã / tên / bộ phận..."
@@ -296,7 +383,9 @@ export default function NhanVienTable() {
         {/* Table */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-            <span className="text-sm font-semibold text-foreground">Danh sách nhân viên</span>
+            <span className="text-sm font-semibold text-foreground">
+              Danh sách nhân viên
+            </span>
             <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
               {filtered.length} nhân viên
             </span>
@@ -313,14 +402,18 @@ export default function NhanVienTable() {
                   <th className={th}>Chức Vụ</th>
                   <th className={th}>Số ĐT</th>
                   <th className={th}>Trạng Thái</th>
-                  {/* Cột thao tác — chỉ role 28 */}
-                  {isFullAccess && <th className={`${th} text-center`}>Thao Tác</th>}
+                  {isFullAccess && (
+                    <th className={`${th} text-center`}>Thao Tác</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={isFullAccess ? 8 : 7} className="text-center py-16 text-sm text-muted-foreground">
+                    <td
+                      colSpan={isFullAccess ? 8 : 7}
+                      className="text-center py-16 text-sm text-muted-foreground"
+                    >
                       <div className="flex items-center justify-center gap-2">
                         <span className="animate-spin">◌</span> Đang tải...
                       </div>
@@ -328,15 +421,23 @@ export default function NhanVienTable() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={isFullAccess ? 8 : 7} className="text-center py-16 text-sm text-muted-foreground">
+                    <td
+                      colSpan={isFullAccess ? 8 : 7}
+                      className="text-center py-16 text-sm text-muted-foreground"
+                    >
                       <div className="text-4xl mb-3 opacity-30">👥</div>
                       Chưa có nhân viên nào
                     </td>
                   </tr>
                 ) : (
                   filtered.map((r, i) => (
-                    <tr key={r._id} className="hover:bg-muted/20 transition-colors">
-                      <td className={`${td} text-muted-foreground text-xs font-mono`}>
+                    <tr
+                      key={r._id}
+                      className="hover:bg-muted/20 transition-colors"
+                    >
+                      <td
+                        className={`${td} text-muted-foreground text-xs font-mono`}
+                      >
                         {String(i + 1).padStart(2, "0")}
                       </td>
                       <td className={td}>
@@ -344,23 +445,34 @@ export default function NhanVienTable() {
                           {r.ma_nhan_vien}
                         </span>
                       </td>
-                      <td className={`${td} font-medium text-foreground`}>{r.ten_nhan_vien}</td>
-                      <td className={`${td} text-muted-foreground`}>{r.bo_phan}</td>
-                      <td className={`${td} text-muted-foreground`}>{r.chuc_vu || "—"}</td>
-                      <td className={`${td} font-mono text-sm text-muted-foreground`}>{r.so_dien_thoai || "—"}</td>
+                      <td className={`${td} font-medium text-foreground`}>
+                        {r.ten_nhan_vien}
+                      </td>
+                      <td className={`${td} text-muted-foreground`}>
+                        {r.bo_phan}
+                      </td>
+                      <td className={`${td} text-muted-foreground`}>
+                        {r.chuc_vu || "—"}
+                      </td>
+                      <td
+                        className={`${td} font-mono text-sm text-muted-foreground`}
+                      >
+                        {r.so_dien_thoai || "—"}
+                      </td>
                       <td className={td}>
                         {r.active ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Hoạt động
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            Hoạt động
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />Bị khóa
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                            Bị khóa
                           </span>
                         )}
                       </td>
 
-                      {/* Thao tác — chỉ role 28 */}
                       {isFullAccess && (
                         <td className={`${td} text-center`}>
                           <div className="flex items-center justify-center gap-2">
@@ -381,7 +493,9 @@ export default function NhanVienTable() {
                               {r.active ? "Khóa" : "Mở"}
                             </button>
                             <button
-                              onClick={() => handleDelete(r._id, r.ten_nhan_vien)}
+                              onClick={() =>
+                                handleDelete(r._id, r.ten_nhan_vien)
+                              }
                               className="px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/30 bg-destructive/5 rounded-lg hover:bg-destructive/15 transition-colors"
                             >
                               Xóa

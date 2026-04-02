@@ -90,11 +90,12 @@ function fmtNgay(s) {
   return `${d}/${m}/${y}`;
 }
 
-export default function ImportNangSuat({ onSuccess }) {
+export default function ImportNangSuat({ onSuccess  }) {
+  
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState("upload"); // upload | preview | result
   const [file, setFile] = useState(null);
-  const [parsed, setParsed] = useState(null);
+  const [parsed, setParsed] = useState(null); 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);

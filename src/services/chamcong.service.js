@@ -172,6 +172,14 @@ const importNangSuat = async (payload) =>
     undefined,
     ApiServer,
   );
+const toggleKhoa = async (id, payload) =>
+  requestService.patch(
+    `${URL.chamcong.chamcong}/${id}/toggle-khoa`,
+    payload,
+    undefined,
+    ApiServer,
+  );
+
 export const chamCongService = {
   getAllChamCong,
   getChamCongById,
@@ -185,5 +193,6 @@ export const chamCongService = {
   validateQrToken,
   adminAddChamCong,
   adminEditChamCong,
-  importNangSuat
+  importNangSuat,
+  toggleKhoa,
 };

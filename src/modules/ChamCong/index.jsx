@@ -5,7 +5,8 @@ import NhanVienTable from "./nhanVienTable";
 import ChamCongTable from "./Table";
 
 const ROLE_FULL = 28; // thấy cả 2 tab
-const ROLE_NV = 27; // chỉ thấy whitelist nhân viên
+const ROLE_NV = 27; // chỉ thấy dữ liệu chấm công
+const ROLE_NGOC_PHU = 30; // như 27 nhưng chỉ thấy bộ phận Ngọc Phú
 
 function getRoleFromStorage() {
   try {
@@ -21,14 +22,14 @@ function getRoleFromStorage() {
 export default function ChamCongPage() {
   const role = getRoleFromStorage();
 
-  const canSeeChamCong = role === ROLE_FULL;
-  const canSeeNhanVien = role === ROLE_FULL || role === ROLE_NV;
+  const canSeeChamCong =
+    role === ROLE_FULL || role === ROLE_NV || role === ROLE_NGOC_PHU;
+  const canSeeNhanVien = role === ROLE_FULL;
 
-  // Hooks luôn gọi trước mọi conditional return
   const [tab, setTab] = useState(canSeeChamCong ? "chamcong" : "nhanvien");
 
-  // Nếu không có quyền gì → không render
-  if (!canSeeNhanVien) {
+  // Không có quyền gì cả
+  if (!canSeeChamCong && !canSeeNhanVien) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-3">
@@ -43,7 +44,6 @@ export default function ChamCongPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Tab Bar — chỉ hiện tab mà role được phép */}
       <div className="border-b-2 border-border bg-card px-6 sm:px-8">
         <div className="flex gap-1">
           {canSeeChamCong && (
@@ -64,8 +64,7 @@ export default function ChamCongPage() {
           )}
         </div>
       </div>
-
-      {tab === "chamcong" && canSeeChamCong && <ChamCongTable />}
+      {tab === "chamcong" && canSeeChamCong && <ChamCongTable role={role} />}{" "}
       {tab === "nhanvien" && canSeeNhanVien && <NhanVienTable />}
     </div>
   );
