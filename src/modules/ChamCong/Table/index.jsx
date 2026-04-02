@@ -1319,9 +1319,13 @@ export default function ChamCongTable({ role }) {
       { header: "Check-In", key: "gio_vao", width: 10 },
       { header: "Check-Out", key: "gio_ra", width: 10 },
       { header: "Tổng Giờ", key: "tong_gio", width: 10 },
-      { header: "Vào Phụ", key: "gio_vao_phu", width: 10 },
-      { header: "Ra Phụ", key: "gio_ra_phu", width: 10 },
-      { header: "T.Giờ Phụ", key: "tong_gio_phu", width: 11 },
+      ...(role !== 30
+        ? [
+            { header: "Vào Phụ", key: "gio_vao_phu", width: 10 },
+            { header: "Ra Phụ", key: "gio_ra_phu", width: 10 },
+            { header: "T.Giờ Phụ", key: "tong_gio_phu", width: 11 },
+          ]
+        : []),
       { header: "Ngày", key: "ngay", width: 13 },
       { header: "Trạng Thái", key: "trang_thai", width: 14 },
       { header: "Phiếu", key: "so_phieu", width: 8 },
@@ -1363,9 +1367,13 @@ export default function ChamCongTable({ role }) {
         gio_vao: fmtTime(r.gio_vao),
         gio_ra: fmtTime(r.gio_ra),
         tong_gio: fmtGio(r.tong_gio),
-        gio_vao_phu: fmtTime(r.gio_vao_phu),
-        gio_ra_phu: fmtTime(r.gio_ra_phu),
-        tong_gio_phu: fmtGio(r.tong_gio_phu),
+        ...(role !== 30
+          ? {
+              gio_vao_phu: fmtTime(r.gio_vao_phu),
+              gio_ra_phu: fmtTime(r.gio_ra_phu),
+              tong_gio_phu: fmtGio(r.tong_gio_phu),
+            }
+          : {}),
         ngay: fmtDate(r.ngay),
         trang_thai: hasCheckout ? "Hợp lệ" : "Chưa hợp lệ",
         so_phieu: r.so_phieu ?? "",
@@ -1471,8 +1479,10 @@ export default function ChamCongTable({ role }) {
                 Xuất {selected.size} mục
               </button>
             )}
-          {role !== 27 && role !== 30 && <ImportNangSuat onSuccess={fetchData} />}
-{role !== 27 && role !== 30 && <ExportChamCongMau records={data} />}
+            {role !== 27 && role !== 30 && (
+              <ImportNangSuat onSuccess={fetchData} />
+            )}
+            {role !== 27 && role !== 30 && <ExportChamCongMau records={data} />}
           </div>
         </div>
 
@@ -1560,23 +1570,25 @@ export default function ChamCongTable({ role }) {
                   <th className={th}>Check-In</th>
                   <th className={th}>Check-Out</th>
                   <th className={th}>Tổng Giờ</th>
-                  <th className={th}>Vào Phụ</th>
-                  <th className={th}>Ra Phụ</th>
-                  <th className={th}>T.Giờ Phụ</th>
+                  {role !== 30 && <th className={th}>Vào Phụ</th>}
+                  {role !== 30 && <th className={th}>Ra Phụ</th>}
+                  {role !== 30 && <th className={th}>T.Giờ Phụ</th>}
                   <th className={th}>Ngày</th>
                   <th className={th}>Trạng Thái</th>
                   <th className={`${th} text-center`}>Phiếu</th>
                   <th className={`${th} text-center`}>Kiện</th>
                   <th className={`${th} text-center`}>Dòng</th>
                   <th className={th}>Ghi Chú</th>
-                  <th className={`${th} text-center`}>Thao Tác</th>
+                  {role !== 30 && (
+                    <th className={`${th} text-center`}>Thao Tác</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={19}
+                      colSpan={role === 30 ? 14 : 19}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -1587,7 +1599,7 @@ export default function ChamCongTable({ role }) {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={19}
+                      colSpan={role === 30 ? 14 : 19}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="text-4xl mb-3 opacity-30">⏱</div>Chưa có
@@ -1614,7 +1626,6 @@ export default function ChamCongTable({ role }) {
                                 : "hover:bg-muted/20"
                         }`}
                       >
-                        {/* Checkbox — disabled khi bị khóa */}
                         <td className={td}>
                           <input
                             type="checkbox"
@@ -1624,7 +1635,6 @@ export default function ChamCongTable({ role }) {
                             className="w-4 h-4 rounded accent-emerald-500 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
                           />
                         </td>
-
                         <td
                           className={`${td} text-muted-foreground text-xs font-mono`}
                         >
@@ -1664,39 +1674,41 @@ export default function ChamCongTable({ role }) {
                           </span>
                         </td>
 
-                        {/* Vào Phụ — InlineCellEdit tự disable khi is_locked */}
-                        <td className={td}>
-                          <InlineCellEdit
-                            record={r}
-                            field="gio_vao_phu"
-                            onSaved={fetchData}
-                          />
-                        </td>
-                        {/* Ra Phụ */}
-                        <td className={td}>
-                          <InlineCellEdit
-                            record={r}
-                            field="gio_ra_phu"
-                            minTimeField="gio_vao_phu"
-                            onSaved={fetchData}
-                          />
-                        </td>
-                        {/* Tổng Giờ Phụ */}
-                        <td className={td}>
-                          <span
-                            className={`font-mono text-sm font-semibold ${r.tong_gio_phu > 0 ? "text-teal-400" : "text-muted-foreground/30"}`}
-                          >
-                            {r.tong_gio_phu > 0
-                              ? formatTongGio(r.tong_gio_phu)
-                              : "—"}
-                          </span>
-                        </td>
+                        {role !== 30 && (
+                          <td className={td}>
+                            <InlineCellEdit
+                              record={r}
+                              field="gio_vao_phu"
+                              onSaved={fetchData}
+                            />
+                          </td>
+                        )}
+                        {role !== 30 && (
+                          <td className={td}>
+                            <InlineCellEdit
+                              record={r}
+                              field="gio_ra_phu"
+                              minTimeField="gio_vao_phu"
+                              onSaved={fetchData}
+                            />
+                          </td>
+                        )}
+                        {role !== 30 && (
+                          <td className={td}>
+                            <span
+                              className={`font-mono text-sm font-semibold ${r.tong_gio_phu > 0 ? "text-teal-400" : "text-muted-foreground/30"}`}
+                            >
+                              {r.tong_gio_phu > 0
+                                ? formatTongGio(r.tong_gio_phu)
+                                : "—"}
+                            </span>
+                          </td>
+                        )}
 
                         <td className={`${td} text-muted-foreground`}>
                           {formatDate(r.ngay)}
                         </td>
 
-                        {/* Trạng thái */}
                         <td className={td}>
                           <div className="flex flex-col gap-1.5">
                             {isLocked ? (
@@ -1775,29 +1787,31 @@ export default function ChamCongTable({ role }) {
                           )}
                         </td>
 
-                        {/* Thao tác — khi khóa chỉ hiện nút mở khóa */}
-                        <td className={`${td} text-center`}>
-                          <div className="flex items-center justify-center gap-1.5">
-                            {!isLocked && (
+                        {/* Thao tác — chỉ hiện với role !== 30 */}
+                        {role !== 30 && (
+                          <td className={`${td} text-center`}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              {!isLocked && (
+                                <button
+                                  onClick={() => setGhiChuModal(r)}
+                                  className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:border-ring hover:text-foreground transition-colors"
+                                >
+                                  Ghi chú
+                                </button>
+                              )}
                               <button
-                                onClick={() => setGhiChuModal(r)}
-                                className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:border-ring hover:text-foreground transition-colors"
+                                onClick={() => setKhoaModal(r)}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                                  isLocked
+                                    ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/15"
+                                    : "text-orange-400 border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/15"
+                                }`}
                               >
-                                Ghi chú
+                                {isLocked ? "🔓 Mở khóa" : "🔒 Khóa"}
                               </button>
-                            )}
-                            <button
-                              onClick={() => setKhoaModal(r)}
-                              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                                isLocked
-                                  ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/15"
-                                  : "text-orange-400 border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/15"
-                              }`}
-                            >
-                              {isLocked ? "🔓 Mở khóa" : "🔒 Khóa"}
-                            </button>
-                          </div>
-                        </td>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
