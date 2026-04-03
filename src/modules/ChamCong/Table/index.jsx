@@ -177,15 +177,24 @@ async function exportChamCongMau(records, { year, month } = {}) {
         c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
         c.border = border;
       } else {
-        const gioVao = rec.gio_vao ? new Date(rec.gio_vao) : null,
-          gioRa = rec.gio_ra ? new Date(rec.gio_ra) : null;
-        if (gioVao && gioRa) {
-          const raw = (gioRa - gioVao) / 3_600_000,
-            thuc = tinhGioThuc(raw);
+        // ── Ưu tiên giờ phụ ──────────────────────────────────────────────
+        const vaoPhu = rec.gio_vao_phu ? new Date(rec.gio_vao_phu) : null;
+        const raPhu = rec.gio_ra_phu ? new Date(rec.gio_ra_phu) : null;
+        const vao = rec.gio_vao ? new Date(rec.gio_vao) : null;
+        const ra = rec.gio_ra ? new Date(rec.gio_ra) : null;
+
+        // Chọn giờ bắt đầu & kết thúc theo logic ưu tiên
+        const gioStart = vaoPhu || vao; // Vào Phụ ưu tiên, fallback Check-In
+        const gioEnd = raPhu || ra; // Ra Phụ ưu tiên, fallback Check-Out
+
+        if (gioStart && gioEnd && gioEnd > gioStart) {
+          const raw = (gioEnd - gioStart) / 3_600_000;
+          const thuc = tinhGioThuc(raw);
           tongGioThuc += thuc;
           cell(row, col, parseFloat(thuc.toFixed(1)), {
             font: { size: 10, name: "Arial" },
-            fill: "FFE2EFDA",
+            // Tô màu khác nếu dùng giờ phụ để dễ nhận biết
+            fill: vaoPhu || raPhu ? "FFD9EAD3" : "FFE2EFDA",
             align: "center",
           });
         } else {
@@ -1412,7 +1421,7 @@ export default function ChamCongTable({ role }) {
   };
 
   const th =
-    "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
+  "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
   const td = "px-5 py-4 text-sm border-b border-border/50 align-middle";
 
   // Tính số row có thể select (không bị khóa)
@@ -1548,9 +1557,9 @@ export default function ChamCongTable({ role }) {
               </span>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[75vh] overflow-y-auto">
             <table className="w-full border-collapse">
-              <thead>
+<thead className="sticky top-0 z-20 bg-card">
                 <tr>
                   <th className={`${th} w-12`}>
                     <input

@@ -37,6 +37,7 @@ async function parseExcelFile(file) {
       if (i !== -1) return i;
     }
     return -1;
+    
   };
   const iId = idxOf(["id", "mã nv", "ma_nhan_vien"]);
   const iNgay = idxOf(["ngay", "ngày", "ngay_nang_suat", "date"]);

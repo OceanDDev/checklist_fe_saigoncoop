@@ -192,8 +192,8 @@ const Import8101Modal = ({ isOpen, onClose, onSuccess }) => {
             loai_phieu: "8101",
             trang_thai: "Chờ xử lý",
             sd_tf: parsed.sd_tf,
-            mach: parsed.mach,
-            tench: parsed.tench,
+            mach: parsed.mach, // ✅ giữ
+            // tench: parsed.tench, ❌ bỏ — backend tự lấy từ DataCH
             chi_tiet,
           };
 
