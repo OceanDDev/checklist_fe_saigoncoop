@@ -5,12 +5,9 @@ import { io } from "socket.io-client";
 import QRCode from "react-qr-code";
 import { chamCongService } from "@/services/chamcong.service";
 
-// ═══════════════════════════════════════════════════════════
-// CONSTANTS
-// ═══════════════════════════════════════════════════════════
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 const SOCKET_URL = import.meta.env.VITE_API || "http://localhost:5173";
-const TOKEN_TTL = 5; // seconds — match your backend
+const TOKEN_TTL = 5;
 
 const STEPS = [
   {
@@ -39,13 +36,30 @@ const STEPS = [
   },
 ];
 
-// ═══════════════════════════════════════════════════════════
-// ACCENT HELPERS  (dynamic color — must stay inline)
-// ═══════════════════════════════════════════════════════════
 function accentColor(progress) {
   if (progress > 60) return "#3d9e6e";
   if (progress > 25) return "#c8841a";
   return "#c04030";
+}
+
+// ═══════════════════════════════════════════════════════════
+// HOOK: Kiểm tra giờ hoạt động (6:30 – 22:00)
+// ═══════════════════════════════════════════════════════════
+function useIsOpen() {
+  const check = () => {
+    const now = new Date();
+    const t = now.getHours() * 60 + now.getMinutes();
+    return t >= 390 && t < 1320; // 6:30 = 390, 22:00 = 1320
+  };
+
+  const [isOpen, setIsOpen] = useState(check);
+
+  useEffect(() => {
+    const id = setInterval(() => setIsOpen(check()), 10_000);
+    return () => clearInterval(id);
+  }, []);
+
+  return isOpen;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -80,7 +94,7 @@ const LiveClock = memo(function LiveClock() {
 });
 
 // ═══════════════════════════════════════════════════════════
-// CORNER BRACKETS  (dynamic color — inline required)
+// CORNER BRACKETS
 // ═══════════════════════════════════════════════════════════
 const Corners = memo(function Corners({
   color,
@@ -137,9 +151,39 @@ const Corners = memo(function Corners({
 });
 
 // ═══════════════════════════════════════════════════════════
+// MÀN HÌNH NGOÀI GIỜ
+// ═══════════════════════════════════════════════════════════
+const ClosedScreen = memo(function ClosedScreen() {
+  return (
+    <div className="h-screen w-screen bg-[#09090a] flex flex-col items-center justify-center gap-6 select-none">
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+      <div className="relative z-10 flex flex-col items-center gap-6">
+        <div className="text-[clamp(3rem,6vw,5rem)]">🌙</div>
+        <div className="font-semibold text-[clamp(1rem,2vw,1.5rem)] text-neutral-300 tracking-wide">
+          Ngoài giờ làm việc
+        </div>
+        <div className="font-mono text-[clamp(0.6rem,0.9vw,0.8rem)] text-neutral-600 tracking-[0.25em] uppercase">
+          Hệ thống hoạt động · 06:30 – 22:00
+        </div>
+        <LiveClock />
+      </div>
+    </div>
+  );
+});
+
+// ═══════════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════════
 export default function QrDisplay() {
+  const isOpen = useIsOpen();
+
   const [token, setToken] = useState(null);
   const [expiry, setExpiry] = useState(0);
   const [timeLeft, setTimeLeft] = useState(TOKEN_TTL);
@@ -176,6 +220,9 @@ export default function QrDisplay() {
     }, 200);
     return () => clearInterval(id);
   }, [expiry]);
+
+  // ── Ngoài giờ → hiện màn hình đóng cửa
+  if (!isOpen) return <ClosedScreen />;
 
   const progress = Math.min(100, (timeLeft / TOKEN_TTL) * 100);
   const accent = accentColor(progress);
@@ -217,7 +264,6 @@ export default function QrDisplay() {
       <div className="relative z-10 grid grid-cols-[1fr_2fr_1fr] items-center px-[3vw] py-[2.5vw] gap-[2vw] min-h-0">
         {/* ── LEFT: Clock + brand ── */}
         <div className="flex flex-col justify-center gap-[clamp(1.5rem,3vh,3.5rem)] pr-[1.5vw] border-r border-neutral-900">
-          {/* Brand */}
           <div className="flex items-center gap-3">
             <img
               src="/img/logonew.png"
@@ -236,33 +282,24 @@ export default function QrDisplay() {
               </div>
             </div>
           </div>
-
-          {/* Clock */}
           <LiveClock />
-
-          {/* Divider */}
           <div className="h-px bg-neutral-900" />
         </div>
 
         {/* ── CENTER: QR ── */}
         <div className="flex flex-col items-center justify-center gap-[clamp(1.2rem,2.5vh,2.5rem)]">
-          {/* Label */}
           <div className="font-mono text-[clamp(0.6rem,0.8vw,0.75rem)] tracking-[0.3em] uppercase text-neutral-700">
             QUÉT ĐỂ CHẤM CÔNG
           </div>
 
-          {/* QR box */}
           <div className="relative">
             <Corners color={accent} size={40} thickness={3} offset={18} />
-
-            {/* Glow */}
             <div
               className="absolute -inset-6 rounded-2xl pointer-events-none transition-all duration-500"
               style={{
                 background: `radial-gradient(ellipse at center, ${accent}12 0%, transparent 70%)`,
               }}
             />
-
             <div
               className="bg-white rounded-xl transition-all duration-300"
               style={{
@@ -289,31 +326,7 @@ export default function QrDisplay() {
             </div>
           </div>
 
-          {/* Progress bar + timer */}
-          <div style={{ width: qrSize + 48 }}>
-            <div className="flex justify-between mb-2">
-              <span className="font-mono text-[clamp(0.55rem,0.72vw,0.68rem)] tracking-[0.15em] uppercase text-neutral-700">
-                Mã mới sau
-              </span>
-              <span
-                className="font-mono text-[clamp(0.6rem,0.78vw,0.72rem)] font-bold min-w-[2.5rem] text-right transition-colors duration-300"
-                style={{ color: accent }}
-              >
-                {timeLeft}s
-              </span>
-            </div>
-            <div className="h-0.5 bg-neutral-900 rounded overflow-hidden">
-              <div
-                className="h-full rounded transition-all duration-200 ease-linear"
-                style={{
-                  width: `${progress}%`,
-                  background: accent,
-                  boxShadow: `0 0 10px ${accent}`,
-                  transition: "width 0.2s linear, background 0.5s ease",
-                }}
-              />
-            </div>
-          </div>
+        
         </div>
 
         {/* ── RIGHT: How-to ── */}
@@ -327,15 +340,12 @@ export default function QrDisplay() {
               key={n}
               className="flex gap-[clamp(0.7rem,1.2vw,1.2rem)] items-start"
             >
-              {/* Step number */}
               <div className="font-mono text-[clamp(0.65rem,0.9vw,0.85rem)] font-bold text-green-900 shrink-0 min-w-[1.8rem] leading-none pt-0.5">
                 {n}
               </div>
-              {/* Icon */}
               <div className="text-[clamp(0.9rem,1.4vw,1.3rem)] shrink-0 leading-none pt-0.5">
                 {icon}
               </div>
-              {/* Text */}
               <div>
                 <div className="text-[clamp(0.72rem,1vw,0.92rem)] font-bold text-neutral-300 mb-1 leading-tight">
                   {label}
@@ -347,10 +357,8 @@ export default function QrDisplay() {
             </div>
           ))}
 
-          {/* Divider */}
           <div className="h-px bg-neutral-900 my-1" />
 
-          {/* Warning */}
           <div className="flex gap-2 items-start bg-[#110f0a] border border-yellow-950 rounded-lg p-3">
             <span className="text-[clamp(0.7rem,1vw,0.9rem)] shrink-0">⚠️</span>
             <span className="text-[clamp(0.58rem,0.78vw,0.72rem)] text-yellow-800 leading-relaxed">
