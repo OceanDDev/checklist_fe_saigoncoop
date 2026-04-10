@@ -155,7 +155,7 @@ const PrintMultiplePhieuLe = ({
                         />
                         <div className="flex flex-col items-center">
                           {is8101 && (
-                            <span className="px-2 py-0.5 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-bold mb-1">
+                            <span className="px-5 py-1.5 rounded-xl bg-indigo-100 text-indigo-700 text-4xl font-extrabold mb-1 tracking-widest">
                               8101
                             </span>
                           )}

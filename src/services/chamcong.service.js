@@ -1,5 +1,6 @@
 import { ApiServer, URL } from "@/configs/api-request";
 import { requestService } from "./request.service";
+import { getDeviceId } from "@/utils/device";
 
 // 🧭 Lấy danh sách chấm công (có thể filter theo query)
 const getAllChamCong = async (params = {}) => {
@@ -36,9 +37,13 @@ const getChamCongById = async (id) => {
 // 🕒 Gửi yêu cầu chấm công (check-in/out)
 const checkChamCong = async (payload) => {
   try {
+    const finalPayload = {
+      ...payload,
+      device_id: getDeviceId() 
+    };
     const results = await requestService.post(
       `${URL.chamcong.chamcong}/check`,
-      payload,
+      finalPayload,
       undefined,
       ApiServer,
     );
@@ -129,12 +134,16 @@ const getCurrentQr = async () => {
 
 // 🔐 Chấm công qua QR
 const checkChamCongQR = async (payload) => {
+  const finalPayload = {
+    ...payload,
+    device_id: getDeviceId()
+  };
   // ⚠️  KHÔNG bọc try/catch ở đây
   //     Để error.response (chứa blocked_by, message...) đi thẳng lên component
   //     Component sẽ tự xử lý và hiển thị đúng toast cảnh cáo
   return await requestService.post(
     `${URL.chamcong.chamcong}/check-qr`,
-    payload,
+    finalPayload,
     undefined,
     ApiServer,
   );
