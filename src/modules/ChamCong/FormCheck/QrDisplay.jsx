@@ -49,7 +49,9 @@ function useIsOpen() {
   const check = () => {
     const now = new Date();
     const t = now.getHours() * 60 + now.getMinutes();
-    return t >= 390 && t < 1320; // 6:30 = 390, 22:00 = 1320
+    const isSunday = now.getDay() === 0;
+    const openTime = isSunday ? 413 : 445; // CN: 6h53 = 413, các ngày khác: 7h25 = 445
+    return t >= openTime && t < 1320; // 22:00 = 1320
   };
 
   const [isOpen, setIsOpen] = useState(check);
@@ -170,7 +172,7 @@ const ClosedScreen = memo(function ClosedScreen() {
           Ngoài giờ làm việc
         </div>
         <div className="font-mono text-[clamp(0.6rem,0.9vw,0.8rem)] text-neutral-600 tracking-[0.25em] uppercase">
-          Hệ thống hoạt động · 06:30 – 22:00
+          Hệ thống hoạt động · 07:25 – 22:00 (Chủ Nhật 06:25 - 22:00)
         </div>
         <LiveClock />
       </div>
@@ -325,8 +327,6 @@ export default function QrDisplay() {
               )}
             </div>
           </div>
-
-        
         </div>
 
         {/* ── RIGHT: How-to ── */}
