@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 // pages/chamcong/QrDisplay.jsx  —  TV kiosk layout (Tailwind)
-import { useState, useEffect, useCallback, memo } from "react";
+import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { io } from "socket.io-client";
 import QRCode from "react-qr-code";
 import { chamCongService } from "@/services/chamcong.service";
@@ -43,36 +43,64 @@ function accentColor(progress) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HOOK: Kiểm tra giờ hoạt động (6:30 – 22:00)
+// HOOK: Giờ Hà Nội từ server — không phụ thuộc giờ thiết bị
 // ═══════════════════════════════════════════════════════════
-function useIsOpen() {
-  const check = () => {
-    const now = new Date();
-    const t = now.getHours() * 60 + now.getMinutes();
-    const isSunday = now.getDay() === 0;
-    const openTime = isSunday ? 413 : 445; // CN: 6h53 = 413, các ngày khác: 7h25 = 445
-    return t >= openTime && t < 1320; // 22:00 = 1320
-  };
+const TZ_API = "https://worldtimeapi.org/api/timezone/Asia/Ho_Chi_Minh";
+const SYNC_INTERVAL = 5 * 60 * 1000; // re-sync mỗi 5 phút
 
-  const [isOpen, setIsOpen] = useState(check);
+function useHanoiTime() {
+  const offsetRef = useRef(0); // ms lệch giữa server HN và Date.now()
+  const [now, setNow] = useState(() => new Date());
 
-  useEffect(() => {
-    const id = setInterval(() => setIsOpen(check()), 10_000);
-    return () => clearInterval(id);
+  const sync = useCallback(async () => {
+    try {
+      const before = Date.now();
+      const res = await fetch(TZ_API);
+      const data = await res.json();
+      const rtt = (Date.now() - before) / 2; // bù latency một chiều
+      const serverMs = new Date(data.datetime).getTime();
+      offsetRef.current = serverMs + rtt - Date.now();
+    } catch {
+      // Fallback: dùng Intl để ép về Asia/Ho_Chi_Minh
+      // (vẫn chuẩn hơn dùng giờ thô của thiết bị nếu TZ sai)
+      const localVN = new Date().toLocaleString("en-US", {
+        timeZone: "Asia/Ho_Chi_Minh",
+      });
+      offsetRef.current = new Date(localVN) - Date.now();
+    }
   }, []);
 
-  return isOpen;
+  useEffect(() => {
+    sync(); // fetch ngay khi mount
+    const syncId = setInterval(sync, SYNC_INTERVAL);
+    const tickId = setInterval(() => {
+      setNow(new Date(Date.now() + offsetRef.current));
+    }, 1000);
+    return () => {
+      clearInterval(syncId);
+      clearInterval(tickId);
+    };
+  }, [sync]);
+
+  return now; // Date object đã bù offset Hà Nội
 }
 
 // ═══════════════════════════════════════════════════════════
-// LIVE CLOCK
+// HOOK: Kiểm tra giờ hoạt động (dùng giờ Hà Nội)
+// ═══════════════════════════════════════════════════════════
+function useIsOpen() {
+  const now = useHanoiTime(); // ← nguồn giờ chuẩn Hà Nội
+  const t = now.getHours() * 60 + now.getMinutes();
+  const isSunday = now.getDay() === 0;
+  const openTime = isSunday ? 413 : 445; // CN: 6h53, các ngày khác: 7h25
+  return t >= openTime && t < 1320; // 22:00 = 1320
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIVE CLOCK (dùng chung useHanoiTime, không tạo interval riêng)
 // ═══════════════════════════════════════════════════════════
 const LiveClock = memo(function LiveClock() {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useHanoiTime();
 
   return (
     <div className="select-none leading-none">
@@ -172,7 +200,7 @@ const ClosedScreen = memo(function ClosedScreen() {
           Ngoài giờ làm việc
         </div>
         <div className="font-mono text-[clamp(0.6rem,0.9vw,0.8rem)] text-neutral-600 tracking-[0.25em] uppercase">
-          Hệ thống hoạt động · 07:25 – 22:00 (Chủ Nhật 06:25 - 22:00)
+          Hệ thống hoạt động · 07:25 – 22:00 (Chủ Nhật 06:53 – 22:00)
         </div>
         <LiveClock />
       </div>
