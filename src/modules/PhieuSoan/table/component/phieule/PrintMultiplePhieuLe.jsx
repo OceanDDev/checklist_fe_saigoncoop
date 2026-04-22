@@ -3,6 +3,8 @@ import { useRef, useState } from "react";
 import { useReactToPrint } from "react-to-print";
 import { phieuLeService } from "@/services/phieusoan/phieule.service";
 
+const ROWS_PER_PAGE = 15;
+
 const PrintMultiplePhieuLe = ({
   isOpen,
   onClose,
@@ -10,7 +12,6 @@ const PrintMultiplePhieuLe = ({
   onPrintSuccess,
 }) => {
   const contentRef = useRef(null);
-
   const [printTime] = useState(() => new Date());
 
   const reactToPrintFn = useReactToPrint({
@@ -27,7 +28,6 @@ const PrintMultiplePhieuLe = ({
             trang_thai: "Đã xử lý",
           });
         });
-
         await Promise.all(updatePromises);
         if (onPrintSuccess) onPrintSuccess();
       } catch (error) {
@@ -72,6 +72,28 @@ const PrintMultiplePhieuLe = ({
     return 0;
   };
 
+  // Chia phiếu thành nhiều trang nếu có > ROWS_PER_PAGE dòng
+  const splitPhieuIntoPages = (phieu) => {
+    const chiTiet = phieu.chi_tiet || [];
+    if (chiTiet.length <= ROWS_PER_PAGE) {
+      return [{ ...phieu, _page: 1, _totalPages: 1, _rows: chiTiet }];
+    }
+    const pages = [];
+    const totalPages = Math.ceil(chiTiet.length / ROWS_PER_PAGE);
+    for (let i = 0; i < totalPages; i++) {
+      pages.push({
+        ...phieu,
+        _page: i + 1,
+        _totalPages: totalPages,
+        _rows: chiTiet.slice(i * ROWS_PER_PAGE, (i + 1) * ROWS_PER_PAGE),
+      });
+    }
+    return pages;
+  };
+
+  // Tổng số tờ in (tất cả các phiếu sau khi chia trang)
+  const allPages = selectedPhieus.flatMap(splitPhieuIntoPages);
+
   return (
     <>
       <style
@@ -84,7 +106,9 @@ const PrintMultiplePhieuLe = ({
             .phieu-container { page-break-after: always; page-break-inside: avoid; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
             table { width: 100%; table-layout: auto; page-break-inside: avoid; }
             .print-content { font-size: 11px; }
+            .sdtf-multi { background-color: #fef08a !important; color: #92400e !important; font-weight: 900 !important; border-radius: 4px; padding: 1px 4px; }
           }
+          .sdtf-multi { background-color: #fef08a; color: #92400e; font-weight: 900; border-radius: 4px; padding: 1px 6px; }
         `,
         }}
       />
@@ -102,7 +126,11 @@ const PrintMultiplePhieuLe = ({
                 <span className="font-semibold text-blue-600">
                   {selectedPhieus.length}
                 </span>{" "}
-                phiếu. Mỗi phiếu sẽ in trên 1 trang riêng biệt.
+                phiếu →{" "}
+                <span className="font-semibold text-orange-600">
+                  {allPages.length} tờ in
+                </span>
+                . Phiếu trên 15 dòng sẽ tự động chia trang.
               </p>
             </div>
             <button
@@ -132,14 +160,22 @@ const PrintMultiplePhieuLe = ({
               className="mx-auto"
               style={{ width: "277mm" }}
             >
-              {selectedPhieus.map((phieu, phieuIndex) => {
-                const is8101 = phieu.loai_phieu === "8101"; // ✅
+              {allPages.map((phieu, pageIndex) => {
+                const is8101 = phieu.loai_phieu === "8101";
                 const soLanInDuKien = (phieu.so_lan_in_phieu || 0) + 1;
-                const ngayHienThi = printTime;
+                const isMultiPage = phieu._totalPages > 1;
+
+                // Số SD/TF hiển thị: thêm -1, -2 nếu có nhiều tờ
+                const sdTfDisplay = isMultiPage
+                  ? `${phieu.loai_phieu || "N/A"}-${phieu.sd_tf || "N/A"}-${phieu._page}`
+                  : `${phieu.loai_phieu || "N/A"}-${phieu.sd_tf || "N/A"}`;
+
+                // Tổng kiện chỉ hiển thị ở trang cuối
+                const isLastPage = phieu._page === phieu._totalPages;
 
                 return (
                   <div
-                    key={phieu._id || phieuIndex}
+                    key={`${phieu._id || pageIndex}-page${phieu._page}`}
                     className="phieu-container bg-white p-4 print-content"
                   >
                     {/* Header Phiếu */}
@@ -160,7 +196,7 @@ const PrintMultiplePhieuLe = ({
                             </span>
                           )}
                           <h1 className="text-xl font-bold text-slate-800">
-                            PHIẾU NGÀY {formatDate(ngayHienThi)}
+                            PHIẾU NGÀY {formatDate(printTime)}
                           </h1>
                           <div className="text-xs text-slate-500 mt-1">
                             <span className="font-semibold text-orange-600">
@@ -169,7 +205,7 @@ const PrintMultiplePhieuLe = ({
                           </div>
                         </div>
                         <div className="text-xs text-right italic text-slate-500">
-                          Trang {phieuIndex + 1} / {selectedPhieus.length}
+                          Trang {pageIndex + 1} / {allPages.length}
                         </div>
                       </div>
 
@@ -181,7 +217,11 @@ const PrintMultiplePhieuLe = ({
                           </p>
                           <p>
                             <span className="font-bold">Số SD/TF:</span>{" "}
-                            {phieu.loai_phieu || "N/A"}-{phieu.sd_tf || "N/A"}
+                            {isMultiPage ? (
+                              <span className="sdtf-multi">{sdTfDisplay}</span>
+                            ) : (
+                              sdTfDisplay
+                            )}
                           </p>
                           <p>
                             <span className="font-bold">Mã/Tên CH:</span>{" "}
@@ -239,58 +279,68 @@ const PrintMultiplePhieuLe = ({
                           </tr>
                         </thead>
                         <tbody>
-                          {phieu.chi_tiet?.map((item, idx) => (
-                            <tr key={idx} className="text-[11px] leading-tight">
-                              <td className="border border-slate-400 p-1 text-center">
-                                {idx + 1}
+                          {phieu._rows.map((item, idx) => {
+                            // STT toàn cục (tính theo trang)
+                            const globalIdx =
+                              (phieu._page - 1) * ROWS_PER_PAGE + idx + 1;
+                            return (
+                              <tr
+                                key={idx}
+                                className="text-[11px] leading-tight"
+                              >
+                                <td className="border border-slate-400 p-1 text-center">
+                                  {globalIdx}
+                                </td>
+                                <td className="border border-slate-400 p-1">
+                                  {item.slot}
+                                </td>
+                                <td className="border border-slate-400 p-1">
+                                  {item.sku}
+                                </td>
+                                <td className="border border-slate-400 p-1 truncate max-w-[200px]">
+                                  {item.name}
+                                </td>
+                                <td className="border border-slate-400 p-1 text-right font-bold">
+                                  {item.quantity}
+                                </td>
+                                <td className="border border-slate-400 p-1 text-right">
+                                  {is8101 ? "-" : item.pack_unit}
+                                </td>
+                                <td className="border border-slate-400 p-1 text-center">
+                                  {is8101 ? "-" : item.pck_um}
+                                </td>
+                                <td className="border border-slate-400 p-1 text-right">
+                                  {is8101 ? "-" : item.packs_to_pick}
+                                </td>
+                                <td className="border border-slate-400 p-1 text-right">
+                                  {is8101 ? "-" : item.store}
+                                </td>
+                                <td className="border border-slate-400 p-1 text-right font-bold bg-green-50">
+                                  {getKienDuKien(item, is8101)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+
+                          {/* Dòng tổng: chỉ hiện ở trang cuối */}
+                          {isLastPage && (
+                            <tr className="bg-green-100 font-bold">
+                              <td
+                                colSpan="9"
+                                className="border border-slate-400 p-2 text-right text-[13px]"
+                              >
+                                TỔNG KIỆN DỰ KIẾN:
                               </td>
-                              <td className="border border-slate-400 p-1">
-                                {item.slot}
-                              </td>
-                              <td className="border border-slate-400 p-1">
-                                {item.sku}
-                              </td>
-                              <td className="border border-slate-400 p-1 truncate max-w-[200px]">
-                                {item.name}
-                              </td>
-                              <td className="border border-slate-400 p-1 text-right font-bold">
-                                {item.quantity}
-                              </td>
-                              {/* ✅ 8101: hiển thị "-" cho các cột không có data */}
-                              <td className="border border-slate-400 p-1 text-right">
-                                {is8101 ? "-" : item.pack_unit}
-                              </td>
-                              <td className="border border-slate-400 p-1 text-center">
-                                {is8101 ? "-" : item.pck_um}
-                              </td>
-                              <td className="border border-slate-400 p-1 text-right">
-                                {is8101 ? "-" : item.packs_to_pick}
-                              </td>
-                              <td className="border border-slate-400 p-1 text-right">
-                                {is8101 ? "-" : item.store}
-                              </td>
-                              <td className="border border-slate-400 p-1 text-right font-bold bg-green-50">
-                                {getKienDuKien(item, is8101)}
+                              <td className="border border-slate-400 p-2 text-center text-[15px] bg-green-200">
+                                {is8101 ? "-" : `${phieu.tong_kien || 0} KIỆN`}
                               </td>
                             </tr>
-                          ))}
-
-                          <tr className="bg-green-100 font-bold">
-                            <td
-                              colSpan="9"
-                              className="border border-slate-400 p-2 text-right text-[13px]"
-                            >
-                              TỔNG KIỆN DỰ KIẾN:
-                            </td>
-                            <td className="border border-slate-400 p-2 text-center text-[15px] bg-green-200">
-                              {/* ✅ 8101 không có tong_kien */}
-                              {is8101 ? "-" : `${phieu.tong_kien || 0} KIỆN`}
-                            </td>
-                          </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
 
+                    {/* Ghi chú hiện ở tất cả các tờ */}
                     {phieu.ghi_chu_phieu && (
                       <div className="mt-2 p-2.5 bg-yellow-50 border border-yellow-200 rounded text-[35px]">
                         <strong>Ghi chú:</strong> {phieu.ghi_chu_phieu}
@@ -305,7 +355,10 @@ const PrintMultiplePhieuLe = ({
           {/* Footer Modal */}
           <div className="flex items-center justify-between p-6 border-t border-slate-200 bg-white no-print">
             <div className="text-sm text-slate-600">
-              Tổng: <strong>{selectedPhieus.length}</strong> phiếu
+              Tổng: <strong>{selectedPhieus.length}</strong> phiếu →{" "}
+              <strong className="text-orange-600">
+                {allPages.length} tờ in
+              </strong>
               <span className="ml-3 text-orange-600">
                 (Số lần in, ngày in và trạng thái sẽ cập nhật sau khi in)
               </span>

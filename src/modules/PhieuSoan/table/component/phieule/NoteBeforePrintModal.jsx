@@ -3,13 +3,13 @@
 import { useState, useEffect } from "react";
 
 const NoteBeforePrintModal = ({ isOpen, onClose, selectedCount, onContinue }) => {
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState("KẸP PHIẾU SOẠN TRÊN XE SMT");
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Reset note khi modal mở
   useEffect(() => {
     if (isOpen) {
-      setNote("");
+      setNote("KẸP PHIẾU SOẠN TRÊN XE SMT");
     }
   }, [isOpen]);
 

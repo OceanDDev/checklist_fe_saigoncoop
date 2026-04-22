@@ -8,7 +8,9 @@ import {
   Database,
   ArrowRight,
   Merge,
+  CheckCircle,
 } from "lucide-react";
+import { tonKhoService } from "@/services/tonkho.service";
 
 // ============================================================
 // HELPERS
@@ -28,36 +30,37 @@ const getMergedFileName = () => {
 };
 
 // ============================================================
-// EXCEL FORMATTING - matching sample file exactly
-// Header: theme color 4 tint 0.4 (light blue), Calibri 11, bold, theme color 1 (black)
-// Data rows: no fill, Calibri 11
-// Col I (Cases) & Col M (Total): number format _(* #,##0_);_(* \(#,##0\);_(* "-"??_);_(@_)
-// Col K (Rcv Date) & Col N (Date): mm-dd-yy
-// Freeze panes: E3 (freeze top 1 row + left 4 cols... but sample shows E3 which is 2 rows, 4 cols)
-// Actually freeze_panes=E3 means row 1-2 frozen + cols A-D frozen? No, E3 = col split at E, row split at 3
-// AutoFilter on row 1
+// MAP TO INVENTORY MODEL
+// zone, slot, sku, name, onHand, pack, ngay_ton
 // ============================================================
+const mapRowToInventoryModel = (row) => ({
+  zone: String(row[0] ?? "").trim(),
+  slot: String(row[1] ?? "").trim(),
+  sku: String(row[2] ?? "").trim(),
+  name: String(row[3] ?? "").trim(),
+  onHand: Number(row[7]) || 0,
+  pack: Number(row[9]) || 1, // default 1 tránh vi phạm min:1
+  ngay_ton: row[13] instanceof Date ? row[13] : new Date(),
+});
 
+// ============================================================
+// EXCEL FORMATTING
+// ============================================================
 const NUM_FORMAT_ACCOUNTING = '_(* #,##0_);_(* \\(#,##0\\);_(* "-"??_);_(@_)';
 const NUM_FORMAT_DATE = "dd/mm/yyyy";
-
 const HEADER_THEME_FILL = {
   type: "pattern",
   pattern: "solid",
-  fgColor: { argb: "FFBDD7EE" }, // approximation of theme 4 tint 0.4 (light blue)
+  fgColor: { argb: "FFBDD7EE" },
 };
 
 const buildFormattedSheet = (wb, sheetName, headers, rows, colWidths) => {
   const ws = wb.addWorksheet(sheetName);
-
-  // Set column widths
   ws.columns = headers.map((h, i) => ({
     header: h,
     key: `col${i}`,
     width: colWidths[i] || 15,
   }));
-
-  // Style header row (row 1)
   const headerRow = ws.getRow(1);
   headers.forEach((h, i) => {
     const cell = headerRow.getCell(i + 1);
@@ -66,34 +69,20 @@ const buildFormattedSheet = (wb, sheetName, headers, rows, colWidths) => {
     cell.fill = HEADER_THEME_FILL;
     cell.alignment = { vertical: "middle", horizontal: "center" };
   });
-
-  // AutoFilter
   ws.autoFilter = {
     from: { row: 1, column: 1 },
     to: { row: 1, column: headers.length },
   };
-
-  // Freeze panes: E3 (matching sample - freeze top 2 rows and left 4 cols, but sample has E3)
-  // E3 means: columns A-D frozen, rows 1-2 frozen
   ws.views = [{ state: "frozen", xSplit: 4, ySplit: 1, topLeftCell: "E2" }];
-
-  // Data rows
   rows.forEach((rowData) => {
     const row = ws.addRow(rowData);
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.font = { name: "Calibri", size: 11 };
-      // Apply number formats matching sample
-      // Col 9 = Cases, Col 13 = Total
-      if (colNumber === 9 || colNumber === 13) {
+      if (colNumber === 9 || colNumber === 13)
         cell.numFmt = NUM_FORMAT_ACCOUNTING;
-      }
-      // Col 11 = Rcv Date, Col 14 = Date
-      if (colNumber === 11 || colNumber === 14) {
-        cell.numFmt = NUM_FORMAT_DATE;
-      }
+      if (colNumber === 11 || colNumber === 14) cell.numFmt = NUM_FORMAT_DATE;
     });
   });
-
   return ws;
 };
 
@@ -135,7 +124,6 @@ export const HEADERS_8101 = [
   "Cost",
   "G.M.%",
 ];
-
 const COL_WIDTHS_8101 = [12, 35, 12, 12, 12, 12, 14, 12, 14, 10];
 
 // ============================================================
@@ -152,7 +140,6 @@ export const parseKho810 = (text) => {
   } else {
     reportDate = new Date();
   }
-
   const ALLOWED_ZONES = [
     "DL",
     "DP",
@@ -189,7 +176,7 @@ export const parseKho810 = (text) => {
     const onHand = formatJdaNumber(nums[1]);
     const cases = parseInt(nums[2]) || 0;
     const pack = parseInt(nums[3]) || 0;
-    const rcvDate = nums[4] && nums[4] !== "0/00/00" ? nums[4] : nums[4];
+    const rcvDate = nums[4] ?? nums[4];
     const cube = formatJdaNumber(nums[5]);
     dataRows.push([
       zon,
@@ -227,13 +214,12 @@ export const HEADERS_810 = [
   "Total",
   "Date",
 ];
-
 const COL_WIDTHS_810 = [
   6, 10, 10, 35.7, 18, 8, 12, 10, 10.5, 8.5, 10.7, 12, 14.3, 10.7,
 ];
 
 // ============================================================
-// MERGE HEADERS & WIDTHS (same as 810)
+// MERGE
 // ============================================================
 export const HEADERS_MERGED = [
   "Zone",
@@ -251,55 +237,44 @@ export const HEADERS_MERGED = [
   "Total",
   "Date",
 ];
-
 const COL_WIDTHS_MERGED = [
   5.14, 9, 8, 35.7, 15.3, 7.86, 12, 10.14, 10.57, 8.57, 10.71, 12, 14.3, 10.71,
 ];
 
-// Build a pack lookup map from 810 rows: sku -> pack (first occurrence)
 const buildPackMap = (rows810) => {
   const map = {};
   for (const row of rows810) {
-    const sku = row[2]; // col index 2 = Sku
-    const pack = row[9]; // col index 9 = Pack
-    if (sku && pack && !map[sku]) {
-      map[sku] = pack;
-    }
+    const sku = row[2];
+    const pack = row[9];
+    if (sku && pack && !map[sku]) map[sku] = pack;
   }
   return map;
 };
 
-// Convert 8101 row to merged format, using packMap to VLOOKUP pack by sku
 const convert8101ToMerged = (row, reportDate, packMap) => {
   const sku = row[0];
   const onHand = row[2];
   const cost = row[6];
-
-  // VLOOKUP: find pack from 810 data by sku
   const pack = packMap[sku] || "";
   const cases = pack ? +(onHand / pack).toFixed(4) : "";
-
   return [
-    8101, // Zone
-    "A8101", // Slot
-    parseInt(sku), // Sku (as number)
-    row[1], // Name
-    null, // Vendor Part No.
-    null, // Buyer
-    cost, // Unit Cost
-    onHand, // On Hand
-    cases, // Cases = OnHand / Pack
-    pack || null, // Pack (from vlookup)
-    null, // Rcv Date
-    null, // Cube
-    cost * onHand, // Total
-    reportDate, // Date
+    8101,
+    "A8101",
+    parseInt(sku),
+    row[1],
+    null,
+    null,
+    cost,
+    onHand,
+    cases,
+    pack || null,
+    null,
+    null,
+    cost * onHand,
+    reportDate,
   ];
 };
 
-// ============================================================
-// EXPORT HELPERS (ExcelJS → Blob)
-// ============================================================
 const workbookToBlob = async (wb) => {
   const buffer = await wb.xlsx.writeBuffer();
   return new Blob([buffer], {
@@ -314,6 +289,7 @@ const HandleTonKho = () => {
   const [files8101, setFiles8101] = useState([]);
   const [files810, setFiles810] = useState([]);
   const [status, setStatus] = useState("idle");
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
   const [downloadUrl8101, setDownloadUrl8101] = useState(null);
   const [downloadUrl810, setDownloadUrl810] = useState(null);
   const [downloadUrlMerged, setDownloadUrlMerged] = useState(null);
@@ -324,35 +300,57 @@ const HandleTonKho = () => {
     merged: 0,
   });
 
+  const [inventoryPayload, setInventoryPayload] = useState([]);
+
+  // ── CONVERT & AUTO-SAVE ──────────────────────────────────
   const handleConvert = async () => {
     if (files8101.length === 0 && files810.length === 0) return;
     setStatus("processing");
+    setSaveStatus("idle");
 
     let allRows8101 = [];
     let allRows810 = [];
 
     try {
-      // Parse 8101
       for (const file of files8101) {
         const text = await file.text();
         const rows = text.split("\n").map(parseKho8101).filter(Boolean);
         allRows8101 = [...allRows8101, ...rows];
       }
-
-      // Parse 810
       for (const file of files810) {
         const text = await file.text();
         const rows = parseKho810(text);
         allRows810 = [...allRows810, ...rows];
       }
 
-      // Build pack lookup map from 810 data
       const packMap = buildPackMap(allRows810);
-
-      // Determine reportDate from 810, fallback to today
       const reportDate = allRows810.length > 0 ? allRows810[0][13] : new Date();
 
-      // Xuất KHO 8101
+      // Build merged rows (raw, for Excel)
+      const merged = [
+        ...allRows810,
+        ...allRows8101.map((r) => convert8101ToMerged(r, reportDate, packMap)),
+      ];
+
+      // Map merged rows → inventory model objects
+      const modelPayload = merged
+        .map(mapRowToInventoryModel)
+        .filter((item) => item.sku && item.name);
+      setInventoryPayload(modelPayload);
+
+      // 🚀 TỰ ĐỘNG LƯU DATABASE TẠI ĐÂY
+      if (modelPayload.length > 0) {
+        setSaveStatus("saving");
+        try {
+          await tonKhoService.upsertManyTonKho(modelPayload);
+          setSaveStatus("saved");
+        } catch (error) {
+          setSaveStatus("error");
+          console.error("Lỗi khi tự động lưu DB:", error);
+        }
+      }
+
+      // ── Export Excel ──
       if (allRows8101.length > 0) {
         const wb = new ExcelJS.Workbook();
         buildFormattedSheet(
@@ -362,11 +360,8 @@ const HandleTonKho = () => {
           allRows8101,
           COL_WIDTHS_8101,
         );
-        const blob = await workbookToBlob(wb);
-        setDownloadUrl8101(URL.createObjectURL(blob));
+        setDownloadUrl8101(URL.createObjectURL(await workbookToBlob(wb)));
       }
-
-      // Xuất KHO 810
       if (allRows810.length > 0) {
         const wb = new ExcelJS.Workbook();
         buildFormattedSheet(
@@ -376,18 +371,9 @@ const HandleTonKho = () => {
           allRows810,
           COL_WIDTHS_810,
         );
-        const blob = await workbookToBlob(wb);
-        setDownloadUrl810(URL.createObjectURL(blob));
+        setDownloadUrl810(URL.createObjectURL(await workbookToBlob(wb)));
       }
-
-      // Xuất MERGE
-      if (allRows810.length > 0 || allRows8101.length > 0) {
-        const merged = [
-          ...allRows810,
-          ...allRows8101.map((r) =>
-            convert8101ToMerged(r, reportDate, packMap),
-          ),
-        ];
+      if (merged.length > 0) {
         const wb = new ExcelJS.Workbook();
         buildFormattedSheet(
           wb,
@@ -396,33 +382,36 @@ const HandleTonKho = () => {
           merged,
           COL_WIDTHS_MERGED,
         );
-        const blob = await workbookToBlob(wb);
-        setDownloadUrlMerged(URL.createObjectURL(blob));
+        setDownloadUrlMerged(URL.createObjectURL(await workbookToBlob(wb)));
         setMergedFileName(getMergedFileName());
       }
 
       setTotalRecords({
         8101: allRows8101.length,
         810: allRows810.length,
-        merged: allRows810.length + allRows8101.length,
+        merged: merged.length,
       });
       setStatus("success");
     } catch (error) {
       setStatus("error");
-      console.error(error);
+      console.error("Lỗi xử lý file:", error);
     }
   };
 
+  // ── RESET ─────────────────────────────────────────────────
   const reset = () => {
     setFiles8101([]);
     setFiles810([]);
     setStatus("idle");
+    setSaveStatus("idle");
     setDownloadUrl8101(null);
     setDownloadUrl810(null);
     setDownloadUrlMerged(null);
     setMergedFileName("");
+    setInventoryPayload([]);
   };
 
+  // ── RENDER ────────────────────────────────────────────────
   return (
     <div className="p-6 max-w-7xl mx-auto bg-slate-50 min-h-screen">
       <div className="bg-white shadow-2xl rounded-3xl p-8 border border-slate-200">
@@ -432,6 +421,7 @@ const HandleTonKho = () => {
           </h1>
         </div>
 
+        {/* Upload zones */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
           {/* KHO 8101 */}
           <div className="space-y-4">
@@ -512,12 +502,13 @@ const HandleTonKho = () => {
           </div>
         </div>
 
+        {/* Process button */}
         {status !== "success" &&
           (files8101.length > 0 || files810.length > 0) && (
             <button
               onClick={handleConvert}
               disabled={status === "processing"}
-              className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black flex items-center justify-center gap-3"
+              className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-slate-800 transition-colors"
             >
               {status === "processing" ? (
                 <Loader className="animate-spin" />
@@ -528,6 +519,7 @@ const HandleTonKho = () => {
             </button>
           )}
 
+        {/* Error */}
         {status === "error" && (
           <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center mt-4">
             <p className="text-red-700 font-black">
@@ -535,23 +527,26 @@ const HandleTonKho = () => {
             </p>
             <button
               onClick={reset}
-              className="mt-3 text-sm text-red-400 font-bold"
+              className="mt-3 text-sm text-red-400 font-bold hover:underline"
             >
               Thử lại
             </button>
           </div>
         )}
 
+        {/* Success & Status */}
         {status === "success" && (
           <div className="space-y-4">
             <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6">
               <p className="text-green-800 font-black mb-4">✓ XỬ LÝ XONG!</p>
-              <div className="grid gap-3">
+
+              {/* Download buttons */}
+              <div className="grid gap-3 mb-4">
                 {downloadUrl8101 && (
                   <a
                     href={downloadUrl8101}
                     download="KHO_8101.xlsx"
-                    className="flex items-center justify-between p-4 bg-blue-600 text-white rounded-xl font-bold"
+                    className="flex items-center justify-between p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors"
                   >
                     <span>Tải Kho 8101 ({totalRecords[8101]} dòng)</span>
                     <Download size={20} />
@@ -561,7 +556,7 @@ const HandleTonKho = () => {
                   <a
                     href={downloadUrl810}
                     download="KHO_810.xlsx"
-                    className="flex items-center justify-between p-4 bg-purple-600 text-white rounded-xl font-bold"
+                    className="flex items-center justify-between p-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition-colors"
                   >
                     <span>Tải Kho 810 ({totalRecords[810]} dòng)</span>
                     <Download size={20} />
@@ -571,7 +566,7 @@ const HandleTonKho = () => {
                   <a
                     href={downloadUrlMerged}
                     download={mergedFileName}
-                    className="flex items-center justify-between p-4 bg-emerald-600 text-white rounded-xl font-bold"
+                    className="flex items-center justify-between p-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <Merge size={18} />
@@ -583,10 +578,33 @@ const HandleTonKho = () => {
                   </a>
                 )}
               </div>
+
+              {/* ── Trạng thái tự động lưu DB ── */}
+              {saveStatus === "saving" && (
+                <div className="flex items-center justify-center gap-2 py-3 bg-orange-50 border border-orange-200 rounded-xl text-orange-600 font-bold animate-pulse">
+                  <Loader size={18} className="animate-spin" /> Đang tự động lưu{" "}
+                  {inventoryPayload.length} dòng vào Database...
+                </div>
+              )}
+
+              {saveStatus === "error" && (
+                <div className="flex items-center justify-center gap-2 py-3 bg-red-50 border border-red-200 rounded-xl text-red-700 font-black">
+                  <X size={18} /> Lỗi tự động lưu vào Database! Vui lòng kiểm
+                  tra lại.
+                </div>
+              )}
+
+              {saveStatus === "saved" && (
+                <div className="flex items-center justify-center gap-2 py-3 bg-teal-50 border border-teal-200 rounded-xl text-teal-700 font-black">
+                  <CheckCircle size={18} /> Đã tự động lưu{" "}
+                  {inventoryPayload.length} dòng vào Database!
+                </div>
+              )}
             </div>
+
             <button
               onClick={reset}
-              className="w-full py-3 text-slate-400 font-bold"
+              className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors"
             >
               Làm mới hệ thống
             </button>

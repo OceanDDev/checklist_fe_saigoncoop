@@ -69,15 +69,12 @@ const parseINV041 = (rawText) => {
     if (!sd_tf) sd_tf = parseInt(refStr, 10);
 
     // Quantity: số X.XX đầu tiên < 10000, phần tử kế >= 1000 (Unit Retail)
+    const dateIdx = parts.findIndex((p) => /^\d{2}\/\d{2}\/\d{2,4}$/.test(p));
     let quantity = null;
-    for (let j = 1; j < parts.length - 1; j++) {
-      if (/^\d+\.\d{2}$/.test(parts[j])) {
-        const val = parseFloat(parts[j]);
-        const next = parseFloat(parts[j + 1]);
-        if (val > 0 && val < 10000 && next >= 1000) {
-          quantity = val;
-          break;
-        }
+    if (dateIdx !== -1 && dateIdx + 1 < parts.length) {
+      const qtyStr = parts[dateIdx + 1];
+      if (/^\d+\.\d{2}$/.test(qtyStr)) {
+        quantity = parseFloat(qtyStr);
       }
     }
 
