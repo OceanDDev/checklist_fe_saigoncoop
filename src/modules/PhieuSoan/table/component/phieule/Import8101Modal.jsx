@@ -85,7 +85,87 @@ const parseINV041 = (rawText) => {
 
   return { so_document, sd_tf, mach, tench, items };
 };
+const parseTRF031 = (rawText) => {
+  const normalized = rawText.replace(/[ \t]+/g, " ").trim();
+  const lines = normalized.split(/\r?\n/);
 
+  const blocks = []; // mỗi block = 1 phiếu
+  let current = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // Batch Name: 17243597 → bắt đầu block mới
+    const batchMatch = line.match(/Batch\s+Name\s*:\s*(\d+)/i);
+    if (batchMatch) {
+      if (current) blocks.push(current);
+      current = {
+        sd_tf: parseInt(batchMatch[1], 10),
+        mach: null,
+        tench: null,
+        items: [],
+      };
+      continue;
+    }
+
+    if (!current) continue;
+
+    // To:   9205   09205-CF BH NGUYEN VAN TIEN
+    if (!current.mach) {
+      const toMatch = line.match(
+        /^To\s*:\s*(\d+)\s+(.+?)(?:\s+Allocated.*)?$/i,
+      );
+      if (toMatch) {
+        current.mach = toMatch[1].trim();
+        // Bỏ hết chữ "Allocated/Released" ở cuối nếu có
+        current.tench = toMatch[2]
+          .replace(/Allocated\s*\/?\s*Released.*/i, "")
+          .trim();
+        continue;
+      }
+    }
+
+    // Dòng item SKU: bắt đầu bằng 7 chữ số
+    if (!/^\d{7}/.test(line)) continue;
+    const parts = line.split(/\s+/);
+    if (parts.length < 5) continue;
+
+    const sku = parseInt(parts[0], 10);
+
+    // Tìm vendor (số >= 5 chữ số không phải XX.XX) để tách name
+    // Vendor thường là số 5 chữ số như 10017
+    let vendorIdx = -1;
+    for (let i = 1; i < parts.length; i++) {
+      if (/^\d{5,}$/.test(parts[i]) && !/\.\d{2}$/.test(parts[i])) {
+        vendorIdx = i;
+        break;
+      }
+    }
+
+    const name =
+      vendorIdx > 1 ? parts.slice(1, vendorIdx).join(" ") : `SKU ${sku}`;
+
+    // Quantity Allocated: tìm 2 số dạng X.XX liên tiếp cuối dòng
+    // Cặp: [Requested, Allocated] → lấy phần tử thứ 2
+    const numPattern = /^\d+\.\d{2}$/;
+    let allocated = null;
+    for (let i = parts.length - 2; i >= 0; i--) {
+      if (numPattern.test(parts[i]) && numPattern.test(parts[i + 1])) {
+        allocated = parseFloat(parts[i + 1]); // Allocated là số thứ 2
+        break;
+      }
+    }
+
+    if (!allocated || allocated <= 0) continue;
+
+    current.items.push({ sku, name, quantity: allocated });
+  }
+
+  if (current) blocks.push(current);
+
+  return blocks.filter((b) => b.sd_tf && b.mach && b.items.length > 0);
+};
 // =============================================================================
 // COMPONENT
 // =============================================================================
@@ -161,42 +241,76 @@ const Import8101Modal = ({ isOpen, onClose, onSuccess }) => {
         const file = files[i];
 
         try {
-          // 1. Đọc + parse file
+          // 1. Đọc file
           const text = await readFileAsText(file);
-          const parsed = parseINV041(text);
 
-          if (!parsed.so_document || !parsed.items.length) {
-            throw new Error(
-              "Không parse được dữ liệu từ file. Kiểm tra định dạng INV041.",
-            );
+          // 2. Detect loại file
+          const isTRF031 =
+            /Batch\s+Name/i.test(text) && /Transfers\s+Listing/i.test(text);
+
+          if (isTRF031) {
+            // ── TRF031: 1 file = nhiều block, mỗi block = 1 phiếu ──────────
+            const blocks = parseTRF031(text);
+
+            if (!blocks.length) {
+              throw new Error(
+                "Không parse được dữ liệu TRF031. Kiểm tra định dạng file.",
+              );
+            }
+
+            for (const block of blocks) {
+              const chi_tiet = block.items.map((item, idx) => ({
+                seq: idx + 1,
+                slot: "8101",
+                sku: item.sku,
+                name: item.name,
+                quantity: item.quantity,
+              }));
+
+              const payload = {
+                loai_phieu: "8101",
+                trang_thai: "Chờ xử lý",
+                sd_tf: block.sd_tf,
+                mach: block.mach,
+                chi_tiet,
+              };
+
+              await phieuLeService.import8101PhieuLe(payload);
+              results.success++;
+            }
+          } else {
+            // ── INV041: logic cũ ─────────────────────────────────────────────
+            const parsed = parseINV041(text);
+
+            if (!parsed.so_document || !parsed.items.length) {
+              throw new Error(
+                "Không parse được dữ liệu từ file. Kiểm tra định dạng INV041.",
+              );
+            }
+
+            // Map SKU → name từ DinhVi
+            const skuList = [...new Set(parsed.items.map((item) => item.sku))];
+            const nameMap = await fetchSkuNames(skuList);
+
+            const chi_tiet = parsed.items.map((item, idx) => ({
+              seq: idx + 1,
+              slot: "8101",
+              sku: item.sku,
+              name: nameMap[item.sku] || `SKU ${item.sku}`,
+              quantity: item.quantity,
+            }));
+
+            const payload = {
+              loai_phieu: "8101",
+              trang_thai: "Chờ xử lý",
+              sd_tf: parsed.sd_tf,
+              mach: parsed.mach,
+              chi_tiet,
+            };
+
+            await phieuLeService.import8101PhieuLe(payload);
+            results.success++;
           }
-
-          // 2. Map SKU → name từ DinhVi (bulk)
-          const skuList = [...new Set(parsed.items.map((i) => i.sku))];
-          const nameMap = await fetchSkuNames(skuList);
-
-          // 3. Build chi_tiet — chỉ lấy name từ DinhVi, slot mặc định "8101"
-          const chi_tiet = parsed.items.map((item, idx) => ({
-            seq: idx + 1,
-            slot: "8101",
-            sku: item.sku,
-            name: nameMap[item.sku] || `SKU ${item.sku}`,
-            quantity: item.quantity,
-          }));
-
-          // 4. Build payload — truyền thẳng sd_tf, mach, tench, không để backend map DataCH
-          const payload = {
-            loai_phieu: "8101",
-            trang_thai: "Chờ xử lý",
-            sd_tf: parsed.sd_tf,
-            mach: parsed.mach, // ✅ giữ
-            // tench: parsed.tench, ❌ bỏ — backend tự lấy từ DataCH
-            chi_tiet,
-          };
-
-          // 5. Gọi createPhieuLe có sẵn
-          await phieuLeService.import8101PhieuLe(payload);
-          results.success++;
         } catch (err) {
           results.failed++;
           const errMsg =
