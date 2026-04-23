@@ -1,7 +1,165 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { toast } from "react-toastify";
 import { checkListBDHService } from "@/services/checklistbdh.service";
+
+// Định nghĩa quyền truy cập cho từng mã nhân viên
+const EMPLOYEE_PERMISSIONS = {
+  20952: {
+    sections: [
+      "QUẢN LÝ ĐIỀU HÀNH CÔNG VIỆC CHUNG TRONG TỔ",
+      "ĐIỀU PHỐI NHẬP - XUẤT HÀNG",
+      "QUẢN LÝ TỒN KHO",
+      "TRANG THIẾT BỊ",
+      "CẬP NHẬT VÀ PHÂN BỔ HÀNG HÓA",
+      "KIỂM TRA, ĐIỀU PHỐI",
+      "BÁO CÁO VÀ CÔNG VIỆC KHÁC",
+      "XLBB VÀ PHÁT SINH",
+    ],
+    excludedJobs: {
+      "KIỂM TRA, ĐIỀU PHỐI": ["KIỂM TRA TEM VÀ ĐỊNH VỊ HÀNG"],
+    },
+  },
+  40303: {
+    sections: [
+      "ĐIỀU PHỐI NHẬP - XUẤT HÀNG",
+      "QUẢN LÝ TỒN KHO",
+      "TRANG THIẾT BỊ",
+      "KIỂM TRA, ĐIỀU PHỐI",
+      "BÁO CÁO VÀ CÔNG VIỆC KHÁC",
+      "XLBB VÀ PHÁT SINH",
+    ],
+    excludedJobs: {
+      "ĐIỀU PHỐI NHẬP - XUẤT HÀNG": ["SẮP XẾP NHÂN SỰ NHẬP HÀNG SLL"],
+      "TRANG THIẾT BỊ": ["KIỂM TRA VẬN HÀNH XE NÂNG"],
+    },
+    includedJobs: {
+      "KIỂM TRA, ĐIỀU PHỐI": ["KIỂM TRA TEM VÀ ĐỊNH VỊ HÀNG"],
+    },
+  },
+  23204: {
+    sections: [
+      "ĐIỀU PHỐI NHẬP - XUẤT HÀNG",
+      "QUẢN LÝ TỒN KHO",
+      "TRANG THIẾT BỊ",
+      "KIỂM TRA, ĐIỀU PHỐI",
+      "BÁO CÁO VÀ CÔNG VIỆC KHÁC",
+      "XLBB VÀ PHÁT SINH",
+    ],
+    excludedJobs: {
+      "ĐIỀU PHỐI NHẬP - XUẤT HÀNG": ["SẮP XẾP NHÂN SỰ NHẬP HÀNG SLL"],
+      "TRANG THIẾT BỊ": ["KIỂM TRA VẬN HÀNH XE NÂNG"],
+      "KIỂM TRA, ĐIỀU PHỐI": ["KIỂM TRA TEM VÀ ĐỊNH VỊ HÀNG"],
+    },
+  },
+};
+
+const RESTRICTED_FORM_ID = "687f155b32fbc64dbf1c0bb0";
+
+// ✅ Hàm kiểm tra công việc có được mở khóa hôm nay không
+const isUnlockedToday = (quy_dinh) => {
+  if (!quy_dinh) return true;
+
+  const now = new Date();
+  const vietnamTime = new Date(
+    now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }),
+  );
+
+  const dayOfWeek = vietnamTime.getDay();
+  const dayOfMonth = vietnamTime.getDate();
+
+  if (
+    quy_dinh.loai === "phát sinh" ||
+    quy_dinh.loai === "phat_sinh" ||
+    quy_dinh.loai === "ngày"
+  ) {
+    return true;
+  }
+
+  if (quy_dinh.loai === "tuần") {
+    if (!quy_dinh.ngay_trong_tuan || quy_dinh.ngay_trong_tuan.length === 0) {
+      return false;
+    }
+    return quy_dinh.ngay_trong_tuan.includes(dayOfWeek);
+  }
+
+  if (quy_dinh.loai === "tháng") {
+    if (
+      !quy_dinh.ngay_trong_thang ||
+      quy_dinh.ngay_trong_thang.length === 0
+    ) {
+      return false;
+    }
+    return quy_dinh.ngay_trong_thang.includes(dayOfMonth);
+  }
+
+  return true;
+};
+
+// ✅ Tạo thông báo lịch cho công việc bị khóa
+const getScheduleNote = (quy_dinh) => {
+  if (!quy_dinh || isUnlockedToday(quy_dinh)) return null;
+
+  const daysOfWeek = [
+    "Chủ nhật",
+    "Thứ 2",
+    "Thứ 3",
+    "Thứ 4",
+    "Thứ 5",
+    "Thứ 6",
+    "Thứ 7",
+  ];
+
+  if (quy_dinh.loai === "tuần" && quy_dinh.ngay_trong_tuan) {
+    const days = quy_dinh.ngay_trong_tuan
+      .map((d) => daysOfWeek[d])
+      .join(", ");
+    return `🔒 Công việc này chỉ mở vào: ${days}`;
+  }
+
+  if (quy_dinh.loai === "tháng" && quy_dinh.ngay_trong_thang) {
+    const days = quy_dinh.ngay_trong_thang.sort((a, b) => a - b).join(", ");
+    return `🔒 Công việc này chỉ mở vào ngày: ${days} hàng tháng`;
+  }
+
+  return null;
+};
+
+// ✅ Kiểm tra loại quy định để hiển thị badge
+const getScheduleBadge = (quy_dinh) => {
+  if (!quy_dinh) return null;
+
+  const badges = {
+    "phát sinh": {
+      text: "Phát sinh",
+      bgColor: "bg-orange-500",
+      icon: "⚡",
+    },
+    phat_sinh: {
+      text: "Phát sinh",
+      bgColor: "bg-orange-500",
+      icon: "⚡",
+    },
+    tuần: {
+      text: "Hàng tuần",
+      bgColor: "bg-blue-500",
+      icon: "📅",
+    },
+    tháng: {
+      text: "Hàng tháng",
+      bgColor: "bg-purple-500",
+      icon: "📆",
+    },
+  };
+
+  return badges[quy_dinh.loai] || null;
+};
+
+// ✅ Kiểm tra có quy định đặc biệt không
+const hasSpecialSchedule = (quy_dinh) => {
+  if (!quy_dinh) return false;
+  return ["phát sinh", "phat_sinh", "tuần", "tháng"].includes(quy_dinh.loai);
+};
 
 const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   const [selectedJobs, setSelectedJobs] = useState([]);
@@ -10,171 +168,18 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
   const [customJobs, setCustomJobs] = useState([]);
   const [newJob, setNewJob] = useState("");
 
-  // Định nghĩa quyền truy cập cho từng mã nhân viên
-  const EMPLOYEE_PERMISSIONS = {
-    20952: {
-      sections: [
-        "QUẢN LÝ ĐIỀU HÀNH CÔNG VIỆC CHUNG TRONG TỔ",
-        "ĐIỀU PHỐI NHẬP - XUẤT HÀNG",
-        "QUẢN LÝ TỒN KHO",
-        "TRANG THIẾT BỊ",
-        "CẬP NHẬT VÀ PHÂN BỔ HÀNG HÓA",
-        "KIỂM TRA, ĐIỀU PHỐI",
-        "BÁO CÁO VÀ CÔNG VIỆC KHÁC",
-      ],
-      excludedJobs: {
-        "KIỂM TRA, ĐIỀU PHỐI": ["KIỂM TRA TEM VÀ ĐỊNH VỊ HÀNG"],
-      },
-    },
-    40303: {
-      sections: [
-        "ĐIỀU PHỐI NHẬP - XUẤT HÀNG",
-        "QUẢN LÝ TỒN KHO",
-        "TRANG THIẾT BỊ",
-        "KIỂM TRA, ĐIỀU PHỐI",
-        "BÁO CÁO VÀ CÔNG VIỆC KHÁC",
-      ],
-      excludedJobs: {
-        "ĐIỀU PHỐI NHẬP - XUẤT HÀNG": ["SẮP XẾP NHÂN SỰ NHẬP HÀNG SLL"],
-        "TRANG THIẾT BỊ": ["KIỂM TRA VẬN HÀNH XE NÂNG"],
-      },
-      includedJobs: {
-        "KIỂM TRA, ĐIỀU PHỐI": ["KIỂM TRA TEM VÀ ĐỊNH VỊ HÀNG"],
-      },
-    },
-    23204: {
-      sections: [
-        "ĐIỀU PHỐI NHẬP - XUẤT HÀNG",
-        "QUẢN LÝ TỒN KHO",
-        "TRANG THIẾT BỊ",
-        "KIỂM TRA, ĐIỀU PHỐI",
-        "BÁO CÁO VÀ CÔNG VIỆC KHÁC",
-      ],
-      excludedJobs: {
-        "ĐIỀU PHỐI NHẬP - XUẤT HÀNG": ["SẮP XẾP NHÂN SỰ NHẬP HÀNG SLL"],
-        "TRANG THIẾT BỊ": ["KIỂM TRA VẬN HÀNH XE NÂNG"],
-        "KIỂM TRA, ĐIỀU PHỐI": ["KIỂM TRA TEM VÀ ĐỊNH VỊ HÀNG"],
-      },
-    },
-  };
+  const isRestricted = formId === RESTRICTED_FORM_ID;
 
-  const RESTRICTED_FORM_ID = "687f155b32fbc64dbf1c0bb0";
-
-  // ✅ Hàm kiểm tra công việc có được mở khóa hôm nay không
-  const isUnlockedToday = (quy_dinh) => {
-    if (!quy_dinh) return true;
-
-    const now = new Date();
-    const vietnamTime = new Date(
-      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
-    );
-
-    const dayOfWeek = vietnamTime.getDay();
-    const dayOfMonth = vietnamTime.getDate();
-
-    // ✅ Phát sinh và ngày → luôn mở khóa
-    if (quy_dinh.loai === "phát sinh" || quy_dinh.loai === "phat_sinh" || quy_dinh.loai === "ngày") {
-      return true;
-    }
-
-    if (quy_dinh.loai === "tuần") {
-      if (!quy_dinh.ngay_trong_tuan || quy_dinh.ngay_trong_tuan.length === 0) {
-        return false;
-      }
-
-      // Sắp xếp các ngày trong tuần
-      const sortedDays = [...quy_dinh.ngay_trong_tuan].sort((a, b) => a - b);
-
-      // Chỉ khóa khi chưa đến ngày đầu tiên
-      return dayOfWeek >= sortedDays[0];
-    }
-
-    if (quy_dinh.loai === "tháng") {
-      if (!quy_dinh.ngay_trong_thang || quy_dinh.ngay_trong_thang.length === 0) {
-        return false;
-      }
-
-      // Sắp xếp các ngày trong tháng
-      const sortedDays = [...quy_dinh.ngay_trong_thang].sort((a, b) => a - b);
-
-      // Chỉ khóa khi chưa đến ngày đầu tiên
-      return dayOfMonth >= sortedDays[0];
-    }
-
-    return true;
-  };
-
-  // ✅ Tạo thông báo lịch cho công việc bị khóa
-  const getScheduleNote = (quy_dinh) => {
-    if (!quy_dinh || isUnlockedToday(quy_dinh)) return null;
-
-    const daysOfWeek = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
-
-    if (quy_dinh.loai === "tuần" && quy_dinh.ngay_trong_tuan) {
-      const sortedDays = [...quy_dinh.ngay_trong_tuan].sort((a, b) => a - b);
-      // eslint-disable-next-line no-unused-vars
-      const days = sortedDays.map(d => daysOfWeek[d]).join(", ");
-      return `🔒 Công việc này chỉ mở từ: ${daysOfWeek[sortedDays[0]]}`;
-    }
-
-    if (quy_dinh.loai === "tháng" && quy_dinh.ngay_trong_thang) {
-      const sortedDays = [...quy_dinh.ngay_trong_thang].sort((a, b) => a - b);
-      return `🔒 Công việc này chỉ mở từ ngày: ${sortedDays[0]} hàng tháng`;
-    }
-
-    return null;
-  };
-
-  // ✅ Kiểm tra loại quy định để hiển thị badge
-  const getScheduleBadge = (quy_dinh) => {
-    if (!quy_dinh) return null;
-
-    const badges = {
-      "phát sinh": {
-        text: "Phát sinh",
-        bgColor: "bg-orange-500",
-        icon: "⚡",
-      },
-      phat_sinh: {
-        text: "Phát sinh",
-        bgColor: "bg-orange-500",
-        icon: "⚡",
-      },
-      tuần: {
-        text: "Hàng tuần",
-        bgColor: "bg-blue-500",
-        icon: "📅",
-      },
-      tháng: {
-        text: "Hàng tháng",
-        bgColor: "bg-purple-500",
-        icon: "📆",
-      },
-    };
-
-    return badges[quy_dinh.loai] || null;
-  };
-
-  // ✅ Kiểm tra có quy định đặc biệt không
-  const hasSpecialSchedule = (quy_dinh) => {
-    if (!quy_dinh) return false;
-    return ["phát sinh", "phat_sinh", "tuần", "tháng"].includes(quy_dinh.loai);
-  };
-
-  const isRestrictedForm = () => {
-    return formId === RESTRICTED_FORM_ID;
-  };
-
-  const hasPermission = () => {
-    if (!isRestrictedForm()) return true;
+  const hasPermission = useMemo(() => {
+    if (!isRestricted) return true;
     return Object.prototype.hasOwnProperty.call(
       EMPLOYEE_PERMISSIONS,
-      userInfo.employeeId
+      userInfo.employeeId,
     );
-  };
+  }, [isRestricted, userInfo.employeeId]);
 
-  const getAllowedSections = () => {
-    if (!isRestrictedForm()) {
+  const allowedSections = useMemo(() => {
+    if (!isRestricted) {
       return form.cac_muc?.map((section) => section.ten_muc) || [];
     }
 
@@ -183,15 +188,14 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       return [];
     }
     return permissions.sections;
-  };
+  }, [isRestricted, form.cac_muc, userInfo.employeeId]);
 
-  const canAccessSection = (sectionName) => {
-    const allowedSections = getAllowedSections();
+  const canAccessSection = useCallback((sectionName) => {
     return allowedSections.includes(sectionName);
-  };
+  }, [allowedSections]);
 
-  const canAccessJob = (sectionName, jobContent) => {
-    if (!isRestrictedForm()) {
+  const canAccessJob = useCallback((sectionName, jobContent) => {
+    if (!isRestricted) {
       return true;
     }
 
@@ -209,45 +213,48 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     }
 
     return true;
-  };
+  }, [isRestricted, userInfo.employeeId]);
 
   // ✅ Lọc công việc theo quyền (không lọc theo lịch trình nữa)
-  const getFilteredJobs = (section) => {
+  const getFilteredJobs = useCallback((section) => {
+    if (!section?.cong_viec) return [];
     return section.cong_viec.filter((job) =>
-      canAccessJob(section.ten_muc, job.noidung)
+      canAccessJob(section.ten_muc, job.noidung),
     );
-  };
+  }, [canAccessJob]);
 
-  const toggleExpand = (sectionIdx, jobIdx) => {
+  const toggleExpand = useCallback((sectionIdx, jobIdx) => {
     const key = `${sectionIdx}-${jobIdx}`;
     setExpandedJobs((prev) => ({
       ...prev,
       [key]: !prev[key],
     }));
-  };
+  }, []);
 
-  const toggleJob = (sectionIdx, jobIdx, job) => {
+  const toggleJob = useCallback((sectionIdx, jobIdx, job) => {
     const key = `${sectionIdx}-${jobIdx}`;
-    const exists = selectedJobs.find((item) => item.key === key);
 
-    if (exists) {
-      setSelectedJobs(selectedJobs.filter((item) => item.key !== key));
-    } else {
-      setSelectedJobs([
-        ...selectedJobs,
-        { key, sectionIdx, jobIdx, noidung: job.noidung },
-      ]);
-      if (job.chi_tiet && job.chi_tiet.length > 0) {
-        const allDetailIndexes = job.chi_tiet.map((_, idx) => idx);
-        setSelectedDetails((prev) => ({
-          ...prev,
-          [key]: allDetailIndexes,
-        }));
+    setSelectedJobs((prevJobs) => {
+      const exists = prevJobs.some((item) => item.key === key);
+      if (exists) {
+        return prevJobs.filter((item) => item.key !== key);
+      } else {
+        if (job.chi_tiet && job.chi_tiet.length > 0) {
+          const allDetailIndexes = job.chi_tiet.map((_, idx) => idx);
+          setSelectedDetails((prev) => ({
+            ...prev,
+            [key]: allDetailIndexes,
+          }));
+        }
+        return [
+          ...prevJobs,
+          { key, sectionIdx, jobIdx, noidung: job.noidung },
+        ];
       }
-    }
-  };
+    });
+  }, []);
 
-  const toggleDetail = (sectionIdx, jobIdx, detailIdx) => {
+  const toggleDetail = useCallback((sectionIdx, jobIdx, detailIdx) => {
     const jobKey = `${sectionIdx}-${jobIdx}`;
 
     setSelectedDetails((prev) => {
@@ -264,31 +271,37 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
         };
       }
     });
-  };
+  }, []);
 
-  const addCustomJob = () => {
+  const addCustomJob = useCallback(() => {
     const jobText = newJob.trim();
     if (!jobText) return;
 
     const newJobObj = { noidung: jobText, chi_tiet: [] };
-    setCustomJobs([...customJobs, newJobObj]);
+    setCustomJobs((prev) => [...prev, newJobObj]);
     setNewJob("");
-  };
+  }, [newJob]);
 
-  const handleSubmit = async () => {
+  const removeCustomJob = useCallback((idx) => {
+    setCustomJobs((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const visibleSections = useMemo(() => {
+    return form.cac_muc?.filter((section) => canAccessSection(section.ten_muc)) || [];
+  }, [form.cac_muc, canAccessSection]);
+
+  const handleSubmit = useCallback(async () => {
     if (!userInfo?.employeeId || !formId) {
       toast.error("Thông tin nhân viên không hợp lệ.");
       return;
     }
 
-    if (!hasPermission()) {
+    if (!hasPermission) {
       toast.error("❌ Mã nhân viên không có quyền truy cập form này.");
       return;
     }
 
-    const filteredSections = form.cac_muc.filter((section) =>
-      canAccessSection(section.ten_muc)
-    );
+    const filteredSections = visibleSections;
 
     if (filteredSections.length === 0) {
       toast.error("Không có công việc nào được phân quyền cho bạn.");
@@ -312,12 +325,13 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
               quy_dinh: job.quy_dinh,
               chi_tiet: (job.chi_tiet || []).map((detail, detailIdx) => ({
                 noi_dung_chi_tiet: detail.noi_dung_chi_tiet,
-                da_chon: isJobSelected && selectedDetailIndexes.includes(detailIdx),
+                da_chon:
+                  isJobSelected && selectedDetailIndexes.includes(detailIdx),
               })),
             };
           }),
         };
-      }
+      },
     );
 
     const transformedCustomJobs = customJobs.map((job) => ({
@@ -342,12 +356,20 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
     } catch (err) {
       onError(err);
     }
-  };
+  }, [
+    userInfo,
+    formId,
+    hasPermission,
+    visibleSections,
+    getFilteredJobs,
+    selectedJobs,
+    selectedDetails,
+    customJobs,
+    onSuccess,
+    onError,
+  ]);
 
-  const visibleSections =
-    form.cac_muc?.filter((section) => canAccessSection(section.ten_muc)) || [];
-
-  if (isRestrictedForm() && !hasPermission()) {
+  if (isRestricted && !hasPermission) {
     return (
       <div className="p-4 bg-gradient-to-br from-gray-50 to-white min-h-screen max-w-3xl mx-auto shadow-sm">
         <h2 className="text-center text-xl font-bold text-blue-700 mb-6 uppercase tracking-wide">
@@ -421,7 +443,7 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                   {filteredJobs.map((job, jobIdx) => {
                     const jobKey = `${sectionIdx}-${jobIdx}`;
                     const isJobSelected = selectedJobs.some(
-                      (j) => j.key === jobKey
+                      (j) => j.key === jobKey,
                     );
                     const isExpanded = expandedJobs[jobKey];
                     const hasDetails = job.chi_tiet && job.chi_tiet.length > 0;
@@ -440,18 +462,19 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                     return (
                       <div
                         key={jobIdx}
-                        className={`border rounded-lg shadow transition-all duration-300 ${
-                          !isUnlocked
+                        className={`border rounded-lg shadow transition-all duration-300 ${!isUnlocked
                             ? "border-gray-300 bg-gray-100 opacity-60"
                             : isPhatSinh
-                            ? "border-orange-400 bg-gradient-to-r from-orange-50 to-red-50 ring-2 ring-orange-300"
-                            : isSpecial
-                            ? "border-blue-400 bg-gradient-to-r from-blue-50 to-indigo-50 ring-2 ring-blue-300"
-                            : "border-gray-200 bg-white"
-                        }`}
+                              ? "border-orange-400 bg-gradient-to-r from-orange-50 to-red-50 ring-2 ring-orange-300"
+                              : isSpecial
+                                ? "border-blue-400 bg-gradient-to-r from-blue-50 to-indigo-50 ring-2 ring-blue-300"
+                                : "border-gray-200 bg-white"
+                          }`}
                       >
                         <div className="flex items-center justify-between p-3 hover:bg-gray-50/50 transition-all">
-                          <label className={`flex items-center gap-3 w-full ${isUnlocked ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                          <label
+                            className={`flex items-center gap-3 w-full ${isUnlocked ? "cursor-pointer" : "cursor-not-allowed"}`}
+                          >
                             <input
                               type="checkbox"
                               className="accent-blue-600 w-4 h-4"
@@ -463,15 +486,14 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                               disabled={!isUnlocked}
                             />
                             <span
-                              className={`text-sm font-medium flex-1 ${
-                                !isUnlocked
+                              className={`text-sm font-medium flex-1 ${!isUnlocked
                                   ? "text-gray-500"
                                   : isPhatSinh
-                                  ? "text-orange-900 font-bold"
-                                  : isSpecial
-                                  ? "text-blue-900 font-semibold"
-                                  : "text-gray-800"
-                              }`}
+                                    ? "text-orange-900 font-bold"
+                                    : isSpecial
+                                      ? "text-blue-900 font-semibold"
+                                      : "text-gray-800"
+                                }`}
                               onClick={(e) => {
                                 e.preventDefault();
                                 if (hasDetails && isUnlocked)
@@ -484,11 +506,9 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                             {/* ✅ Badge hiển thị loại công việc */}
                             {badge && (
                               <span
-                                className={`px-2.5 py-1 ${
-                                  badge.bgColor
-                                } text-white text-xs font-bold rounded-full shadow-sm flex items-center gap-1 ${
-                                  isPhatSinh ? "animate-pulse" : ""
-                                } ${!isUnlocked ? "opacity-50" : ""}`}
+                                className={`px-2.5 py-1 ${badge.bgColor
+                                  } text-white text-xs font-bold rounded-full shadow-sm flex items-center gap-1 ${isPhatSinh ? "animate-pulse" : ""
+                                  } ${!isUnlocked ? "opacity-50" : ""}`}
                               >
                                 <span>{badge.icon}</span>
                                 <span>{badge.text}</span>
@@ -515,13 +535,12 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                         {/* Chi tiết */}
                         {hasDetails && isExpanded && isUnlocked && (
                           <div
-                            className={`px-3 pb-3 pl-10 space-y-2 border-t ${
-                              isPhatSinh
+                            className={`px-3 pb-3 pl-10 space-y-2 border-t ${isPhatSinh
                                 ? "bg-orange-50/50"
                                 : isSpecial
-                                ? "bg-blue-50/50"
-                                : "bg-gray-50"
-                            }`}
+                                  ? "bg-blue-50/50"
+                                  : "bg-gray-50"
+                              }`}
                           >
                             {job.chi_tiet.map((detail, detailIdx) => (
                               <label
@@ -531,9 +550,12 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
                                 <input
                                   type="checkbox"
                                   className="accent-green-600 w-3 h-3"
-                                  checked={isJobSelected && (
-                                    selectedDetails[jobKey] || []
-                                  ).includes(detailIdx)}
+                                  checked={
+                                    isJobSelected &&
+                                    (selectedDetails[jobKey] || []).includes(
+                                      detailIdx,
+                                    )
+                                  }
                                   onChange={() =>
                                     toggleDetail(sectionIdx, jobIdx, detailIdx)
                                   }
@@ -569,9 +591,7 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
             >
               <span className="text-sm text-gray-700">• {job.noidung}</span>
               <button
-                onClick={() =>
-                  setCustomJobs(customJobs.filter((_, i) => i !== idx))
-                }
+                onClick={() => removeCustomJob(idx)}
                 className="text-red-500 hover:text-red-700 text-xs"
               >
                 ✕
@@ -601,11 +621,10 @@ const NhapHandler = ({ form, userInfo, formId, onSuccess, onError }) => {
       <button
         onClick={handleSubmit}
         disabled={visibleSections.length === 0}
-        className={`w-full py-3 mt-6 rounded-lg font-semibold text-base shadow-md transition ${
-          visibleSections.length === 0
+        className={`w-full py-3 mt-6 rounded-lg font-semibold text-base shadow-md transition ${visibleSections.length === 0
             ? "bg-gray-400 cursor-not-allowed text-white"
             : "bg-green-600 text-white hover:bg-green-700"
-        }`}
+          }`}
       >
         ✅ Gửi Checklist
       </button>

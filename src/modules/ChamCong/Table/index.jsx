@@ -7,9 +7,18 @@ import ExcelJS from "exceljs";
 import ImportNangSuat from "./ImportNangSuat";
 
 // ─── Helpers ngày ─────────────────────────────────────────────────────────────
-function tinhGioThuc(tongGio) {
+function tinhGioThuc(tongGio, gioVao) {
   if (!tongGio || tongGio <= 0) return 0;
-  return tongGio >= 5 ? tongGio - 1 : tongGio;
+  if (tongGio < 5) return tongGio;
+
+  if (gioVao) {
+    const d = new Date(gioVao);
+    const isAfter11 =
+      d.getHours() > 11 || (d.getHours() === 11 && d.getMinutes() > 0);
+    if (isAfter11) return tongGio - 0.75; // trừ 45p
+  }
+
+  return tongGio - 1; // trừ 1 giờ
 }
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -189,7 +198,7 @@ async function exportChamCongMau(records, { year, month } = {}) {
 
         if (gioStart && gioEnd && gioEnd > gioStart) {
           const raw = (gioEnd - gioStart) / 3_600_000;
-          const thuc = tinhGioThuc(raw);
+          const thuc = tinhGioThuc(raw, gioStart);
           tongGioThuc += thuc;
           cell(row, col, parseFloat(thuc.toFixed(1)), {
             font: { size: 10, name: "Arial" },
@@ -1421,7 +1430,7 @@ export default function ChamCongTable({ role }) {
   };
 
   const th =
-  "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
+    "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
   const td = "px-5 py-4 text-sm border-b border-border/50 align-middle";
 
   // Tính số row có thể select (không bị khóa)
@@ -1559,7 +1568,7 @@ export default function ChamCongTable({ role }) {
           </div>
           <div className="overflow-x-auto max-h-[75vh] overflow-y-auto">
             <table className="w-full border-collapse">
-<thead className="sticky top-0 z-20 bg-card">
+              <thead className="sticky top-0 z-20 bg-card">
                 <tr>
                   <th className={`${th} w-12`}>
                     <input

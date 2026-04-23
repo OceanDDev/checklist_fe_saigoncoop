@@ -94,6 +94,15 @@ const URL = {
    nangsuat: {
     nangsuat: ENDPOINT_PREFIX + "/nangsuat",
   },
+   inventory: {
+    inventory: ENDPOINT_PREFIX + "/tonkho",
+  },
+  learning:{
+    khoahoc: ENDPOINT_PREFIX +"/khoa-hoc",
+    baihoc: ENDPOINT_PREFIX +"/bai-hoc",
+    baikiemtra: ENDPOINT_PREFIX +"/bai-kiem-tra",
+    luotlambai:ENDPOINT_PREFIX +"/luot-lam-bai",
+  }
 };
 
 export { URL, ApiServer, DEF_HEADERS };

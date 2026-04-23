@@ -38,6 +38,10 @@ import QrDisplay from "./modules/ChamCong/FormCheck/QrDisplay";
 import QrScanner from "./modules/ChamCong/AppQuetQR";
 import NangSuatPage from "./modules/NangSuat";
 import DashBoardNangSuat from "./modules/NangSuat/Dashboard";
+import HomeLearning from "./modules/LearningSCL/HomeLearning";
+import HomeLearningAdmin from "./modules/LearningSCL/Admin/HomeLearningAdmin";
+import KhoaHocDetail from "./modules/LearningSCL/KhoaHocDetail";
+import ProductLookupMobile from "./modules/TraCuu";
 
 function App() {
   return (
@@ -398,9 +402,40 @@ function App() {
             </PrivateRoute>
           }
         />
+  {/* Trang Learning */}
+         <Route
+          path="/learning"
+          element={
+            <PrivateRoute allowRoles={[50,51]}>
+              <MainLayout>
+                <HomeLearning />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+         <Route
+          path="/learning/admin"
+          element={
+            <PrivateRoute allowRoles={[50]}>
+              <MainLayout>
+                <HomeLearningAdmin />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+          <Route
+          path="/learning/khoa-hoc/:id"
+          element={
+            <PrivateRoute allowRoles={[50,51]}>
+              <MainLayout>
+                <KhoaHocDetail />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
         <Route path="/thank-you" element={<ThankYouScreen />} />
-
+<Route path="/tracuu" element={<ProductLookupMobile />} />
         {/* Trang login */}
         <Route path="/login" element={<LoginPage />} />
       </Routes>
