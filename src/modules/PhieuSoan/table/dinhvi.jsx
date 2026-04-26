@@ -345,8 +345,6 @@ const DinhViTable = forwardRef((props, ref) => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      console.log(`✅ Xuất thành công ${allData.length} bản ghi!`);
     } catch (error) {
       console.error("❌ Lỗi khi xuất Excel:", error);
       alert("Không thể xuất Excel. Vui lòng thử lại!");

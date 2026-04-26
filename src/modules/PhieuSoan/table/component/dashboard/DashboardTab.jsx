@@ -30,10 +30,11 @@ const usePhieuSoanDashboard = (startDate, endDate) => {
       // Khởi tạo các biến chứa kết quả
       const byTrangThai = { "Chờ xử lý": 0, "Đã xử lý": 0, "Đã Xuất": 0 };
 
-      // Tách chi tiết cho Transfer (TF) và Soda (SD)
+      // Tách chi tiết cho Transfer (TF), Soda (SD) và 8101
       const statsLoai = {
         TF: { count: 0, kien: 0, khoiLuong: 0, daXuLy: 0 },
         SD: { count: 0, kien: 0, khoiLuong: 0, daXuLy: 0 },
+        "8101": { count: 0, kien: 0, khoiLuong: 0, daXuLy: 0 },
       };
 
       const byQuan = {};
@@ -62,10 +63,11 @@ const usePhieuSoanDashboard = (startDate, endDate) => {
         // 1. Trạng thái
         if (p.trang_thai in byTrangThai) byTrangThai[p.trang_thai]++;
 
-        // 2. Chi tiết theo loại phiếu (TF vs SD)
+        // 2. Chi tiết theo loại phiếu (TF vs SD vs 8101)
         const isSD =
           p.loai_phieu === "SD" || p.loai_phieu?.toUpperCase() === "SODA";
-        const loaiKey = isSD ? "SD" : "TF";
+        const is8101 = p.loai_phieu === "8101" || p.loai_phieu === 8101;
+        const loaiKey = isSD ? "SD" : is8101 ? "8101" : "TF";
 
         statsLoai[loaiKey].count++;
         statsLoai[loaiKey].kien += Number(p.tong_kien) || 0;
@@ -144,30 +146,35 @@ const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
 // ─── Mini components ──────────────────────────────────────────────────────────
 const StatCard = memo(({ label, value, sub, icon, gradient }) => (
   <div
-    className={`relative overflow-hidden rounded-2xl p-5 text-white shadow-md bg-gradient-to-br ${gradient}`}
+    className={`relative overflow-hidden rounded-3xl p-6 text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl bg-gradient-to-br ${gradient} border border-white/10 backdrop-blur-sm group`}
   >
-    <div className="absolute -right-3 -top-3 text-white/10 text-8xl select-none leading-none">
+    <div className="absolute -right-4 -top-4 text-white/20 text-9xl select-none leading-none transform rotate-12 transition-transform group-hover:rotate-0 duration-500">
       {icon}
     </div>
-    <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">
-      {label}
-    </p>
-    <p className="mt-1 text-3xl font-black">{value}</p>
-    <p className="mt-0.5 text-xs text-white/80">{sub}</p>
+    <div className="relative z-10">
+      <p className="text-[11px] font-bold uppercase tracking-widest text-white/80 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 rounded-full bg-white/60 animate-pulse"></span>
+        {label}
+      </p>
+      <p className="mt-3 text-4xl font-black tracking-tight drop-shadow-sm">{value}</p>
+      <p className="mt-1 text-xs text-white/75 font-medium">{sub}</p>
+    </div>
   </div>
 ));
 StatCard.displayName = "StatCard";
 
 const KpiCard = memo(({ label, value, icon, color, bg, border }) => (
   <div
-    className={`rounded-xl border p-4 ${bg} ${border} flex items-center gap-3`}
+    className={`rounded-2xl border p-4 ${bg} ${border} flex items-center gap-4 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 bg-opacity-50 backdrop-blur-sm`}
   >
-    <span className="text-2xl">{icon}</span>
+    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-white shadow-sm shrink-0">
+      <span className="text-2xl">{icon}</span>
+    </div>
     <div>
-      <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider leading-tight">
+      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider leading-tight">
         {label}
       </p>
-      <p className={`text-xl font-black ${color}`}>{value}</p>
+      <p className={`text-xl font-black mt-0.5 ${color}`}>{value}</p>
     </div>
   </div>
 ));
@@ -175,17 +182,19 @@ KpiCard.displayName = "KpiCard";
 
 const Card = memo(({ title, badge, children, className = "" }) => (
   <div
-    className={`rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col overflow-hidden ${className}`}
+    className={`rounded-3xl border border-slate-200/60 bg-white/80 backdrop-blur-md shadow-sm hover:shadow-md transition-all duration-300 flex flex-col overflow-hidden ${className}`}
   >
-    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 shrink-0">
-      <h3 className="font-bold text-slate-700 text-sm">{title}</h3>
+    <div className="flex items-center justify-between border-b border-slate-100/80 px-6 py-4 shrink-0 bg-white/50">
+      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+        {title}
+      </h3>
       {badge && (
-        <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full">
+        <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50/80 text-indigo-600 px-3 py-1.5 rounded-full shadow-sm">
           {badge}
         </span>
       )}
     </div>
-    <div className="p-5 flex-1">{children}</div>
+    <div className="p-6 flex-1">{children}</div>
   </div>
 ));
 Card.displayName = "Card";
@@ -293,10 +302,10 @@ const DateFilter = memo(({ startDate, endDate, onChangeDates }) => {
         <button
           key={p.label}
           onClick={() => applyPreset(i)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 shadow-sm ${
             active === i
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700 hover:-translate-y-0.5"
+              : "bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:-translate-y-0.5"
           }`}
         >
           {p.label}
@@ -304,10 +313,10 @@ const DateFilter = memo(({ startDate, endDate, onChangeDates }) => {
       ))}
       <button
         onClick={() => setShowCustom(!showCustom)}
-        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 shadow-sm ${
           active === -1
-            ? "bg-indigo-600 text-white"
-            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700 hover:-translate-y-0.5"
+            : "bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:-translate-y-0.5"
         }`}
       >
         📅 Tùy chọn
@@ -506,8 +515,8 @@ const DashboardTab = () => {
           />
         </div>
 
-        {/* ── Row 3: Donut + Chi tiết Transfer + Chi tiết Soda ── */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* ── Row 3: Donut + Chi tiết Transfer + Soda + 8101 ── */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
           <Card title="Phân bổ trạng thái">
             <div className="flex flex-col items-center h-full justify-center">
               <div className="relative">
@@ -572,15 +581,15 @@ const DashboardTab = () => {
           <Card title="Thông số: Transfer (TF)">
             <div className="flex flex-col h-full justify-between space-y-4">
               <div className="flex justify-between items-end border-b border-slate-100 pb-3">
-                <span className="text-sm font-semibold text-slate-500">
+                <span className="text-sm font-medium text-slate-500">
                   Số lượng phiếu
                 </span>
-                <span className="text-3xl font-black text-orange-500">
+                <span className="text-3xl font-black text-orange-500 drop-shadow-sm">
                   {fmt(statsLoai.TF.count)}
                 </span>
               </div>
               <div className="flex justify-between items-end border-b border-slate-100 pb-3">
-                <span className="text-sm font-semibold text-slate-500">
+                <span className="text-sm font-medium text-slate-500">
                   Tổng kiện hàng
                 </span>
                 <span className="text-xl font-bold text-slate-700">
@@ -591,7 +600,7 @@ const DashboardTab = () => {
                 </span>
               </div>
               <div className="flex justify-between items-end border-b border-slate-100 pb-3">
-                <span className="text-sm font-semibold text-slate-500">
+                <span className="text-sm font-medium text-slate-500">
                   Tổng khối lượng
                 </span>
                 <span className="text-xl font-bold text-slate-700">
@@ -599,11 +608,11 @@ const DashboardTab = () => {
                   <span className="text-xs font-normal text-slate-400">kg</span>
                 </span>
               </div>
-              <div className="flex justify-between items-center bg-blue-50 p-3 rounded-xl mt-auto">
-                <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+              <div className="flex justify-between items-center bg-orange-50/80 p-3.5 rounded-2xl mt-auto border border-orange-100/50">
+                <span className="text-xs font-bold text-orange-700 uppercase tracking-wide">
                   Tỷ lệ đã xử lý
                 </span>
-                <span className="text-lg font-black text-blue-600">
+                <span className="text-lg font-black text-orange-600">
                   {pct(statsLoai.TF.daXuLy, statsLoai.TF.count)}%
                 </span>
               </div>
@@ -613,15 +622,15 @@ const DashboardTab = () => {
           <Card title="Thông số: Soda (SD)">
             <div className="flex flex-col h-full justify-between space-y-4">
               <div className="flex justify-between items-end border-b border-slate-100 pb-3">
-                <span className="text-sm font-semibold text-slate-500">
+                <span className="text-sm font-medium text-slate-500">
                   Số lượng phiếu
                 </span>
-                <span className="text-3xl font-black text-purple-600">
+                <span className="text-3xl font-black text-purple-600 drop-shadow-sm">
                   {fmt(statsLoai.SD.count)}
                 </span>
               </div>
               <div className="flex justify-between items-end border-b border-slate-100 pb-3">
-                <span className="text-sm font-semibold text-slate-500">
+                <span className="text-sm font-medium text-slate-500">
                   Tổng kiện hàng
                 </span>
                 <span className="text-xl font-bold text-slate-700">
@@ -632,7 +641,7 @@ const DashboardTab = () => {
                 </span>
               </div>
               <div className="flex justify-between items-end border-b border-slate-100 pb-3">
-                <span className="text-sm font-semibold text-slate-500">
+                <span className="text-sm font-medium text-slate-500">
                   Tổng khối lượng
                 </span>
                 <span className="text-xl font-bold text-slate-700">
@@ -640,12 +649,53 @@ const DashboardTab = () => {
                   <span className="text-xs font-normal text-slate-400">kg</span>
                 </span>
               </div>
-              <div className="flex justify-between items-center bg-blue-50 p-3 rounded-xl mt-auto">
-                <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+              <div className="flex justify-between items-center bg-purple-50/80 p-3.5 rounded-2xl mt-auto border border-purple-100/50">
+                <span className="text-xs font-bold text-purple-700 uppercase tracking-wide">
                   Tỷ lệ đã xử lý
                 </span>
-                <span className="text-lg font-black text-blue-600">
+                <span className="text-lg font-black text-purple-600">
                   {pct(statsLoai.SD.daXuLy, statsLoai.SD.count)}%
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Thông số: Loại 8101">
+            <div className="flex flex-col h-full justify-between space-y-4">
+              <div className="flex justify-between items-end border-b border-slate-100 pb-3">
+                <span className="text-sm font-medium text-slate-500">
+                  Số lượng phiếu
+                </span>
+                <span className="text-3xl font-black text-pink-600 drop-shadow-sm">
+                  {fmt(statsLoai["8101"].count)}
+                </span>
+              </div>
+              <div className="flex justify-between items-end border-b border-slate-100 pb-3">
+                <span className="text-sm font-medium text-slate-500">
+                  Tổng kiện hàng
+                </span>
+                <span className="text-xl font-bold text-slate-700">
+                  {fmt(statsLoai["8101"].kien)}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    kiện
+                  </span>
+                </span>
+              </div>
+              <div className="flex justify-between items-end border-b border-slate-100 pb-3">
+                <span className="text-sm font-medium text-slate-500">
+                  Tổng khối lượng
+                </span>
+                <span className="text-xl font-bold text-slate-700">
+                  {fmtKg(statsLoai["8101"].khoiLuong)}{" "}
+                  <span className="text-xs font-normal text-slate-400">kg</span>
+                </span>
+              </div>
+              <div className="flex justify-between items-center bg-pink-50/80 p-3.5 rounded-2xl mt-auto border border-pink-100/50">
+                <span className="text-xs font-bold text-pink-700 uppercase tracking-wide">
+                  Tỷ lệ đã xử lý
+                </span>
+                <span className="text-lg font-black text-pink-600">
+                  {pct(statsLoai["8101"].daXuLy, statsLoai["8101"].count)}%
                 </span>
               </div>
             </div>
@@ -778,7 +828,7 @@ const DashboardTab = () => {
           />
           <button
             onClick={handleRefresh}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-bold hover:bg-slate-800 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5"
           >
             <svg
               className="w-3 h-3"

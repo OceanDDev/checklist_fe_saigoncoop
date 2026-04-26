@@ -14,6 +14,7 @@ const normalizeKey = (k = "") =>
     .toUpperCase();
 
 const HEADER_MAP = {
+  // ── English / ASCII keys ──────────────────────────────────
   MANCC: "MANCC",
   MA_NCC: "MANCC",
   "MA NCC": "MANCC",
@@ -29,16 +30,28 @@ const HEADER_MAP = {
   NAME: "NAME",
   PACK: "PACK",
   KHOILUONG: "KHOILUONG",
+  KHOI_LUONG: "KHOILUONG",
   "KHOI LUONG": "KHOILUONG",
-  "KHỐI LƯỢNG": "KHOILUONG",
   LOAIHINH: "LOAIHINH",
-  NGAY_IMPORT: "NGAY_IMPORT",
   LOAI_HINH: "LOAIHINH",
   "LOAI HINH": "LOAIHINH",
+  NGAY_IMPORT: "NGAY_IMPORT",
   NGAY_NHAP: "NGAY_IMPORT",
   NGAY_TAO: "NGAY_IMPORT",
-  "NGAY TAO": "NGAY_IMPORT",
   "NGAY NHAP": "NGAY_IMPORT",
+  "NGAY TAO": "NGAY_IMPORT",
+
+  // ── Tiếng Việt có dấu (theo log thực tế) ─────────────────
+  MÃ_NCC: "MANCC",
+  MÃ_NH: "MANH",
+  TÊN_HÀNG: "NAME",
+  QUY_CÁCH: "PACK",
+  KHỐI_LƯỢNG: "KHOILUONG",
+  LOẠI_HÌNH: "LOAIHINH",
+  NGÀY_IMPORT: "NGAY_IMPORT",
+
+  // ── STT (bỏ qua, không gửi lên API) ──────────────────────
+  STT: "STT",
 };
 
 const normalizeRowKeys = (rowObj) => {
@@ -280,40 +293,42 @@ const DinhViImport = ({ onImportSuccess }) => {
 
     setImporting(true);
     try {
-      // ✅ Kiểm tra từng SKU xem đã tồn tại chưa và có LOAIHINH đặc biệt không
       const processedRows = await Promise.all(
         parsedRows.map(async (row) => {
+          // Helper map UPPERCASE → lowercase
+          const toLower = (r, existing = null) => ({
+            slot: r.SLOT || existing?.slot || "",
+            sku: r.SKU || existing?.sku,
+            name: existing?.name || r.NAME || "",
+            pack: existing?.pack ?? r.PACK,
+            khoiluong: existing?.khoiluong ?? r.KHOILUONG,
+            loaiHinh: existing?.loaiHinh || r.LOAIHINH || "",
+            maNCC: existing?.maNCC || r.MANCC || "",
+            maNH: existing?.maNH || r.MANH || "",
+            Dept: existing?.Dept || r.DEPT || "",
+            SubDept: existing?.SubDept || r.SUBDEPT || "",
+            ngay_import: existing?.ngay_import || r.NGAY_IMPORT || new Date(),
+          });
+
           try {
-            // Gọi API để lấy thông tin SKU hiện tại (giả sử có API này)
             const existing = await dinhViService.getDinhViBySKU(row.SKU);
 
             if (
               existing &&
-              (existing.LOAIHINH === "1" ||
-                existing.LOAIHINH === "Hàng đặc thù")
+              (existing.pack === 1 || existing.loaiHinh === "Hàng Đặc Thù")
             ) {
-              // ⚠️ Chỉ cho phép cập nhật SLOT, giữ nguyên các trường khác
+              // Hàng đặc thù → chỉ cập nhật SLOT, giữ nguyên tất cả field khác
               return {
-                SKU: row.SKU,
-                SLOT: row.SLOT, // Chỉ lấy SLOT mới từ file import
-                // Giữ nguyên các trường cũ
-                MANCC: existing.MANCC,
-                MANH: existing.MANH,
-                DEPT: existing.DEPT,
-                SUBDEPT: existing.SUBDEPT,
-                PACK: existing.PACK,
-                NAME: existing.NAME,
-                KHOILUONG: existing.KHOILUONG,
-                LOAIHINH: existing.LOAIHINH,
-                NGAY_IMPORT: existing.NGAY_IMPORT,
+                ...toLower(row, existing),
+                slot: row.SLOT, // override chỉ slot mới
               };
             }
 
-            // ✅ SKU mới hoặc chưa có LOAIHINH đặc biệt → Cho phép cập nhật toàn bộ
-            return row;
-          } catch (err) {
-            // Nếu không tìm thấy SKU (SKU mới) → Cho phép import toàn bộ
-            return row;
+            // SKU bình thường → cập nhật toàn bộ từ file
+            return toLower(row);
+          } catch {
+            // SKU chưa tồn tại → thêm mới từ file
+            return toLower(row);
           }
         }),
       );
@@ -328,9 +343,7 @@ const DinhViImport = ({ onImportSuccess }) => {
       let message = `✅ Import hoàn tất từ "${fileName}":\n`;
       message += `• Thêm mới: ${inserted} SKU\n`;
       message += `• Cập nhật: ${modified} SKU\n`;
-      if (unchanged > 0) {
-        message += `• Không thay đổi: ${unchanged} SKU`;
-      }
+      if (unchanged > 0) message += `• Không thay đổi: ${unchanged} SKU`;
 
       alert(message);
       setShowModal(false);
@@ -398,10 +411,8 @@ const DinhViImport = ({ onImportSuccess }) => {
                       </li>
                       <li>
                         • Nếu{" "}
-                        <strong>
-                          SKU đã có cách = 1 hoặc Hàng đặc thù
-                        </strong>{" "}
-                        → Chỉ cập nhật <strong>SLOT</strong>
+                        <strong>SKU đã có cách = 1 hoặc Hàng đặc thù</strong> →
+                        Chỉ cập nhật <strong>SLOT</strong>
                       </li>
                     </ul>
                   </div>
