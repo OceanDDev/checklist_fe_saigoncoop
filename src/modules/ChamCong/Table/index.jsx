@@ -1227,6 +1227,7 @@ export default function ChamCongTable({ role }) {
   const [filterViPham] = useState(false);
   const [filterBoPhan, setFilterBoPhan] = useState("");
   const [filterChucVu, setFilterChucVu] = useState("");
+  const [filterTrangThai, setFilterTrangThai] = useState(""); 
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
     return {
@@ -1267,6 +1268,8 @@ export default function ChamCongTable({ role }) {
     if (filterViPham && !r.vi_pham_cham_ho) return false;
     if (filterBoPhan && r.bo_phan !== filterBoPhan) return false;
     if (filterChucVu && r.chuc_vu !== filterChucVu) return false;
+    if (filterTrangThai === "hop_le" && (r.is_locked || !r.gio_ra)) return false;
+if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -1547,7 +1550,17 @@ export default function ChamCongTable({ role }) {
               </option>
             ))}
           </select>
+          <select
+  value={filterTrangThai}
+  onChange={(e) => setFilterTrangThai(e.target.value)}
+  className="bg-card border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring transition-all cursor-pointer min-w-[160px]"
+>
+  <option value="all">Tất cả trạng thái</option>
+  <option value="hop_le">Hợp lệ</option>
+  <option value="chua_hop_le">Chưa hợp lệ</option>
+</select>
         </div>
+        
 
         {/* Table */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">

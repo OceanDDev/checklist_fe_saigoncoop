@@ -91,9 +91,7 @@ function useHanoiTime() {
 function useIsOpen() {
   const now = useHanoiTime(); // ← nguồn giờ chuẩn Hà Nội
   const t = now.getHours() * 60 + now.getMinutes();
-  const isSunday = now.getDay() === 0;
-  const openTime = isSunday ? 413 : 445; // CN: 6h53, các ngày khác: 7h25
-  return t >= openTime && t < 1320; // 22:00 = 1320
+  return t >= 415 && t < 1320; // mở 06:55, đóng 22:00
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -200,7 +198,7 @@ const ClosedScreen = memo(function ClosedScreen() {
           Ngoài giờ làm việc
         </div>
         <div className="font-mono text-[clamp(0.6rem,0.9vw,0.8rem)] text-neutral-600 tracking-[0.25em] uppercase">
-          Hệ thống hoạt động · 07:25 – 22:00 (Chủ Nhật 06:53 – 22:00)
+          Hệ thống hoạt động · 06:55 – 22:00
         </div>
         <LiveClock />
       </div>

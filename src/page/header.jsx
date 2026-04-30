@@ -21,6 +21,7 @@ const Header = () => {
   const getTitleByRole = (role) => {
     const roles = {
       1: "TOOL ĐIỀU VẬN",
+      4: "XUẤT TRẢ",
       2: "KPIs",
       10: "KPIs",
       11: "KPIs",
@@ -30,18 +31,15 @@ const Header = () => {
       15: "KPIs",
       16: "KPIs",
       17: "KPIs",
-      4: "XUẤT TRẢ",
       20: "PHIẾU SOẠN",
       21: "PHỤ XE - BỐC XẾP",
       22: "PHỤ XE - BỐC XẾP",
       23: "TRANG THIẾT BỊ",
       25: "TỒN KHO",
       27: "CHẤM CÔNG",
-      28:"CHẤM CÔNG",
-           29: "NĂNG SUẤT PHIẾU",
-      30:"CHẤM CÔNG",
-       
-
+      28: "CHẤM CÔNG",
+      29: "NĂNG SUẤT PHIẾU",
+      30: "CHẤM CÔNG",
     };
     return roles[role] || "CHECKLIST";
   };
