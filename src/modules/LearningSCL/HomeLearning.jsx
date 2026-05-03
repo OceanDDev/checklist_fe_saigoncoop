@@ -26,7 +26,7 @@ const HomeLearning = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 pt-[72px] sm:pt-28 pb-10">
+    <div className="min-h-screen bg-[#020617] text-slate-100   pb-10">
       {/* STATUS BAR - Tối ưu hiển thị 1 dòng trên mobile */}
       <div className="bg-slate-900/40 border-b border-slate-800/50 px-4 py-2.5 flex items-center justify-between backdrop-blur-sm">
         <div className="flex items-center gap-2 overflow-hidden">

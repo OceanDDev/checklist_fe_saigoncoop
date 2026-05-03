@@ -256,6 +256,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
       key: "selection",
     },
   ]);
+
   const [showCalendar, setShowCalendar] = useState(false);
   const [printDateRange, setPrintDateRange] = useState([
     {
@@ -367,6 +368,7 @@ const PhieuLeTable = forwardRef((props, ref) => {
     return () => timers.forEach(clearTimeout);
   }, [search, soDocument, sku, slot, maCH, chuyen, quan]);
 
+  // ✅ THAY params bằng:
   const params = useMemo(
     () => ({
       page,
@@ -380,14 +382,15 @@ const PhieuLeTable = forwardRef((props, ref) => {
       mach: debouncedMaCH,
       chuyen: debouncedChuyen,
       quan: debouncedQuan,
+      // ✅ Chỉ gửi "YYYY-MM-DD" thuần, backend tự thêm +07:00
       startDate: dateRange[0].startDate
         ? dayjs(dateRange[0].startDate).format("YYYY-MM-DD")
         : "",
       endDate: dateRange[0].endDate
         ? dayjs(dateRange[0].endDate).format("YYYY-MM-DD")
         : "",
-      printStartDate: debouncedPrintStartDate,
-      printEndDate: debouncedPrintEndDate,
+      printStartDate: debouncedPrintStartDate, // đã là "YYYY-MM-DD" hoặc ""
+      printEndDate: debouncedPrintEndDate, // đã là "YYYY-MM-DD" hoặc ""
     }),
     [
       page,

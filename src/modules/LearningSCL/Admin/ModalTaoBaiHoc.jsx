@@ -187,39 +187,7 @@ const ModalTaoBaiHoc = ({ isOpen, onClose, khoaHocId, onSuccess }) => {
                     className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-blue-500/50 transition-colors"
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">
-                    Chế độ bài kiểm tra
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      {
-                        value: "sau_video",
-                        label: "Sau khi xem video",
-                        icon: "🎬",
-                      },
-                      { value: "thu_cong", label: "Mở thủ công", icon: "🔓" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() =>
-                          setForm({ ...form, cheDoBaiKiemTra: opt.value })
-                        }
-                        className={`px-3 py-2.5 rounded-xl border text-[10px] font-bold text-left transition-all
-                          ${
-                            form.cheDoBaiKiemTra === opt.value
-                              ? "border-blue-500/50 bg-blue-500/10 text-blue-400"
-                              : "border-slate-700/50 bg-slate-800/30 text-slate-500 hover:border-slate-600"
-                          }`}
-                      >
-                        <span className="block text-base mb-0.5">
-                          {opt.icon}
-                        </span>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+               
               </div>
             )}
 

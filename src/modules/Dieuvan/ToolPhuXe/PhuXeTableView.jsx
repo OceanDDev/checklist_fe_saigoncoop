@@ -37,6 +37,38 @@ dayjs.extend(timezone);
 const { Title } = Typography;
 const VN_TIMEZONE = "Asia/Ho_Chi_Minh";
 
+// Bảng 28 màu hoàn toàn phân biệt nhau
+const DISTINCT_COLORS = [
+  "#FF6B6B", // đỏ san hô
+  "#4ECDC4", // xanh ngọc
+  "#45B7D1", // xanh dương nhạt
+  "#96CEB4", // xanh lá mint
+  "#FFEAA7", // vàng kem
+  "#DDA0DD", // tím hồng (plum)
+  "#98D8C8", // xanh lá nhạt
+  "#F7DC6F", // vàng tươi
+  "#BB8FCE", // tím lavender
+  "#85C1E9", // xanh sky
+  "#F0B27A", // cam đất
+  "#82E0AA", // xanh lá tươi
+  "#F1948A", // hồng đào
+  "#73C6B6", // xanh teal
+  "#FAD7A0", // cam kem
+  "#AED6F1", // xanh pastel
+  "#A9DFBF", // xanh lá pastel
+  "#F9E79F", // vàng pastel
+  "#D2B4DE", // tím pastel
+  "#A3E4D7", // ngọc pastel
+  "#FADBD8", // hồng nhạt
+  "#D5E8D4", // xanh lá nhạt
+  "#DAE8FC", // xanh dương nhạt
+  "#FFE6CC", // cam nhạt
+  "#E1D5E7", // tím nhạt
+  "#D5F5E3", // xanh mint nhạt
+  "#FDEBD0", // vàng cam nhạt
+  "#EBF5FB", // xanh trời nhạt
+];
+
 const PhuXeTableView = ({
   filteredData,
   sortOrder,
@@ -63,55 +95,44 @@ const PhuXeTableView = ({
   const [selectedPrintRecord, setSelectedPrintRecord] = useState(null);
 
   // Role 21: khóa nếu đã chọn rồi + đã qua 6 tiếng kể từ thoi_gian_di
-  // Chưa chọn thì luôn cho chọn bình thường
   const canRole21EditRecord = (record) => {
     if (!isRole21) return canEditDieuVan;
     if (record.dieu_van_xac_nhan && record.thoi_gian_di) {
       const thoiGianDi = dayjs(record.thoi_gian_di).tz(VN_TIMEZONE);
       const now = dayjs().tz(VN_TIMEZONE);
-      if (now.diff(thoiGianDi, "hour") >= 6) return false; // đã qua 6 tiếng → khóa
+      if (now.diff(thoiGianDi, "hour") >= 6) return false;
     }
     return true;
   };
 
+  // -------------------------------------------------------
   // Color functions
+  // -------------------------------------------------------
+
+  /**
+   * Trả về màu dựa theo INDEX của tên trong danh sách phuXeNames.
+   * Đảm bảo mỗi tên có màu riêng biệt hoàn toàn, không trùng nhau.
+   */
   const getColorForPhuXeName = (tenPhuXe) => {
     if (!tenPhuXe) return "#f0f0f0";
-    const colors = [
-      "#ffd6e7",
-      "#ffadd2",
-      "#eb2f96",
-      "#c41d7f",
-      "#d3f261",
-      "#bae637",
-      "#7cb305",
-      "#5b8c00",
-      "#b7eb8f",
-      "#95de64",
-      "#52c41a",
-      "#389e0d",
-      "#87e8de",
-      "#5cdbd3",
-      "#13c2c2",
-      "#08979c",
-      "#91d5ff",
-      "#69c0ff",
-      "#1890ff",
-      "#096dd9",
-      "#adc6ff",
-      "#85a5ff",
-      "#597ef7",
-      "#2f54eb",
-      "#d3adf7",
-      "#b37feb",
-      "#9254de",
-      "#722ed1",
-    ];
-    let hash = 0;
-    for (let i = 0; i < tenPhuXe.length; i++) {
-      hash = tenPhuXe.charCodeAt(i) + ((hash << 5) - hash);
+    const idx = phuXeNames.findIndex((item) => item.name === tenPhuXe);
+    if (idx === -1) {
+      // Fallback nếu tên không còn trong danh sách (đã bị xóa)
+      let hash = 0;
+      for (let i = 0; i < tenPhuXe.length; i++) {
+        hash = tenPhuXe.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return DISTINCT_COLORS[Math.abs(hash) % DISTINCT_COLORS.length];
     }
-    return colors[Math.abs(hash) % colors.length];
+    return DISTINCT_COLORS[idx % DISTINCT_COLORS.length];
+  };
+
+  /**
+   * Màu preview cho tên phụ xe sắp được thêm mới
+   * (sẽ là index = phuXeNames.length vì chưa thêm vào danh sách)
+   */
+  const getNextAddColor = () => {
+    return DISTINCT_COLORS[phuXeNames.length % DISTINCT_COLORS.length];
   };
 
   const getColorForKhungGio = (khungGio) => {
@@ -147,7 +168,9 @@ const PhuXeTableView = ({
     return dayjs(date).tz(VN_TIMEZONE).format("HH:mm:ss");
   };
 
+  // -------------------------------------------------------
   // Inline editing handlers
+  // -------------------------------------------------------
   const handleStartEdit = (recordId, field, currentValue) => {
     setEditingField({ recordId, field });
     setEditValue(currentValue || "");
@@ -160,7 +183,6 @@ const PhuXeTableView = ({
 
   const handleSaveEdit = async () => {
     if (!editingField) return;
-
     const { recordId, field } = editingField;
     try {
       const result = await phuXeService.updatePhuXe(recordId, {
@@ -180,7 +202,9 @@ const PhuXeTableView = ({
     }
   };
 
+  // -------------------------------------------------------
   // Print handlers
+  // -------------------------------------------------------
   const handleOpenPrintModal = (record) => {
     setSelectedPrintRecord(record);
     setPrintModalVisible(true);
@@ -191,7 +215,9 @@ const PhuXeTableView = ({
     setSelectedPrintRecord(null);
   };
 
+  // -------------------------------------------------------
   // Modal handlers
+  // -------------------------------------------------------
   const handleOpenSelectNameModal = (recordId) => {
     if (!canEditPhuXeName) {
       message.warning("Bạn không có quyền chỉnh sửa tên phụ xe!");
@@ -293,7 +319,9 @@ const PhuXeTableView = ({
     }
   };
 
+  // -------------------------------------------------------
   // Render editable cell
+  // -------------------------------------------------------
   const renderEditableCell = (text, record, field, isRole24) => {
     const isEditing =
       editingField?.recordId === record._id && editingField?.field === field;
@@ -340,6 +368,9 @@ const PhuXeTableView = ({
     );
   };
 
+  // -------------------------------------------------------
+  // Columns
+  // -------------------------------------------------------
   const columns = [
     {
       title: "STT",
@@ -599,6 +630,9 @@ const PhuXeTableView = ({
       },
   ].filter(Boolean);
 
+  // -------------------------------------------------------
+  // Render
+  // -------------------------------------------------------
   return (
     <>
       {canEditPhuXeName && (
@@ -733,6 +767,31 @@ const PhuXeTableView = ({
           >
             <Input placeholder="Nhập tên phụ xe" size="large" />
           </Form.Item>
+
+          {/* Preview màu sẽ được gán cho tên mới */}
+          <div className="mb-3 flex items-center gap-2 text-sm text-gray-500">
+            <span>Màu sẽ được gán:</span>
+            <span
+              style={{
+                display: "inline-block",
+                width: 24,
+                height: 24,
+                borderRadius: 4,
+                backgroundColor: getNextAddColor(),
+                border: "1px solid #ccc",
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                fontSize: 12,
+                color: "#999",
+              }}
+            >
+              ({getNextAddColor()})
+            </span>
+          </div>
+
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -751,11 +810,12 @@ const PhuXeTableView = ({
           <List
             dataSource={phuXeNames}
             locale={{ emptyText: "Chưa có tên phụ xe nào" }}
-            renderItem={(item) => (
+            renderItem={(item, index) => (
               <List.Item
                 className="px-3 py-2 rounded mb-2"
                 style={{
-                  backgroundColor: getColorForPhuXeName(item.name),
+                  backgroundColor:
+                    DISTINCT_COLORS[index % DISTINCT_COLORS.length],
                 }}
                 actions={[
                   <Popconfirm
@@ -774,7 +834,18 @@ const PhuXeTableView = ({
                 ]}
               >
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  {/* Ô màu nhỏ hiển thị màu thực tế */}
+                  <div
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 3,
+                      backgroundColor:
+                        DISTINCT_COLORS[index % DISTINCT_COLORS.length],
+                      border: "1.5px solid rgba(0,0,0,0.15)",
+                      flexShrink: 0,
+                    }}
+                  />
                   <span className="font-medium">{item.name}</span>
                 </div>
               </List.Item>

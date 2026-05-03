@@ -5,6 +5,9 @@ import { checkListService } from "@/services/checklist.service";
 import UserInfoForm from "./infoUser";
 import { ClipboardCheck, AlertCircle } from "lucide-react";
 
+const REACH_TRUCK_KEYWORD = "reach truck";
+const REAR_MIRROR_CONTENT = "kính chiếu hậu";
+
 const ForkliftChecklistMobile = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -28,7 +31,6 @@ const ForkliftChecklistMobile = () => {
   const [showSubmitError, setShowSubmitError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
@@ -62,14 +64,53 @@ const ForkliftChecklistMobile = () => {
     if (id) fetchForm();
   }, [id]);
 
-  const handleAnswerChange = useCallback((qid, type, value) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [qid]: { ...prev[qid], [type]: value },
-    }));
-    setErrors((prev) => ({ ...prev, [qid]: "" }));
-    setShowSubmitError(false);
-  }, []);
+  // Kiểm tra loại xe có phải Reachtruck không
+const isReachTruck = useCallback(() => {
+  return Object.values(selectedOptions).some((val) =>
+    val?.toLowerCase().includes(REACH_TRUCK_KEYWORD)
+  );
+}, [selectedOptions]);
+
+  // Auto-set "Đ" cho Kính chiếu hậu nếu chọn Reachtruck
+  useEffect(() => {
+    if (!isConfirmed) return;
+
+    if (isReachTruck()) {
+      setAnswers((prev) => {
+        const updated = { ...prev };
+        checklistGroups.forEach((group) => {
+          group.items.forEach((item) => {
+            if (item.noidung?.toLowerCase().includes(REAR_MIRROR_CONTENT)) {
+              updated[item._id] = { ...updated[item._id], dap_an: "Đ" };
+            }
+          });
+        });
+        return updated;
+      });
+    }
+  }, [isConfirmed, isReachTruck, checklistGroups]);
+
+  const handleAnswerChange = useCallback(
+    (qid, type, value) => {
+      // Không cho thay đổi nếu là Reachtruck + Kính chiếu hậu
+      const allItems = checklistGroups.flatMap((g) => g.items);
+      const item = allItems.find((i) => i._id === qid);
+      if (
+        item?.noidung?.toLowerCase().includes(REAR_MIRROR_CONTENT) &&
+        isReachTruck()
+      ) {
+        return;
+      }
+
+      setAnswers((prev) => ({
+        ...prev,
+        [qid]: { ...prev[qid], [type]: value },
+      }));
+      setErrors((prev) => ({ ...prev, [qid]: "" }));
+      setShowSubmitError(false);
+    },
+    [checklistGroups, isReachTruck],
+  );
 
   const validate = useCallback(() => {
     const newErrors = {};
@@ -84,22 +125,19 @@ const ForkliftChecklistMobile = () => {
     async (e) => {
       e?.preventDefault();
 
-      // Prevent duplicate submission
       if (isSubmitting || submitRef.current) {
         console.log("Đang xử lý, vui lòng đợi...");
         return;
       }
 
-      // Validate first
       const isValid = validate();
       setShowSubmitError(!isValid);
 
       if (!isValid) {
-        // Scroll to first error
         const firstErrorId = Object.keys(errors)[0];
         if (firstErrorId) {
           const element = document.querySelector(
-            `[name="status-${firstErrorId}"]`
+            `[name="status-${firstErrorId}"]`,
           );
           element?.scrollIntoView({ behavior: "smooth", block: "center" });
         }
@@ -122,7 +160,7 @@ const ForkliftChecklistMobile = () => {
         };
 
         const option_da_chon = Object.entries(selectedOptions).map(
-          ([label, value]) => ({ label, value })
+          ([label, value]) => ({ label, value }),
         );
 
         const payload = {
@@ -135,15 +173,10 @@ const ForkliftChecklistMobile = () => {
           checklist_groups: buildAnswers(),
         };
 
-        console.log("Đang gửi checklist...");
         await checkListService.createCheckList(id, payload);
-
-        console.log("Gửi thành công!");
         navigate("/thank-you", { replace: true });
       } catch (err) {
         console.error("Lỗi gửi checklist:", err);
-
-        // Check if error is duplicate
         const errorMsg = err?.response?.data?.error || err.message;
         if (errorMsg.includes("trùng") || errorMsg.includes("duplicate")) {
           alert("⚠️ Bạn đã gửi checklist này rồi. Không thể gửi lại!");
@@ -152,7 +185,6 @@ const ForkliftChecklistMobile = () => {
           alert("❌ Gửi checklist thất bại: " + errorMsg);
         }
       } finally {
-        // Reset after delay
         setTimeout(() => {
           submitRef.current = false;
           setIsSubmitting(false);
@@ -170,7 +202,7 @@ const ForkliftChecklistMobile = () => {
       userInfo,
       conclusion,
       navigate,
-    ]
+    ],
   );
 
   if (!isConfirmed) {
@@ -225,64 +257,80 @@ const ForkliftChecklistMobile = () => {
               {group.label}
             </div>
 
-            {group.items.map((item, idx) => (
-              <div
-                key={item._id}
-                className={`mb-4 border rounded-xl p-4 shadow-sm bg-white transition-all ${
-                  errors[item._id] ? "border-red-400 bg-red-50" : ""
-                }`}
-              >
-                <div className="flex gap-2 items-start mb-3 text-sm text-gray-800 font-medium">
-                  <AlertCircle className="size-4 text-yellow-500 mt-0.5 flex-shrink-0" />
-                  <span>
-                    {idx + 1}. {item.noidung}
-                  </span>
-                </div>
+            {group.items.map((item, idx) => {
+              const isRearMirror = item.noidung
+                ?.toLowerCase()
+                .includes(REAR_MIRROR_CONTENT);
+              const isAutoSet = isRearMirror && isReachTruck();
 
-                <div className="flex gap-6 text-sm">
-                  {["Đ", "KĐ"].map((opt) => {
-                    const isChecked = answers[item._id]?.dap_an === opt;
-                    const isD = opt === "Đ";
-
-                    return (
-                      <label
-                        key={opt}
-                        className={`flex items-center justify-center w-12 h-12 text-base font-bold rounded-full cursor-pointer border-2 transition-all duration-200 ${
-                          isChecked
-                            ? isD
-                              ? "bg-green-600 text-white border-green-600 shadow-lg scale-110"
-                              : "bg-red-600 text-white border-red-600 shadow-lg scale-110"
-                            : isD
-                            ? "text-green-600 border-green-400 hover:bg-green-100 hover:scale-105"
-                            : "text-red-600 border-red-400 hover:bg-red-100 hover:scale-105"
-                        } ${
-                          isSubmitting ? "pointer-events-none opacity-60" : ""
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name={`status-${item._id}`}
-                          checked={isChecked}
-                          disabled={isSubmitting}
-                          onChange={() =>
-                            handleAnswerChange(item._id, "dap_an", opt)
-                          }
-                          className="hidden"
-                        />
-                        {opt}
-                      </label>
-                    );
-                  })}
-                </div>
-
-                {errors[item._id] && (
-                  <div className="text-red-600 text-sm mt-2 font-medium flex items-center gap-1">
-                    <AlertCircle className="size-4" />
-                    {errors[item._id]}
+              return (
+                <div
+                  key={item._id}
+                  className={`mb-4 border rounded-xl p-4 shadow-sm bg-white transition-all ${
+                    errors[item._id] ? "border-red-400 bg-red-50" : ""
+                  } ${isAutoSet ? "border-blue-200 bg-blue-50" : ""}`}
+                >
+                  <div className="flex gap-2 items-start mb-3 text-sm text-gray-800 font-medium">
+                    <AlertCircle className="size-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                    <span>
+                      {idx + 1}. {item.noidung}
+                    </span>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  <div className="flex gap-6 text-sm">
+                    {["Đ", "KĐ"].map((opt) => {
+                      const isChecked = answers[item._id]?.dap_an === opt;
+                      const isD = opt === "Đ";
+
+                      return (
+                        <label
+                          key={opt}
+                          className={`flex items-center justify-center w-12 h-12 text-base font-bold rounded-full cursor-pointer border-2 transition-all duration-200 ${
+                            isChecked
+                              ? isD
+                                ? "bg-green-600 text-white border-green-600 shadow-lg scale-110"
+                                : "bg-red-600 text-white border-red-600 shadow-lg scale-110"
+                              : isD
+                                ? "text-green-600 border-green-400 hover:bg-green-100 hover:scale-105"
+                                : "text-red-600 border-red-400 hover:bg-red-100 hover:scale-105"
+                          } ${
+                            isSubmitting || isAutoSet
+                              ? "pointer-events-none opacity-60"
+                              : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`status-${item._id}`}
+                            checked={isChecked}
+                            disabled={isSubmitting || isAutoSet}
+                            onChange={() =>
+                              handleAnswerChange(item._id, "dap_an", opt)
+                            }
+                            className="hidden"
+                          />
+                          {opt}
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Badge giải thích auto-set */}
+                  {isAutoSet && (
+                    <p className="text-xs text-blue-500 mt-2 italic">
+                      * Xe Reachtruck không có kính chiếu hậu — tự động chọn Đạt
+                    </p>
+                  )}
+
+                  {errors[item._id] && (
+                    <div className="text-red-600 text-sm mt-2 font-medium flex items-center gap-1">
+                      <AlertCircle className="size-4" />
+                      {errors[item._id]}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ))}
 

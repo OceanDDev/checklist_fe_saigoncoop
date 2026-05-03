@@ -32,17 +32,17 @@ const layMotKhoaHoc = async (id) => {
   }
 };
 
-const taoKhoaHoc = async (payload) => {
+const taoKhoaHoc = async (formData) => {
   try {
-    return await requestService.post(
+    const res = await ApiServer.post(
       URL.learning.khoahoc,
-      payload,
-      undefined,
-      ApiServer,
+      formData,
+      // Không set Content-Type, để axios tự set multipart/form-data
     );
+    return res.data;
   } catch (error) {
     console.error("Lỗi khi gọi taoKhoaHoc:", error);
-    throw error;
+    throw error.response?.data || error;
   }
 };
 

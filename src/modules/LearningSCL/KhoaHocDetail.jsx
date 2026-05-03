@@ -7,18 +7,26 @@ import * as mammoth from "mammoth";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
-// ─── HELPER: Chuyển đổi link YouTube sang dạng Embed ──────────────────────────
 const getYoutubeEmbedUrl = (url) => {
   if (!url) return null;
   // eslint-disable-next-line no-useless-escape
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const regExp =
+    // eslint-disable-next-line no-useless-escape
+    /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
   const match = url.match(regExp);
-  return (match && match[2].length === 11) 
-    ? `https://www.youtube.com/embed/${match[2]}` 
+  return match && match[2].length === 11
+    ? `https://www.youtube.com/embed/${match[2]}?rel=0&modestbranding=1`
     : null;
 };
 
-// ─── Word Viewer ─────────────────────────────────────────────────────────────
+// ─── Spinner ──────────────────────────────────────────────────────────────────
+const Spinner = () => (
+  <div className="flex items-center justify-center h-48">
+    <div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
+  </div>
+);
+
+// ─── Word Viewer ──────────────────────────────────────────────────────────────
 const WordViewer = ({ url }) => {
   const [html, setHtml] = useState("");
   const [loading, setLoading] = useState(true);
@@ -28,44 +36,36 @@ const WordViewer = ({ url }) => {
     if (!url) return;
     setLoading(true);
     setError(null);
-
     fetch(url)
-      .then((res) => res.arrayBuffer())
+      .then((r) => r.arrayBuffer())
       .then((buf) => mammoth.convertToHtml({ arrayBuffer: buf }))
       .then((result) => {
         setHtml(result.value);
         setLoading(false);
       })
       .catch((err) => {
-        setError("Không đọc được file Word: " + err.message);
+        setError("Không đọc được file: " + err.message);
         setLoading(false);
       });
   }, [url]);
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
-      </div>
-    );
-
+  if (loading) return <Spinner />;
   if (error)
     return (
       <div className="text-center py-12 text-red-400 text-sm">{error}</div>
     );
-
   return (
-    <div className="bg-white rounded-xl p-6 sm:p-10 shadow-2xl">
+    <div className="bg-white rounded-2xl p-8 sm:p-12 shadow-2xl">
       <div
-        className="prose prose-sm max-w-none text-slate-900"
-        style={{ fontFamily: "Arial, sans-serif", lineHeight: 1.8 }}
+        className="prose prose-base max-w-none text-slate-900"
+        style={{ fontFamily: "Georgia, serif", lineHeight: 1.9 }}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>
   );
 };
 
-// ─── PDF Slide Viewer ────────────────────────────────────────────────────────
+// ─── PDF Viewer ───────────────────────────────────────────────────────────────
 const PDFSlideViewer = ({ src }) => {
   const canvasRef = useRef(null);
   const [pdf, setPdf] = useState(null);
@@ -94,7 +94,7 @@ const PDFSlideViewer = ({ src }) => {
         renderTask.current = null;
       }
       const p = await pdf.getPage(n);
-      const vp = p.getViewport({ scale: 1.6 });
+      const vp = p.getViewport({ scale: 1.8 });
       const canvas = canvasRef.current;
       canvas.width = vp.width;
       canvas.height = vp.height;
@@ -121,48 +121,47 @@ const PDFSlideViewer = ({ src }) => {
     return () => window.removeEventListener("keydown", fn);
   }, [total]);
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
-      </div>
-    );
+  if (loading) return <Spinner />;
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="bg-slate-950 rounded-xl overflow-auto flex justify-center p-4">
-        <canvas ref={canvasRef} className="rounded-lg shadow-2xl max-w-full" />
+    <div className="flex flex-col gap-4">
+      <div className="bg-slate-950 rounded-2xl overflow-auto flex justify-center p-4 sm:p-6 shadow-2xl border border-slate-800/40">
+        <canvas ref={canvasRef} className="rounded-xl shadow-2xl max-w-full" />
       </div>
-      <div className="flex items-center justify-between bg-slate-800/60 rounded-xl px-4 py-2.5">
+      <div className="flex items-center justify-between bg-slate-800/50 backdrop-blur rounded-xl px-5 py-3 border border-slate-700/30">
         <button
           onClick={() => setPage((p) => Math.max(1, p - 1))}
           disabled={page <= 1}
-          className="text-xs font-bold text-slate-400 hover:text-white disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-700"
+          className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white disabled:opacity-30 transition-all px-3 py-1.5 rounded-lg hover:bg-slate-700 active:scale-95"
         >
-          ← Trước
+          ← <span className="hidden sm:inline">Trang trước</span>
         </button>
-        <span className="text-xs text-slate-400 font-mono">
-          <span className="text-white font-bold">{page}</span> / {total}
+        <span className="text-sm text-slate-400 font-mono">
+          <span className="text-white font-bold">{page}</span>
+          <span className="text-slate-600 mx-1.5">/</span>
+          <span>{total}</span>
         </span>
         <button
           onClick={() => setPage((p) => Math.min(total, p + 1))}
           disabled={page >= total}
-          className="text-xs font-bold text-slate-400 hover:text-white disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-700"
+          className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white disabled:opacity-30 transition-all px-3 py-1.5 rounded-lg hover:bg-slate-700 active:scale-95"
         >
-          Sau →
+          <span className="hidden sm:inline">Trang sau</span> →
         </button>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {Array.from({ length: total }, (_, i) => (
-          <ThumbCanvas
-            key={i}
-            pdf={pdf}
-            index={i + 1}
-            active={i + 1 === page}
-            onClick={() => setPage(i + 1)}
-          />
-        ))}
-      </div>
+      {total > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-2 px-1">
+          {Array.from({ length: total }, (_, i) => (
+            <ThumbCanvas
+              key={i}
+              pdf={pdf}
+              index={i + 1}
+              active={i + 1 === page}
+              onClick={() => setPage(i + 1)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -172,7 +171,7 @@ const ThumbCanvas = ({ pdf, index, active, onClick }) => {
   useEffect(() => {
     if (!pdf || !ref.current) return;
     pdf.getPage(index).then((p) => {
-      const vp = p.getViewport({ scale: 0.15 });
+      const vp = p.getViewport({ scale: 0.18 });
       const c = ref.current;
       if (!c) return;
       c.width = vp.width;
@@ -183,19 +182,81 @@ const ThumbCanvas = ({ pdf, index, active, onClick }) => {
   return (
     <button
       onClick={onClick}
-      className={`flex-shrink-0 rounded-md overflow-hidden border-2 transition-all ${active ? "border-blue-500" : "border-transparent opacity-50 hover:opacity-80"}`}
+      className={`flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${active ? "border-blue-500 shadow-lg shadow-blue-500/20" : "border-transparent opacity-40 hover:opacity-70"}`}
     >
       <canvas ref={ref} />
     </button>
   );
 };
 
-// ─── Tài Liệu Viewer (PDF hoặc Word) ─────────────────────────────────────────
 const TaiLieuViewer = ({ url, loai }) => {
   if (!url) return null;
   if (loai === "docx" || loai === "doc") return <WordViewer url={url} />;
   return <PDFSlideViewer src={url} />;
 };
+
+// ─── Tab Button ───────────────────────────────────────────────────────────────
+const TabBtn = ({ active, onClick, icon, label }) => (
+  <button
+    onClick={onClick}
+    className={`text-sm font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 active:scale-95 ${
+      active
+        ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+        : "text-slate-500 hover:text-slate-200 hover:bg-slate-800/60"
+    }`}
+  >
+    <span>{icon}</span>
+    <span>{label}</span>
+  </button>
+);
+
+// ─── Danh sách bài học ────────────────────────────────────────────────────────
+const BaiHocList = ({ baiHocList, baiHienTai, chonBaiHoc }) => (
+  <>
+    {baiHocList.map((bh, idx) => {
+      const isActive = baiHienTai?._id === bh._id;
+      return (
+        <button
+          key={bh._id}
+          onClick={() => chonBaiHoc(bh)}
+          className={`w-full text-left px-5 py-4 flex items-start gap-3.5 transition-all hover:bg-slate-800/40 active:bg-slate-800/60 border-r-2 ${
+            isActive ? "bg-blue-500/10 border-blue-500" : "border-transparent"
+          }`}
+        >
+          <div
+            className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-black mt-0.5 transition-all ${
+              isActive
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30"
+                : "bg-slate-800 text-slate-500"
+            }`}
+          >
+            {idx + 1}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p
+              className={`text-sm font-bold leading-snug ${isActive ? "text-blue-400" : "text-slate-300"}`}
+            >
+              {bh.tieuDe}
+            </p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              {(bh.video?.duongDan || bh.youtubeUrl) && (
+                <span className="text-[10px] text-slate-600">🎬 Video</span>
+              )}
+              {bh.taiLieu?.length > 0 && (
+                <span className="text-[10px] text-slate-600">
+                  📄 {bh.taiLieu.length} tài liệu
+                </span>
+              )}
+            </div>
+          </div>
+          {isActive && (
+            <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-2 animate-pulse" />
+          )}
+        </button>
+      );
+    })}
+  </>
+);
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const KhoaHocDetail = () => {
@@ -209,6 +270,7 @@ const KhoaHocDetail = () => {
   const [dangTaiUrl, setDangTaiUrl] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -239,17 +301,11 @@ const KhoaHocDetail = () => {
   const chonBaiHoc = (bh) => {
     setBaiHienTai(bh);
     setTaiLieuActive(null);
-    
-    // Kiểm tra nội dung: ưu tiên video/youtube rồi đến tài liệu
     const hasVideo = bh.video?.duongDan || bh.youtubeUrl;
-    
-    if (hasVideo) {
-      setTabActive("video");
-    } else if (bh.taiLieu?.length > 0) {
-      setTabActive("tailieu");
-    } else {
-      setTabActive("video");
-    }
+    setTabActive(
+      hasVideo ? "video" : bh.taiLieu?.length > 0 ? "tailieu" : "video",
+    );
+    setDrawerOpen(false);
   };
 
   const xemTaiLieu = async (baiHocId, taiLieu) => {
@@ -260,11 +316,13 @@ const KhoaHocDetail = () => {
       setTaiLieuActive({ id: taiLieu._id, url, loai: taiLieu.loai });
       setTabActive("tailieu");
     } catch (err) {
-      console.error("Lỗi lấy URL tài liệu:", err);
+      console.error(err);
     } finally {
       setDangTaiUrl(false);
     }
   };
+
+  const currentIdx = baiHocList.findIndex((b) => b._id === baiHienTai?._id);
 
   if (loading)
     return (
@@ -274,123 +332,145 @@ const KhoaHocDetail = () => {
     );
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 pt-[72px] flex flex-col">
-      {/* TOP BAR */}
-      <div className="bg-slate-900/80 border-b border-slate-800 px-4 py-3 flex items-center gap-3 backdrop-blur-sm sticky top-[72px] z-20">
+    <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col">
+      {/* ── TOP BAR ── */}
+      <div className="bg-slate-900/95 border-b border-slate-800/80 px-4 sm:px-6 py-3.5 flex items-center gap-4 backdrop-blur-md sticky top-[93px] z-20 shadow-lg">
         <button
           onClick={() => navigate(-1)}
-          className="text-slate-500 hover:text-white transition-colors text-sm"
+          className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm font-bold px-3 py-1.5 rounded-xl hover:bg-slate-800 active:scale-95"
         >
-          ←
+          ← <span className="hidden sm:inline">Quay lại</span>
         </button>
-        <div className="w-px h-4 bg-slate-700" />
-        <h1 className="text-sm font-bold text-slate-200 truncate flex-1">
+        <div className="w-px h-5 bg-slate-700/60" />
+        <h1 className="text-sm sm:text-base font-bold text-slate-200 truncate flex-1 leading-tight">
           {khoaHoc?.tieuDe}
         </h1>
         <button
           onClick={() => setSidebarOpen((v) => !v)}
-          className="text-[10px] font-bold text-slate-500 hover:text-white border border-slate-700 px-2.5 py-1 rounded-lg transition-colors"
+          className="hidden sm:flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white border border-slate-700/50 hover:border-slate-600 px-3.5 py-2 rounded-xl transition-all hover:bg-slate-800"
         >
-          {sidebarOpen ? "Ẩn DS" : "Bài học"}
+          {sidebarOpen ? "Ẩn DS" : "📋 Bài học"}
+        </button>
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="sm:hidden flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-white border border-slate-700/50 px-3 py-2 rounded-xl transition-all"
+        >
+          ☰ DS
         </button>
       </div>
 
+      {/* ── MOBILE DRAWER ── */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 sm:hidden">
+          <div
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <div className="absolute right-0 top-0 bottom-0 w-[85vw] max-w-sm bg-slate-900 border-l border-slate-800 flex flex-col shadow-2xl">
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                  Danh sách bài học
+                </p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {baiHocList.length} bài
+                </p>
+              </div>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="text-slate-500 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-all"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-2">
+              <BaiHocList
+                baiHocList={baiHocList}
+                baiHienTai={baiHienTai}
+                chonBaiHoc={chonBaiHoc}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
-        {/* SIDEBAR */}
+        {/* ── DESKTOP SIDEBAR ── */}
         {sidebarOpen && (
-          <div className="w-64 xl:w-72 flex-shrink-0 border-r border-slate-800 bg-slate-900/40 overflow-y-auto">
-            <div className="px-4 py-3 border-b border-slate-800">
-              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+          <div className="hidden sm:flex w-80 xl:w-96 flex-shrink-0 border-r border-slate-800/60 bg-slate-900/20 flex-col">
+            <div className="px-5 py-4 border-b border-slate-800/60">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
                 Danh sách bài học
               </p>
+              <p className="text-xs text-slate-600 mt-0.5">
+                {baiHocList.length} bài học
+              </p>
             </div>
-            <div className="py-2">
-              {baiHocList.map((bh, idx) => (
-                <button
-                  key={bh._id}
-                  onClick={() => chonBaiHoc(bh)}
-                  className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-all hover:bg-slate-800/50 ${baiHienTai?._id === bh._id ? "bg-blue-500/10 border-r-2 border-blue-500" : ""}`}
-                >
-                  <div
-                    className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-black mt-0.5 ${baiHienTai?._id === bh._id ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-500"}`}
-                  >
-                    {idx + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={`text-xs font-bold truncate ${baiHienTai?._id === bh._id ? "text-blue-400" : "text-slate-300"}`}
-                    >
-                      {bh.tieuDe}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {(bh.video?.duongDan || bh.youtubeUrl) && (
-                        <span className="text-[9px] text-slate-600">
-                          🎬 Video
-                        </span>
-                      )}
-                      {bh.taiLieu?.length > 0 && (
-                        <span className="text-[9px] text-slate-600">
-                          📄 {bh.taiLieu.length} tài liệu
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              ))}
+            <div className="flex-1 overflow-y-auto py-2">
+              <BaiHocList
+                baiHocList={baiHocList}
+                baiHienTai={baiHienTai}
+                chonBaiHoc={chonBaiHoc}
+              />
             </div>
           </div>
         )}
 
-        {/* MAIN CONTENT */}
+        {/* ── MAIN CONTENT ── */}
         <div className="flex-1 overflow-y-auto">
           {baiHienTai ? (
-            <div className="max-w-4xl mx-auto px-4 py-6 space-y-5">
-              <div>
-                <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-1">
-                  Đang học
+            <div className="max-w-5xl mx-auto px-4 sm:px-8 lg:px-12 py-8 sm:py-10 space-y-7">
+              {/* Tiêu đề */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-black text-blue-500/80 uppercase tracking-widest">
+                  Bài {currentIdx + 1} / {baiHocList.length}
                 </p>
-                <h2 className="text-lg font-black text-slate-100">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-100 leading-snug">
                   {baiHienTai.tieuDe}
                 </h2>
               </div>
 
               {/* TABS */}
-              <div className="flex gap-1 bg-slate-900 rounded-xl p-1 w-fit">
-                {(baiHienTai.video?.duongDan || baiHienTai.youtubeUrl) && (
-                  <button
-                    onClick={() => setTabActive("video")}
-                    className={`text-xs font-bold px-4 py-2 rounded-lg transition-all ${tabActive === "video" ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  >
-                    🎬 Video
-                  </button>
-                )}
-                {baiHienTai.taiLieu?.length > 0 && (
-                  <button
-                    onClick={() => {
-                      setTabActive("tailieu");
-                      if (!taiLieuActive)
-                        xemTaiLieu(baiHienTai._id, baiHienTai.taiLieu[0]);
-                    }}
-                    className={`text-xs font-bold px-4 py-2 rounded-lg transition-all ${tabActive === "tailieu" ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  >
-                    📄 Tài liệu
-                  </button>
-                )}
-              </div>
+              {(baiHienTai.video?.duongDan ||
+                baiHienTai.youtubeUrl ||
+                baiHienTai.taiLieu?.length > 0) && (
+                <div className="flex gap-2 bg-slate-900/60 border border-slate-800/50 rounded-2xl p-1.5 w-fit">
+                  {(baiHienTai.video?.duongDan || baiHienTai.youtubeUrl) && (
+                    <TabBtn
+                      active={tabActive === "video"}
+                      onClick={() => setTabActive("video")}
+                      icon="🎬"
+                      label="Video"
+                    />
+                  )}
+                  {baiHienTai.taiLieu?.length > 0 && (
+                    <TabBtn
+                      active={tabActive === "tailieu"}
+                      onClick={() => {
+                        setTabActive("tailieu");
+                        if (!taiLieuActive)
+                          xemTaiLieu(baiHienTai._id, baiHienTai.taiLieu[0]);
+                      }}
+                      icon="📄"
+                      label={`Tài liệu${baiHienTai.taiLieu.length > 1 ? ` (${baiHienTai.taiLieu.length})` : ""}`}
+                    />
+                  )}
+                </div>
+              )}
 
-              {/* KHU VỰC HIỂN THỊ VIDEO / YOUTUBE */}
+              {/* VIDEO */}
               {tabActive === "video" && (
-                <div className="rounded-2xl overflow-hidden bg-black aspect-video shadow-2xl">
+                <div className="rounded-2xl overflow-hidden bg-black aspect-video shadow-2xl border border-slate-800/30">
                   {baiHienTai.youtubeUrl ? (
                     <iframe
                       key={`yt-${baiHienTai._id}`}
                       className="w-full h-full"
                       src={getYoutubeEmbedUrl(baiHienTai.youtubeUrl)}
-                      title="YouTube player"
+                      title="YouTube"
                       frameBorder="0"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                       allowFullScreen
-                    ></iframe>
+                    />
                   ) : baiHienTai.video?.duongDan ? (
                     <video
                       key={`vid-${baiHienTai._id}`}
@@ -399,8 +479,9 @@ const KhoaHocDetail = () => {
                       src={baiHienTai.video.duongDan}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-700 text-xs">
-                      Không có dữ liệu video
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-700 gap-3">
+                      <span className="text-4xl opacity-20">🎬</span>
+                      <p className="text-sm">Không có video</p>
                     </div>
                   )}
                 </div>
@@ -408,17 +489,17 @@ const KhoaHocDetail = () => {
 
               {/* TÀI LIỆU */}
               {tabActive === "tailieu" && (
-                <div className="space-y-4">
+                <div className="space-y-5">
                   {baiHienTai.taiLieu.length > 1 && (
                     <div className="flex gap-2 flex-wrap">
                       {baiHienTai.taiLieu.map((tl) => (
                         <button
                           key={tl._id}
                           onClick={() => xemTaiLieu(baiHienTai._id, tl)}
-                          className={`text-xs font-bold px-3 py-2 rounded-lg border transition-all flex items-center gap-1.5 ${
+                          className={`text-sm font-bold px-4 py-2.5 rounded-xl border transition-all flex items-center gap-2 active:scale-95 ${
                             taiLieuActive?.id === tl._id
-                              ? "border-blue-500/50 bg-blue-500/10 text-blue-400"
-                              : "border-slate-700 text-slate-500 hover:border-slate-600 hover:text-slate-300"
+                              ? "border-blue-500/60 bg-blue-500/10 text-blue-400 shadow-lg shadow-blue-500/10"
+                              : "border-slate-700/50 text-slate-400 hover:border-slate-600 hover:text-slate-200 bg-slate-900/40"
                           }`}
                         >
                           {tl.loai === "pdf" ? "📄" : "📝"} {tl.ten}
@@ -426,16 +507,14 @@ const KhoaHocDetail = () => {
                       ))}
                     </div>
                   )}
-
                   {dangTaiUrl && (
-                    <div className="flex items-center gap-3 py-8 justify-center">
-                      <div className="w-5 h-5 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
+                    <div className="flex items-center gap-3 py-14 justify-center">
+                      <div className="w-6 h-6 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
                       <span className="text-sm text-slate-500">
                         Đang tải tài liệu...
                       </span>
                     </div>
                   )}
-
                   {!dangTaiUrl && taiLieuActive?.url && (
                     <TaiLieuViewer
                       url={taiLieuActive.url}
@@ -445,36 +524,52 @@ const KhoaHocDetail = () => {
                 </div>
               )}
 
-              {/* Nút Điều hướng Bài trước/Bài sau */}
-              <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+              {/* ── ĐIỀU HƯỚNG ── */}
+              <div className="flex items-center justify-between pt-6 border-t border-slate-800/60 gap-4">
                 <button
                   onClick={() => {
-                    const idx = baiHocList.findIndex((b) => b._id === baiHienTai._id);
-                    if (idx > 0) chonBaiHoc(baiHocList[idx - 1]);
+                    if (currentIdx > 0) chonBaiHoc(baiHocList[currentIdx - 1]);
                   }}
-                  disabled={baiHocList.findIndex((b) => b._id === baiHienTai._id) === 0}
-                  className="text-xs font-bold text-slate-500 hover:text-white disabled:opacity-30 transition-colors"
+                  disabled={currentIdx <= 0}
+                  className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white disabled:opacity-25 transition-all px-5 py-3 rounded-xl border border-slate-800/60 hover:border-slate-700 hover:bg-slate-800/40 active:scale-95 disabled:cursor-not-allowed"
                 >
-                  ← Bài trước
+                  ← <span className="hidden sm:inline">Bài trước</span>
                 </button>
-                <span className="text-[10px] text-slate-700 font-mono">
-                  {baiHocList.findIndex((b) => b._id === baiHienTai._id) + 1} / {baiHocList.length}
-                </span>
+
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-xs text-slate-600 font-mono">
+                    {currentIdx + 1} / {baiHocList.length}
+                  </span>
+                  <div className="flex gap-1.5 items-center">
+                    {baiHocList.map((_, i) => (
+                      <div
+                        key={i}
+                        className={`rounded-full transition-all duration-300 ${
+                          i === currentIdx
+                            ? "w-5 h-1.5 bg-blue-500"
+                            : "w-1.5 h-1.5 bg-slate-700"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
                 <button
                   onClick={() => {
-                    const idx = baiHocList.findIndex((b) => b._id === baiHienTai._id);
-                    if (idx < baiHocList.length - 1) chonBaiHoc(baiHocList[idx + 1]);
+                    if (currentIdx < baiHocList.length - 1)
+                      chonBaiHoc(baiHocList[currentIdx + 1]);
                   }}
-                  disabled={baiHocList.findIndex((b) => b._id === baiHienTai._id) === baiHocList.length - 1}
-                  className="text-xs font-bold text-slate-500 hover:text-white disabled:opacity-30 transition-colors"
+                  disabled={currentIdx >= baiHocList.length - 1}
+                  className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white disabled:opacity-25 transition-all px-5 py-3 rounded-xl border border-slate-800/60 hover:border-slate-700 hover:bg-slate-800/40 active:scale-95 disabled:cursor-not-allowed"
                 >
-                  Bài sau →
+                  <span className="hidden sm:inline">Bài sau</span> →
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full text-slate-600 text-sm">
-              Chọn bài học để bắt đầu
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-700 py-24">
+              <span className="text-5xl opacity-20">📖</span>
+              <p className="text-sm font-bold">Chọn bài học để bắt đầu</p>
             </div>
           )}
         </div>

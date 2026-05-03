@@ -44,7 +44,7 @@ const HomeLearningAdmin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 pt-[72px] sm:pt-24 pb-10">
+    <div className="min-h-screen bg-[#020617] text-slate-100  pb-10">
       {/* THANH ĐIỀU HƯỚNG QUẢN TRỊ (STICKY) */}
       <div className="bg-slate-900/60 border-y border-slate-800/50 px-4 py-3 sticky top-[72px] z-30 backdrop-blur-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
