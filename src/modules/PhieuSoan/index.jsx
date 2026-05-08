@@ -5,19 +5,22 @@ import DinhViImport from "./excel/ImportDinhVi";
 import PhieuLeTable from "./table/phieule";
 import DataCHTable from "./table/dataCH";
 import SodaTransferDashboard from "./table/component/dashboard/DashboardTab";
+import PhanBoTable from "./table/phanbo"; // ← thêm mới
 
 const TABS = [
-  { key: "dashboard", label: "Dashboard" }, // ← tab mới ở đầu
+  { key: "dashboard", label: "Dashboard" },
   { key: "dinhvi",    label: "Định Vị"   },
   { key: "phieule",   label: "Phiếu Soạn"  },
   { key: "dataCH",    label: "Cửa Hàng"  },
+  { key: "phanbo",    label: "Phân Bổ"   }, // ← thêm mới
 ];
 
 const PhieuSoanHome = () => {
-  const [activeTab, setActiveTab] = useState("phieule"); // mặc định mở dashboard
+  const [activeTab, setActiveTab] = useState("phieule");
   const dinhViTableRef  = useRef(null);
   const phieuLeTableRef = useRef(null);
   const dataCHTableRef  = useRef(null);
+  const phanBoTableRef  = useRef(null); // ← thêm mới
 
   // ===== Định Vị
   const handleDinhViImportSuccess = () => {
@@ -46,6 +49,12 @@ const PhieuSoanHome = () => {
         return (
           <div className="text-sm text-slate-500 italic">
             Quản lý thông tin cửa hàng
+          </div>
+        );
+      case "phanbo": // ← thêm mới
+        return (
+          <div className="text-sm text-slate-500 italic">
+            Quản lý dữ liệu phân bổ
           </div>
         );
       default:
@@ -86,7 +95,6 @@ const PhieuSoanHome = () => {
                 : "text-slate-600 hover:text-slate-800"
             }`}
           >
-            {/* Icon nhỏ cho dashboard */}
             {t.key === "dashboard" && (
               <span className="mr-1.5">📊</span>
             )}
@@ -97,10 +105,10 @@ const PhieuSoanHome = () => {
 
       {/* Content */}
       {activeTab === "dashboard" && <SodaTransferDashboard />}
-
-      {activeTab === "dinhvi"   && <DinhViTable  ref={dinhViTableRef}  />}
-      {activeTab === "phieule"  && <PhieuLeTable ref={phieuLeTableRef} />}
-      {activeTab === "dataCH"   && <DataCHTable  ref={dataCHTableRef}  />}
+      {activeTab === "dinhvi"    && <DinhViTable  ref={dinhViTableRef}  />}
+      {activeTab === "phieule"   && <PhieuLeTable ref={phieuLeTableRef} />}
+      {activeTab === "dataCH"    && <DataCHTable  ref={dataCHTableRef}  />}
+      {activeTab === "phanbo"    && <PhanBoTable  ref={phanBoTableRef}  />} {/* ← thêm mới */}
     </div>
   );
 };
