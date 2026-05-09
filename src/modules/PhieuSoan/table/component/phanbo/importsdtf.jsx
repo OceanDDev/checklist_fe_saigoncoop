@@ -152,7 +152,7 @@ const buildPhieuPayloads = (validRows, phanboMap) => {
       sku: Number(row.sku),
       name: pb?.name ?? "Không xác định",
       quantity,
-      slot: "PB",
+      slot: "8101",
       pack_unit: packUnit,
       packs_to_pick: packUnit > 0 ? quantity / packUnit : 0,
     });

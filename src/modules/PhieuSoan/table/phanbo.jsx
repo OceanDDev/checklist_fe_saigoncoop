@@ -375,22 +375,7 @@ const PhanBoTable = forwardRef((_, ref) => {
     setDateRangeXuLi([{ startDate: null, endDate: null, key: "selection" }]); // ← mới
   }, []);
 
-  const handleDeleteAll = useCallback(async () => {
-    if (
-      !window.confirm(
-        "⚠️ Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu phân bổ không?\nHành động này không thể hoàn tác!",
-      )
-    )
-      return;
-    try {
-      const res = await phanBoService.deleteAllPhanBo();
-      alert(res?.message || "Đã xóa toàn bộ dữ liệu phân bổ!");
-      fetchPhanBo();
-    } catch {
-      alert("Không thể xóa toàn bộ dữ liệu. Vui lòng thử lại.");
-    }
-  }, [fetchPhanBo]);
-
+ 
   const formatDate = useCallback((val) => {
     if (!val) return "";
     try {
@@ -431,12 +416,7 @@ const PhanBoTable = forwardRef((_, ref) => {
               setSelectedRows([]);
             }}
           />
-          <button
-            onClick={handleDeleteAll}
-            className="h-10 rounded-xl bg-rose-600 px-4 text-white hover:bg-rose-700 whitespace-nowrap font-medium text-sm transition-colors"
-          >
-            🗑️ Xóa toàn bộ
-          </button>
+
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
