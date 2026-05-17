@@ -3,9 +3,11 @@ import HeaderCheckList from "./header";
 
 const MainLayout = ({ children }) => {
   return (
-    <div> 
+    <div>
       <HeaderCheckList />
-      <main className="pt-[93px]">{children}</main>
+      <main style={{ paddingTop: "var(--header-h)" }}>
+        {children}
+      </main>
     </div>
   );
 };

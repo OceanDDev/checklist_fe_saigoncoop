@@ -1,19 +1,18 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { learningService } from "@/services/leaning.service";
 import { toast } from "react-toastify";
 import ModalTaoKhoaHoc from "./ModalTaoKhoaHoc";
 import ModalChiTietKhoaHoc from "./ModalChiTietKhoaHoc";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COMPONENT CHÍNH: HOME LEARNING ADMIN
-// ─────────────────────────────────────────────────────────────────────────────
 const HomeLearningAdmin = () => {
+  const navigate = useNavigate();
   const [danhSach, setDanhSach] = useState([]);
   const [dangTai, setDangTai] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [khoaHocDangXem, setKhoaHocDangXem] = useState(null);
-  // Load danh sách khóa học
+
   const loadData = async () => {
     setDangTai(true);
     try {
@@ -44,27 +43,50 @@ const HomeLearningAdmin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100  pb-10">
-      {/* THANH ĐIỀU HƯỚNG QUẢN TRỊ (STICKY) */}
+    <div className="min-h-screen bg-[#020617] text-slate-100 pb-10">
+      {/* HEADER STICKY */}
       <div className="bg-slate-900/60 border-y border-slate-800/50 px-4 py-3 sticky top-[72px] z-30 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)] animate-pulse"></div>
+            <div className="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)] animate-pulse" />
             <h1 className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-slate-400">
               Quản trị Đào tạo
             </h1>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] sm:text-xs font-bold px-4 py-2 rounded-lg transition-all active:scale-95 shadow-lg shadow-blue-900/20"
-          >
-            + TẠO KHÓA HỌC
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Nút sang trang QR + tạo quiz */}
+            <button
+              onClick={() => navigate("/learning/admin/quan-ly-qr")}
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700/60 hover:border-violet-500/40 text-slate-300 hover:text-violet-300 text-[10px] sm:text-xs font-bold px-3 py-2 rounded-lg transition-all active:scale-95"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 3.5V16M4 4h4v4H4V4zm12 0h4v4h-4V4zM4 16h4v4H4v-4z"
+                />
+              </svg>
+              QR &amp; Quiz
+            </button>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] sm:text-xs font-bold px-4 py-2 rounded-lg transition-all active:scale-95 shadow-lg shadow-blue-900/20"
+            >
+              + TẠO KHÓA HỌC
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 mt-8">
-        {/* STATS AREA */}
+        {/* STATS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <StatCard label="Khóa học" value={danhSach.length} color="blue" />
           <StatCard label="Giờ học" value="--" color="cyan" />
@@ -72,7 +94,7 @@ const HomeLearningAdmin = () => {
           <StatCard label="Hoàn thành" value="--" color="emerald" />
         </div>
 
-        {/* TABLE AREA */}
+        {/* TABLE */}
         <div className="bg-slate-900/30 border border-slate-800/60 rounded-2xl overflow-hidden backdrop-blur-sm shadow-2xl">
           <div className="p-4 border-b border-slate-800/60 bg-slate-900/50 flex items-center justify-between">
             <h2 className="text-xs font-black uppercase tracking-widest text-blue-400">
@@ -164,13 +186,38 @@ const HomeLearningAdmin = () => {
                       </td>
                       <td className="px-4 py-4 hidden md:table-cell">
                         <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-800/50 border border-slate-700/30 rounded text-[10px] font-bold text-slate-400">
-                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
                           {item.danhSachBaiHoc?.length || 0} BÀI GIẢNG
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Nút vào chi tiết */}
+                          {/* Tạo quiz nhanh cho khóa học này → navigate sang QR page */}
+                          <button
+                            onClick={() =>
+                              navigate(
+                                `/learning/admin/quan-ly-qr?khoaHocId=${item._id}`,
+                              )
+                            }
+                            className="p-2 hover:bg-violet-500/10 text-slate-500 hover:text-violet-400 rounded-lg transition-all"
+                            title="Tạo quiz / Quản lý QR"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                              />
+                            </svg>
+                          </button>
+                          {/* Chi tiết */}
                           <button
                             onClick={() => setKhoaHocDangXem(item)}
                             className="p-2 hover:bg-blue-500/10 text-slate-500 hover:text-blue-400 rounded-lg transition-all"
@@ -191,11 +238,11 @@ const HomeLearningAdmin = () => {
                               />
                             </svg>
                           </button>
-                          {/* Nút xóa */}
+                          {/* Xóa */}
                           <button
                             onClick={() => handleXoa(item._id)}
                             className="p-2 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition-all"
-                            title="Xóa khóa học"
+                            title="Xóa"
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -223,7 +270,6 @@ const HomeLearningAdmin = () => {
         </div>
       </div>
 
-      {/* MODAL COMPONENT */}
       <ModalTaoKhoaHoc
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -240,10 +286,10 @@ const HomeLearningAdmin = () => {
 
 const StatCard = ({ label, value, color }) => {
   const colors = {
-    blue: "text-blue-400 border-blue-500/20 shadow-blue-500/[0.03]",
-    cyan: "text-cyan-400 border-cyan-500/20 shadow-cyan-500/[0.03]",
-    indigo: "text-indigo-400 border-indigo-500/20 shadow-indigo-500/[0.03]",
-    emerald: "text-emerald-400 border-emerald-500/20 shadow-emerald-500/[0.03]",
+    blue: "text-blue-400 border-blue-500/20",
+    cyan: "text-cyan-400 border-cyan-500/20",
+    indigo: "text-indigo-400 border-indigo-500/20",
+    emerald: "text-emerald-400 border-emerald-500/20",
   };
   return (
     <div
@@ -280,7 +326,8 @@ const TableSkeleton = () => (
         </td>
         <td className="px-6 py-4">
           <div className="flex justify-end gap-2">
-            <div className="w-8 h-8 bg-slate-800/50 rounded-lg" />{" "}
+            <div className="w-8 h-8 bg-slate-800/50 rounded-lg" />
+            <div className="w-8 h-8 bg-slate-800/50 rounded-lg" />
             <div className="w-8 h-8 bg-slate-800/50 rounded-lg" />
           </div>
         </td>

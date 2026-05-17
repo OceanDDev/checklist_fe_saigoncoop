@@ -48,11 +48,11 @@ const taoKhoaHoc = async (formData) => {
 
 const capNhatKhoaHoc = async (id, payload) => {
   try {
-    return await requestService.put( // Đổi từ .patch sang .put
+    return await requestService.put(
       `${URL.learning.khoahoc}/${id}`,
       payload,
       undefined,
-      ApiServer
+      ApiServer,
     );
   } catch (error) {
     console.error("Lỗi khi gọi capNhatKhoaHoc:", error);
@@ -106,11 +106,11 @@ const layMotBaiHoc = async (id) => {
 
 const capNhatBaiHoc = async (id, payload) => {
   try {
-    return await requestService.put( // Đổi từ .patch sang .put
+    return await requestService.put(
       `${URL.learning.baihoc}/${id}`,
       payload,
       undefined,
-      ApiServer
+      ApiServer,
     );
   } catch (error) {
     console.error("Lỗi khi gọi capNhatBaiHoc:", error);
@@ -136,7 +136,7 @@ const uploadTaiLieu = async (id, formData) => {
     const res = await ApiServer.post(
       `${URL.learning.baihoc}/${id}/upload/tai-lieu`,
       formData,
-      // không set headers — để interceptor + axios tự xử lý
+      // Không set headers — để interceptor + axios tự xử lý
     );
     return res.data;
   } catch (error) {
@@ -144,6 +144,19 @@ const uploadTaiLieu = async (id, formData) => {
     throw error.response?.data || error;
   }
 };
+
+const layUrlTaiLieu = async (baiHocId, taiLieuId) => {
+  try {
+    const res = await ApiServer.get(
+      `${URL.learning.baihoc}/${baiHocId}/tai-lieu/${taiLieuId}/url`,
+    );
+    return res.data.url;
+  } catch (error) {
+    console.error("Lỗi khi lấy URL tài liệu:", error);
+    throw error;
+  }
+};
+
 const xoaTaiLieu = async (id, taiLieuId) => {
   try {
     return await requestService.del(
@@ -190,11 +203,11 @@ const layMotBaiKiemTra = async (id) => {
 
 const capNhatBaiKiemTra = async (id, payload) => {
   try {
-    return await requestService.put( // Đổi từ .patch sang .put
+    return await requestService.put(
       `${URL.learning.baikiemtra}/${id}`,
       payload,
       undefined,
-      ApiServer
+      ApiServer,
     );
   } catch (error) {
     console.error("Lỗi khi gọi capNhatBaiKiemTra:", error);
@@ -215,20 +228,42 @@ const xoaBaiKiemTra = async (id) => {
   }
 };
 
-const taoQR = async (id, payload = { thoiGianHetHan: 30 }) => {
+// ── Quản lý phiên (admin/teacher) ────────────
+
+const moPhien = async (id) => {
   try {
     return await requestService.post(
-      `${URL.learning.baikiemtra}/${id}/tao-qr`,
-      payload,
+      `${URL.learning.baikiemtra}/${id}/mo-phien`,
+      {},
       undefined,
       ApiServer,
     );
   } catch (error) {
-    console.error("Lỗi khi gọi taoQR:", error);
+    console.error("Lỗi khi gọi moPhien:", error);
     throw error;
   }
 };
 
+const ketThuc = async (id) => {
+  try {
+    return await requestService.post(
+      `${URL.learning.baikiemtra}/${id}/ket-thuc`,
+      {},
+      undefined,
+      ApiServer,
+    );
+  } catch (error) {
+    console.error("Lỗi khi gọi ketThuc:", error);
+    throw error;
+  }
+};
+
+// ── Học viên làm bài (không cần auth) ────────
+
+/**
+ * GET /bai-kiem-tra/xac-thuc-qr?token=...
+ * Trả về đề bài sau khi xác thực token QR
+ */
 const xacThucQR = async (token) => {
   try {
     return await requestService.get(
@@ -243,90 +278,125 @@ const xacThucQR = async (token) => {
   }
 };
 
-// ─────────────────────────────────────────────
-// LƯỢT LÀM BÀI
-// ─────────────────────────────────────────────
-const nopBaiQR = async (payload) => {
+/**
+ * POST /bai-kiem-tra/:id/bat-dau
+ * body: { ten, token }  →  nhận ketQuaId
+ */
+const batDau = async (id, payload) => {
   try {
-    // payload: { tenNguoiLam, baiKiemTraId, danhSachCauTraLoi, qrToken }
     return await requestService.post(
-      `${URL.learning.luotlambai}/nop-qr`,
+      `${URL.learning.baikiemtra}/${id}/bat-dau`,
       payload,
       undefined,
       ApiServer,
     );
   } catch (error) {
-    console.error("Lỗi khi gọi nopBaiQR:", error);
+    console.error("Lỗi khi gọi batDau:", error);
     throw error;
   }
 };
 
-const tatCaLuotLam = async (baiKiemTraId, params = {}) => {
+/**
+ * POST /bai-kiem-tra/:id/nop-bai
+ * body: { ketQuaId, cauTraLoi: [{ cauHoiId, dapAnChon }] }
+ * →  nhận điểm + giải thích
+ */
+const nopBai = async (id, payload) => {
   try {
-    return await requestService.get(
-      `${URL.learning.luotlambai}/tat-ca/${baiKiemTraId}`,
-      params,
+    return await requestService.post(
+      `${URL.learning.baikiemtra}/${id}/nop-bai`,
+      payload,
       undefined,
       ApiServer,
     );
   } catch (error) {
-    console.error("Lỗi khi gọi tatCaLuotLam:", error);
+    console.error("Lỗi khi gọi nopBai:", error);
     throw error;
   }
 };
 
-const timTheoTen = async (ten) => {
+// ── Xem kết quả (admin/teacher) ──────────────
+
+/**
+ * GET /bai-kiem-tra/:id/ket-qua
+ * Trả về: STT, tên, điểm%, số câu đúng/tổng, đạt/trượt,
+ *         thời gian làm, tuDongNop + thống kê tổng
+ */
+const xemKetQua = async (id) => {
   try {
     return await requestService.get(
-      `${URL.learning.luotlambai}/tim-ten`,
-      { ten },
+      `${URL.learning.baikiemtra}/${id}/ket-qua`,
+      {},
       undefined,
       ApiServer,
     );
   } catch (error) {
-    console.error("Lỗi khi gọi timTheoTen:", error);
+    console.error("Lỗi khi gọi xemKetQua:", error);
     throw error;
   }
 };
-const layUrlTaiLieu = async (baiHocId, taiLieuId) => {
+const layTatCaBaiKiemTra = async () => {
   try {
-    const res = await ApiServer.get(
-      `${URL.learning.baihoc}/${baiHocId}/tai-lieu/${taiLieuId}/url`
+    return await requestService.get(
+      URL.learning.baikiemtra,
+      {},
+      undefined,
+      ApiServer,
     );
-    return res.data.url;
   } catch (error) {
-    console.error("Lỗi khi lấy URL tài liệu:", error);
+    console.error("Lỗi khi gọi layTatCaBaiKiemTra:", error);
     throw error;
   }
 };
-
+const resetPhien = async (id) => {
+  try {
+    return await requestService.post(
+      `${URL.learning.baikiemtra}/${id}/reset-phien`,
+      {},
+      undefined,
+      ApiServer,
+    );
+  } catch (error) {
+    console.error("Lỗi khi gọi resetPhien:", error);
+    throw error;
+  }
+};
 // ─────────────────────────────────────────────
 // EXPORT
 // ─────────────────────────────────────────────
 export const learningService = {
-  layUrlTaiLieu,
   // Khóa học
   layTatCaKhoaHoc,
   layMotKhoaHoc,
   taoKhoaHoc,
   capNhatKhoaHoc,
   xoaKhoaHoc,
+
   // Bài học
   taoBaiHoc,
   layMotBaiHoc,
   capNhatBaiHoc,
   xoaBaiHoc,
   uploadTaiLieu,
+  layUrlTaiLieu,
   xoaTaiLieu,
-  // Bài kiểm tra
+
+  // Bài kiểm tra — CRUD
   taoBaiKiemTra,
   layMotBaiKiemTra,
   capNhatBaiKiemTra,
   xoaBaiKiemTra,
-  taoQR,
+  layTatCaBaiKiemTra,
+resetPhien,
+  // Bài kiểm tra — Quản lý phiên
+  moPhien,
+  ketThuc,
+
+  // Bài kiểm tra — Học viên làm bài
   xacThucQR,
-  // Lượt làm bài
-  nopBaiQR,
-  tatCaLuotLam,
-  timTheoTen,
+  batDau,
+  nopBai,
+
+  // Bài kiểm tra — Kết quả
+  xemKetQua,
 };

@@ -37,38 +37,36 @@ dayjs.extend(timezone);
 const { Title } = Typography;
 const VN_TIMEZONE = "Asia/Ho_Chi_Minh";
 
-// Bảng 28 màu hoàn toàn phân biệt nhau
 const DISTINCT_COLORS = [
-  "#FF6B6B", // đỏ san hô
-  "#4ECDC4", // xanh ngọc
-  "#45B7D1", // xanh dương nhạt
-  "#96CEB4", // xanh lá mint
-  "#FFEAA7", // vàng kem
-  "#DDA0DD", // tím hồng (plum)
-  "#98D8C8", // xanh lá nhạt
-  "#F7DC6F", // vàng tươi
-  "#BB8FCE", // tím lavender
-  "#85C1E9", // xanh sky
-  "#F0B27A", // cam đất
-  "#82E0AA", // xanh lá tươi
-  "#F1948A", // hồng đào
-  "#73C6B6", // xanh teal
-  "#FAD7A0", // cam kem
-  "#AED6F1", // xanh pastel
-  "#A9DFBF", // xanh lá pastel
-  "#F9E79F", // vàng pastel
-  "#D2B4DE", // tím pastel
-  "#A3E4D7", // ngọc pastel
-  "#FADBD8", // hồng nhạt
-  "#D5E8D4", // xanh lá nhạt
-  "#DAE8FC", // xanh dương nhạt
-  "#FFE6CC", // cam nhạt
-  "#E1D5E7", // tím nhạt
-  "#D5F5E3", // xanh mint nhạt
-  "#FDEBD0", // vàng cam nhạt
-  "#EBF5FB", // xanh trời nhạt
+  "#E74C3C", // 0 - Đỏ
+  "#1E90FF", // 1 - Xanh dương
+  "#2ECC71", // 2 - Xanh lá
+  "#F1C40F", // 3 - Vàng
+  "#8E44AD", // 4 - Tím
+  "#E67E22", // 5 - Cam
+  "#FF1744", // 6 - Đỏ tươi
+  "#00BFFF", // 7 - Xanh trời
+  "#27AE60", // 8 - Xanh lá đậm
+  "#FFD600", // 9 - Vàng tươi
+  "#9B59B6", // 10 - Tím vừa
+  "#FF6D00", // 11 - Cam đậm
+  "#C0392B", // 12 - Đỏ đậm
+  "#4169E1", // 13 - Xanh hoàng gia
+  "#00C853", // 14 - Xanh lá sáng
+  "#F9CA24", // 15 - Vàng kem
+  "#6C3483", // 16 - Tím đậm
+  "#F39C12", // 17 - Cam vừa
+  "#FF6B6B", // 18 - Đỏ nhạt
+  "#87CEEB", // 19 - Xanh nhạt
+  "#A8E6CF", // 20 - Xanh mint
+  "#FFF176", // 21 - Vàng nhạt
+  "#CE93D8", // 22 - Tím lavender
+  "#FFAB40", // 23 - Cam nhạt
+  "#FF8A80", // 24 - Hồng đỏ
+  "#00BFFF", // 25 - Sky
+  "#D5F5E3", // 26 - Xanh lá pastel
+  "#D35400", // 27 - Cam pumpkin
 ];
-
 const PhuXeTableView = ({
   filteredData,
   sortOrder,

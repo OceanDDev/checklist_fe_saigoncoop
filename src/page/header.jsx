@@ -31,7 +31,9 @@ const Header = () => {
       15: "KPIs",
       16: "KPIs",
       17: "KPIs",
+      19: "PHIẾU SOẠN",
       20: "PHIẾU SOẠN",
+      26: "PHIẾU SOẠN",
       21: "PHỤ XE - BỐC XẾP",
       22: "PHỤ XE - BỐC XẾP",
       23: "TRANG THIẾT BỊ",
@@ -40,6 +42,8 @@ const Header = () => {
       28: "CHẤM CÔNG",
       29: "NĂNG SUẤT PHIẾU",
       30: "CHẤM CÔNG",
+      50: "LEARNING",
+      51: "LEARNING",
     };
     return roles[role] || "CHECKLIST";
   };

@@ -299,6 +299,10 @@ const PhieuLeTable = forwardRef((props, ref) => {
   const [editValue, setEditValue] = useState("");
   const [savingGhiChu, setSavingGhiChu] = useState(false);
 
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   // Checkbox selection
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -564,7 +568,27 @@ const PhieuLeTable = forwardRef((props, ref) => {
     },
     [selectedIds, fetchPhieuLe],
   );
-
+  const handleDeleteSelected = useCallback(async () => {
+    if (deletePassword !== "Khovan") {
+      setDeleteError("Sai mật khẩu!");
+      return;
+    }
+    setDeleting(true);
+    try {
+      await phieuLeService.deleteManyPhieuLe(selectedIds);
+      setShowDeleteModal(false);
+      setDeletePassword("");
+      setDeleteError("");
+      setSelectedIds([]);
+      await fetchPhieuLe();
+    } catch (error) {
+      setDeleteError(
+        "Xóa thất bại: " + (error?.response?.data?.message || error.message),
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }, [deletePassword, selectedIds, fetchPhieuLe]);
   const sortedRows = useMemo(() => {
     if (!sortMaCH && !sortSDTF) return rows;
 
@@ -688,6 +712,11 @@ const PhieuLeTable = forwardRef((props, ref) => {
           loaiPhieu={loaiPhieu} // ✅
           setLoaiPhieu={setLoaiPhieu}
           onImport8101Click={() => setShow8101Modal(true)}
+          onDeleteSelected={() => {
+            setDeletePassword("");
+            setDeleteError("");
+            setShowDeleteModal(true);
+          }}
         />
         <div className="overflow-auto rounded-2xl border border-slate-200 shadow-sm">
           <table className="min-w-full text-xs md:text-sm">
@@ -1167,6 +1196,82 @@ const PhieuLeTable = forwardRef((props, ref) => {
         selectedPhieus={selectedPhieus}
         onPrintSuccess={handlePrintSuccess}
       />
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-red-100 grid place-items-center">
+                <svg
+                  className="w-5 h-5 text-red-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </div>
+              <div>
+                <div className="font-semibold text-slate-800">Xác nhận xóa</div>
+                <div className="text-xs text-slate-500">
+                  Xóa <b className="text-red-600">{selectedIds.length}</b> phiếu
+                  đã chọn
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+              ⚠️ Hành động này không thể hoàn tác. Nhập mật khẩu để xác nhận.
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-700">
+                Mật khẩu xác nhận
+              </label>
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => {
+                  setDeletePassword(e.target.value);
+                  setDeleteError("");
+                }}
+                onKeyDown={(e) => e.key === "Enter" && handleDeleteSelected()}
+                placeholder="Nhập mật khẩu..."
+                autoFocus
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-200 outline-none"
+              />
+              {deleteError && (
+                <p className="text-xs text-red-600">{deleteError}</p>
+              )}
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeletePassword("");
+                  setDeleteError("");
+                }}
+                disabled={deleting}
+                className="px-4 py-2 text-sm rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={deleting || !deletePassword}
+                className="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {deleting ? "Đang xóa..." : `Xóa ${selectedIds.length} phiếu`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 });

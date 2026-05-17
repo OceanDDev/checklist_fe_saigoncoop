@@ -42,6 +42,8 @@ import HomeLearning from "./modules/LearningSCL/HomeLearning";
 import HomeLearningAdmin from "./modules/LearningSCL/Admin/HomeLearningAdmin";
 import KhoaHocDetail from "./modules/LearningSCL/KhoaHocDetail";
 import ProductLookupMobile from "./modules/TraCuu";
+import QuanLyQR from "./modules/LearningSCL/Admin/Q&A/quanlyQR";
+import TrangLamBai from "./modules/LearningSCL/Admin/Q&A/tranglambai";
 
 function App() {
   return (
@@ -357,7 +359,7 @@ function App() {
         <Route
           path="/chamcong"
           element={
-            <PrivateRoute allowRoles={[27, 28,30]}>
+            <PrivateRoute allowRoles={[27, 28, 30]}>
               <MainLayout>
                 <ChamCongPage />
               </MainLayout>
@@ -373,7 +375,7 @@ function App() {
         <Route
           path="/phieusoan"
           element={
-            <PrivateRoute allowRoles={[20, 26]}>
+            <PrivateRoute allowRoles={[20, 26, 19]}>
               <MainLayout>
                 <PhieuSoanHome />
               </MainLayout>
@@ -392,28 +394,28 @@ function App() {
             </PrivateRoute>
           }
         />
-          <Route
+        <Route
           path="/nangsuat/dashboard"
           element={
             <PrivateRoute allowRoles={[29]}>
               <MainLayout>
-                <DashBoardNangSuat/>
+                <DashBoardNangSuat />
               </MainLayout>
             </PrivateRoute>
           }
         />
-  {/* Trang Learning */}
-         <Route
+        {/* Trang Learning */}
+        <Route
           path="/learning"
           element={
-            <PrivateRoute allowRoles={[50,51]}>
+            <PrivateRoute allowRoles={[50, 51]}>
               <MainLayout>
                 <HomeLearning />
               </MainLayout>
             </PrivateRoute>
           }
         />
-         <Route
+        <Route
           path="/learning/admin"
           element={
             <PrivateRoute allowRoles={[50]}>
@@ -423,19 +425,30 @@ function App() {
             </PrivateRoute>
           }
         />
-          <Route
+        <Route
           path="/learning/khoa-hoc/:id"
           element={
-            <PrivateRoute allowRoles={[50,51]}>
+            <PrivateRoute allowRoles={[50, 51]}>
               <MainLayout>
                 <KhoaHocDetail />
               </MainLayout>
             </PrivateRoute>
           }
         />
+        <Route
+          path="/learning/admin/quan-ly-qr"
+          element={
+            <PrivateRoute allowRoles={[50, 51]}>
+              <MainLayout>
+                <QuanLyQR />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route path="/lam-bai" element={<TrangLamBai />} />
 
         <Route path="/thank-you" element={<ThankYouScreen />} />
-<Route path="/tracuu" element={<ProductLookupMobile />} />
+        <Route path="/tracuu" element={<ProductLookupMobile />} />
         {/* Trang login */}
         <Route path="/login" element={<LoginPage />} />
       </Routes>

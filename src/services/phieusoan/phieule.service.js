@@ -378,7 +378,33 @@ const import8101PhieuLe = async (payload) => {
   return response.data;
 };
 // thêm vào export: import8101PhieuLe,
+const deleteManyPhieuLe = async (ids) => {
+  try {
+    const response = await ApiServer.delete(`${URL.phieule.phieule}/many`, {
+      data: { ids },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi deleteManyPhieuLe:", error);
+    throw error;
+  }
+};
 
+/** DELETE: xóa nhiều phiếu lẻ theo filter */
+const deleteManyPhieuLeByFilter = async (filter) => {
+  try {
+    const response = await ApiServer.delete(
+      `${URL.phieule.phieule}/by-filter`,
+      {
+        data: { filter, confirmation: "CONFIRM_DELETE" },
+      },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi deleteManyPhieuLeByFilter:", error);
+    throw error;
+  }
+};
 export const phieuLeService = {
   getAllPhieuLe, // GET  /api/saigoncoop/phieule?page=1&limit=10&search=...
   getPhieuLeById, // GET  /api/saigoncoop/phieule/:id
@@ -402,4 +428,6 @@ export const phieuLeService = {
   importSodaTxtPhieuLe,
   importSodaTxtPhieuLeMultiple,
   import8101PhieuLe,
+  deleteManyPhieuLe, // DELETE /phieule/many
+  deleteManyPhieuLeByFilter, // DELETE /phieule/by-filter
 };
