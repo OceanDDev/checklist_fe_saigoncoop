@@ -14,6 +14,7 @@ const UserInfoFormBDH = ({
 }) => {
   const [employeeIdInput, setEmployeeIdInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [selectedStatus, setSelectedStatus] = useState("");
@@ -29,26 +30,19 @@ const UserInfoFormBDH = ({
 
   const FORM_PERMISSIONS = {
     "BĐH - NHẬP HÀNG": ["20952", "40303", "23204"],
-    "BĐH - XUẤT HÀNG": ["24373", "30541", "34278","37616", "37993"],
+    "BĐH - XUẤT HÀNG": ["24373", "30541", "34278", "37616", "37993"],
   };
 
   const isRestrictedForm = () => {
     if (!formTitle) return false;
-
-    // ✅ Loại trừ form XUẤT HÀNG (HT)
-    if (formTitle.includes("XUẤT HÀNG (HT)")) {
-      return false;
-    }
-
+    if (formTitle.includes("XUẤT HÀNG (HT)")) return false;
     return Object.keys(FORM_PERMISSIONS).some((key) => formTitle.includes(key));
   };
 
   const getAllowedEmployees = () => {
     if (!formTitle) return [];
     for (const [formKey, employees] of Object.entries(FORM_PERMISSIONS)) {
-      if (formTitle.includes(formKey)) {
-        return employees;
-      }
+      if (formTitle.includes(formKey)) return employees;
     }
     return [];
   };
@@ -98,21 +92,27 @@ const UserInfoFormBDH = ({
       return;
     }
 
-    if (selectedStatus !== "Đi làm") {
-      onConfirm({
+    try {
+      setConfirming(true);
+
+      if (selectedStatus !== "Đi làm") {
+        await onConfirm({
+          ...userInfo,
+          status: selectedStatus,
+          skipChecklist: true,
+          autoSubmit: true,
+        });
+        return;
+      }
+
+      await onConfirm({
         ...userInfo,
         status: selectedStatus,
-        skipChecklist: true,
-        autoSubmit: true,
+        skipChecklist: false,
       });
-      return;
+    } finally {
+      setConfirming(false);
     }
-
-    onConfirm({
-      ...userInfo,
-      status: selectedStatus,
-      skipChecklist: false,
-    });
   };
 
   const isReady =
@@ -126,7 +126,6 @@ const UserInfoFormBDH = ({
           <img src="/img/logonew.png" alt="Logo" className="h-14 w-auto" />
         </div>
 
-        {/* ✅ Hiển thị thông báo đã submit hôm nay */}
         {hasSubmittedToday && (
           <div className="mb-4 bg-red-50 border border-red-300 rounded-lg p-4 flex items-start gap-3">
             <AlertCircle
@@ -193,9 +192,7 @@ const UserInfoFormBDH = ({
             disabled={loading || hasSubmittedToday || checkingSubmission}
             className="w-full py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {checkingSubmission
-              ? "Đang kiểm tra..."
-              : loading
+            {checkingSubmission || loading
               ? "Đang kiểm tra..."
               : "Kiểm tra mã nhân viên"}
           </button>
@@ -219,11 +216,38 @@ const UserInfoFormBDH = ({
 
               <button
                 onClick={handleConfirm}
-                className="w-full py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700"
+                disabled={confirming}
+                className="w-full py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {selectedStatus === "Đi làm"
-                  ? "Bắt đầu checklist"
-                  : "Xác nhận nghỉ"}
+                {confirming ? (
+                  <>
+                    <svg
+                      className="animate-spin h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8v8z"
+                      />
+                    </svg>
+                    Đang xử lý...
+                  </>
+                ) : selectedStatus === "Đi làm" ? (
+                  "Bắt đầu checklist"
+                ) : (
+                  "Xác nhận nghỉ"
+                )}
               </button>
             </>
           )}

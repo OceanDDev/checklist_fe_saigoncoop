@@ -5,18 +5,22 @@ import { saveAs } from "file-saver";
 import { buildCells, getNgay, groupByStore } from "@/utils/dataload";
 import { phanBoService } from "@/services/phieusoan/phanbo.service";
 
-// Style cho Dataload (Sheet 1)
-const CELL_FONT = { size: 10, name: "Courier New" };
+// ── Fonts ──────────────────────────────────────────────────────────────────
+const CELL_FONT = { size: 10, name: "Times New Roman" };
 const CELL_ALIGNMENT = {
   vertical: "middle",
   horizontal: "left",
   wrapText: false,
 };
 
-// Style cho Header SD_TF (Sheet 2) - Màu xanh đậm chữ trắng như hình bạn gửi
 const SDTF_HEADER_STYLE = {
-  font: { bold: true, color: { argb: "FFFFFF" }, size: 11, name: "Arial" },
-  fill: { type: "pattern", pattern: "solid", fgColor: { argb: "20538D" } }, // Màu xanh lính thủy
+  font: {
+    bold: true,
+    color: { argb: "FFFFFF" },
+    size: 11,
+    name: "Times New Roman",
+  },
+  fill: { type: "pattern", pattern: "solid", fgColor: { argb: "20538D" } },
   alignment: { vertical: "middle", horizontal: "center" },
   border: {
     top: { style: "thin" },
@@ -26,6 +30,9 @@ const SDTF_HEADER_STYLE = {
   },
 };
 
+const SDTF_DATA_FONT = { name: "Times New Roman", size: 10 };
+
+// ── Helper ─────────────────────────────────────────────────────────────────
 const applyCell = (cell, { value, color }) => {
   const cleaned =
     typeof value === "string"
@@ -37,6 +44,7 @@ const applyCell = (cell, { value, color }) => {
   cell.alignment = CELL_ALIGNMENT;
 };
 
+// ── Component ──────────────────────────────────────────────────────────────
 const ExportDataloadButton = memo(
   ({ selectedRows = [], fileName = "dataload_phan_bo", onExportSuccess }) => {
     const [isExporting, setIsExporting] = useState(false);
@@ -51,71 +59,101 @@ const ExportDataloadButton = memo(
         const wb = new ExcelJS.Workbook();
         wb.creator = "SaigonCoop";
 
-        // ─── SHEET 1: DATALOAD (Format ngang hệ thống) ───
+        // ─── SHEET 1: DATALOAD ───────────────────────────────────────────
         const ws1 = wb.addWorksheet("Dataload");
         const groups = groupByStore(selectedRows);
         const maxCols = groups.reduce(
           (max, g) => Math.max(max, 11 + g.items.length * 6 + 1),
           0,
         );
-        ws1.columns = Array.from({ length: maxCols }, () => ({ width: 16 }));
 
-        for (const group of groups) {
-          const cells = buildCells(group, ngay);
-          const excelRow = ws1.addRow(cells.map((c) => c.value));
+        ws1.columns = Array.from({ length: maxCols }, (_, i) => ({
+          key: `col${i + 1}`,
+          width: 16,
+        }));
+
+        const allRows = groups.map((group) => buildCells(group, ngay));
+
+        ws1.addTable({
+          name: "TableDataload",
+          ref: "A1",
+          headerRow: true,
+          totalsRow: false,
+          style: { theme: "TableStyleMedium2", showRowStripes: true },
+          columns: Array.from({ length: maxCols }, (_, i) => ({
+            name: `Column${i + 1}`,
+            filterButton: true,
+          })),
+          rows: allRows.map((cells) => cells.map((c) => c.value)),
+        });
+
+        // Re-apply màu nền + font Times New Roman cho data rows
+        allRows.forEach((cells, rowIdx) => {
+          const excelRow = ws1.getRow(rowIdx + 2);
           excelRow.height = 16;
-          cells.forEach((def, i) => applyCell(excelRow.getCell(i + 1), def));
-        }
+          cells.forEach((def, colIdx) => {
+            applyCell(excelRow.getCell(colIdx + 1), def);
+          });
+        });
 
-        // ─── SHEET 2: SD_TF (Danh sách nhập liệu) ───
+        // ─── SHEET 2: SD_TF ──────────────────────────────────────────────
         const ws2 = wb.addWorksheet("SD_TF");
 
-        // Định nghĩa cột
         ws2.columns = [
-          { header: "Tên Phân Bổ", key: "ten_phan_bo", width: 30 },
-          { header: "SD_TF", key: "sd_tf", width: 15 },
-          { header: "Mã CH", key: "mach", width: 15 },
-          { header: "SKU", key: "sku", width: 15 },
-          { header: "Ngày xử lý", key: "ngay_xu_li", width: 20 },
+          { key: "ten_phan_bo", width: 30 },
+          { key: "sd_tf", width: 15 },
+          { key: "mach", width: 15 },
+          { key: "sku", width: 15 },
+          { key: "ngay_xu_li", width: 20 },
         ];
 
-        // Apply style cho Header Sheet 2
+        ws2.addTable({
+          name: "TableSDTF",
+          ref: "A1",
+          headerRow: true,
+          totalsRow: false,
+          style: { theme: "TableStyleMedium2", showRowStripes: true },
+          columns: [
+            { name: "Tên Phân Bổ", filterButton: true },
+            { name: "SD_TF", filterButton: true },
+            { name: "Mã CH", filterButton: true },
+            { name: "SKU", filterButton: true },
+            { name: "Ngày xử lý", filterButton: true },
+          ],
+          rows: selectedRows.map((row) => [
+            row.ten_phan_bo,
+            "",
+            row.mach,
+            row.sku,
+            "",
+          ]),
+        });
+
+        // Re-apply header style
         const headerRow = ws2.getRow(1);
         headerRow.height = 25;
         headerRow.eachCell((cell) => {
           cell.style = SDTF_HEADER_STYLE;
         });
 
-        // Thêm dữ liệu (Bỏ trống SD_TF và Ngày xử lý theo yêu cầu)
-        selectedRows.forEach((row) => {
-          const newRow = ws2.addRow({
-            ten_phan_bo: row.ten_phan_bo,
-            sd_tf: "", // Để trống cho user nhập
-            mach: row.mach,
-            sku: row.sku,
-            ngay_xu_li: "", // Để trống cho user nhập
-          });
-
-          // Style nhẹ cho data row
-          newRow.eachCell((cell) => {
-            cell.font = { name: "Arial", size: 10 };
-            cell.border = {
-              top: { style: "thin", color: { argb: "E2E8F0" } },
-              left: { style: "thin", color: { argb: "E2E8F0" } },
-              bottom: { style: "thin", color: { argb: "E2E8F0" } },
-              right: { style: "thin", color: { argb: "E2E8F0" } },
-            };
+        // Re-apply font Times New Roman cho data rows sheet 2
+        selectedRows.forEach((_, idx) => {
+          const dataRow = ws2.getRow(idx + 2);
+          dataRow.height = 20;
+          dataRow.eachCell({ includeEmpty: true }, (cell) => {
+            cell.font = SDTF_DATA_FONT;
+            cell.alignment = { vertical: "middle", horizontal: "left" };
           });
         });
 
-        // Xuất file
+        // ─── Xuất file ───────────────────────────────────────────────────
         const buffer = await wb.xlsx.writeBuffer();
         saveAs(
           new Blob([buffer], { type: "application/octet-stream" }),
           `${fileName}_${getNgay()}.xlsx`,
         );
 
-        // Cập nhật Trạng thái sang "Đang xử lý"
+        // Cập nhật trạng thái
         const ids = selectedRows.map((r) => r._id);
         await phanBoService.updateManyPhanBo(ids, {
           trang_thai: "dang_xu_li",
