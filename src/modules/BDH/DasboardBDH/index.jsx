@@ -30,7 +30,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
 );
 
 // Team configuration
@@ -54,6 +54,11 @@ const TEAM_CONFIG = {
     employees: ["23475"],
     formId: "687f16a632fbc64dbf1c0c41",
     color: "rgba(245, 158, 11, 0.8)",
+  },
+  "Tổ Điều Vận": {
+    employees: ["24859"],
+    formId: "69e085056a96fc31947cfd18",
+    color: "rgba(239, 68, 68, 0.8)",
   },
 };
 
@@ -153,7 +158,7 @@ const DashboardBDH = () => {
   const formatDate = (date) => {
     const d = new Date(date);
     return `${String(d.getDate()).padStart(2, "0")}/${String(
-      d.getMonth() + 1
+      d.getMonth() + 1,
     ).padStart(2, "0")}/${d.getFullYear()}`;
   };
 
@@ -210,14 +215,14 @@ const DashboardBDH = () => {
 
       const formIds = Object.values(TEAM_CONFIG).map((t) => t.formId);
       const checklistPromises = formIds.map((formId) =>
-        checkListBDHService.getCheckListsByFormBDHId(formId).catch(() => [])
+        checkListBDHService.getCheckListsByFormBDHId(formId).catch(() => []),
       );
 
       const results = await Promise.all(checklistPromises);
       setChecklists(results.flat().filter(Boolean));
 
       const employeeIds = Object.values(TEAM_CONFIG).flatMap(
-        (team) => team.employees
+        (team) => team.employees,
       );
       const namePromises = employeeIds.map(async (empId) => {
         try {
@@ -230,7 +235,7 @@ const DashboardBDH = () => {
 
       const names = await Promise.all(namePromises);
       setEmployeeNames(
-        Object.fromEntries(names.map(({ id, name }) => [id, name]))
+        Object.fromEntries(names.map(({ id, name }) => [id, name])),
       );
     } catch (error) {
       setError(`Lỗi khi tải dữ liệu: ${error.message}`);
@@ -244,7 +249,7 @@ const DashboardBDH = () => {
     const { start, end } = getDateRange();
     return checklists.filter((item) => {
       const itemDate = new Date(
-        item.ngay_tao || item.thoi_gian_tao || item.createdAt
+        item.ngay_tao || item.thoi_gian_tao || item.createdAt,
       );
       return !isNaN(itemDate.getTime()) && itemDate >= start && itemDate <= end;
     });
@@ -277,7 +282,7 @@ const DashboardBDH = () => {
 
     filteredData.forEach((checklist) => {
       const checklistDate = new Date(
-        checklist.thoi_gian_tao || checklist.ngay_tao || checklist.createdAt
+        checklist.thoi_gian_tao || checklist.ngay_tao || checklist.createdAt,
       );
 
       if (!isOffDuty(checklist)) {
@@ -314,7 +319,7 @@ const DashboardBDH = () => {
       const empName =
         employeeNames[checklist.ma_nhan_vien] || `NV ${checklist.ma_nhan_vien}`;
       const checklistDate = new Date(
-        checklist.thoi_gian_tao || checklist.ngay_tao || checklist.createdAt
+        checklist.thoi_gian_tao || checklist.ngay_tao || checklist.createdAt,
       );
 
       if (!isOffDuty(checklist)) {
@@ -366,13 +371,13 @@ const DashboardBDH = () => {
 
     checklists.forEach((checklist) => {
       const checkDate = new Date(
-        checklist.thoi_gian_tao || checklist.ngay_tao || checklist.createdAt
+        checklist.thoi_gian_tao || checklist.ngay_tao || checklist.createdAt,
       );
       checkDate.setHours(0, 0, 0, 0);
 
       if (checkDate.getTime() === today.getTime()) {
         const teamName = Object.keys(TEAM_CONFIG).find((team) =>
-          TEAM_CONFIG[team].employees.includes(checklist.ma_nhan_vien)
+          TEAM_CONFIG[team].employees.includes(checklist.ma_nhan_vien),
         );
 
         if (teamName && status[teamName][checklist.ma_nhan_vien]) {
@@ -412,7 +417,7 @@ const DashboardBDH = () => {
 
       teamData.employees.forEach((empId) => {
         const empChecklists = filteredData.filter(
-          (item) => String(item.ma_nhan_vien) === String(empId)
+          (item) => String(item.ma_nhan_vien) === String(empId),
         );
 
         let totalJobs = 0;
@@ -422,7 +427,9 @@ const DashboardBDH = () => {
 
         empChecklists.forEach((checklist) => {
           const checklistDate = new Date(
-            checklist.ngay_tao || checklist.thoi_gian_tao || checklist.createdAt
+            checklist.ngay_tao ||
+              checklist.thoi_gian_tao ||
+              checklist.createdAt,
           );
 
           if (!isOffDuty(checklist)) {
@@ -1025,7 +1032,9 @@ const DashboardBDH = () => {
                                 <button
                                   onClick={() =>
                                     setExpandedEmployee(
-                                      isExpanded ? null : `${teamName}-${empId}`
+                                      isExpanded
+                                        ? null
+                                        : `${teamName}-${empId}`,
                                     )
                                   }
                                   className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
@@ -1089,7 +1098,7 @@ const DashboardBDH = () => {
                           })}
                         </div>
                       </div>
-                    )
+                    ),
                   )}
                 </div>
               </div>
@@ -1186,10 +1195,10 @@ const DashboardBDH = () => {
                             const value = context.parsed || 0;
                             const total = context.dataset.data.reduce(
                               (a, b) => a + b,
-                              0
+                              0,
                             );
                             const percentage = ((value / total) * 100).toFixed(
-                              1
+                              1,
                             );
                             return `${label}: ${value} việc (${percentage}%)`;
                           },
@@ -1376,7 +1385,7 @@ const DashboardBDH = () => {
               <div className="text-4xl font-bold">
                 {(() => {
                   const total = Object.values(employeeCheckStatus).flatMap(
-                    (team) => Object.values(team)
+                    (team) => Object.values(team),
                   ).length;
                   const checked = Object.values(employeeCheckStatus)
                     .flatMap((team) => Object.values(team))
@@ -1394,7 +1403,7 @@ const DashboardBDH = () => {
             const teamColor =
               TEAM_CONFIG[teamName]?.color || "rgba(156, 163, 175, 0.8)";
             const checked = Object.values(employees).filter(
-              (e) => e.hasChecked
+              (e) => e.hasChecked,
             ).length;
             const total = Object.values(employees).length;
             const rate = total > 0 ? Math.round((checked / total) * 100) : 0;
@@ -1421,8 +1430,8 @@ const DashboardBDH = () => {
                           rate === 100
                             ? "bg-green-100 text-green-700"
                             : rate >= 50
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-red-100 text-red-700"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-red-100 text-red-700"
                         }`}
                       >
                         {rate}%
@@ -1480,7 +1489,7 @@ const DashboardBDH = () => {
                                   <Clock size={14} />
                                   <span>
                                     {new Date(
-                                      empData.checkTime
+                                      empData.checkTime,
                                     ).toLocaleTimeString("vi-VN")}
                                   </span>
                                 </div>
