@@ -405,7 +405,18 @@ const deleteManyPhieuLeByFilter = async (filter) => {
     throw error;
   }
 };
+
+// thêm vào phieule.service.js
+const importSDPhieuLe = async (payload) => {
+  const response = await ApiServer.post(
+    `${URL.phieule.phieule}/import-soda`,
+    payload,
+  );
+  return response.data;
+};
+
 export const phieuLeService = {
+  importSDPhieuLe,
   getAllPhieuLe, // GET  /api/saigoncoop/phieule?page=1&limit=10&search=...
   getPhieuLeById, // GET  /api/saigoncoop/phieule/:id
   getPhieuLeBySoDocument, // GET  /api/saigoncoop/phieule/document/:so_document

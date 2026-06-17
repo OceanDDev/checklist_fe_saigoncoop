@@ -79,6 +79,7 @@ const URL = {
     donhang: ENDPOINT_PREFIX + "/donhang",
     phieusoan: ENDPOINT_PREFIX + "/phieusoan",
     phanbo: ENDPOINT_PREFIX + "/phanbo",
+    phanbocs: ENDPOINT_PREFIX + "/phanbo-cs",
   },
   ttb: {
     ttb: ENDPOINT_PREFIX + "/ttb",
