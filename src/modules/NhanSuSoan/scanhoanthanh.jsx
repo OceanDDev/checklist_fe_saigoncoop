@@ -1,0 +1,523 @@
+/* eslint-disable react/prop-types */
+// components/phieusoan/NhanSuSoan/ScanHoanThanh.jsx
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  ScanLine,
+  X,
+  Trash2,
+  ArrowLeft,
+  Loader2,
+  UserCheck,
+  CheckCircle2,
+} from "lucide-react";
+import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
+import { nhanVienService } from "@/services/nhanvien.service";
+
+const TRANG_THAI_STYLE = {
+  "Chưa soạn": "text-slate-600 bg-slate-50 border border-slate-200",
+  "Đang soạn": "text-yellow-700 bg-yellow-50 border border-yellow-200",
+  "Hoàn thành": "text-green-700 bg-green-50 border border-green-200",
+};
+
+const ScanHoanThanh = ({ onSuccess }) => {
+  const inputRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState(1); // 1: scan list + nhập kiện/dòng, 2: confirm nhân viên
+
+  // --- Bước 1: quét phiếu ---
+  const [scanValue, setScanValue] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
+  // [{ _id, soDonHang, maNXD, noiXuatDen, trangThai, kien, dong }]
+  const [scannedList, setScannedList] = useState([]);
+
+  // --- Bước 2: xác nhận nhân viên KC ---
+  const [maNhanVien, setMaNhanVien] = useState("");
+  const [lookingUpNV, setLookingUpNV] = useState(false);
+  const [nhanVienInfo, setNhanVienInfo] = useState(null);
+  const [nvError, setNvError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  // Luôn đưa con trỏ vào ô scan mỗi khi modal mở, quay lại bước 1,
+  // hoặc vừa quét xong 1 phiếu (scanning: true -> false).
+  // Dùng requestAnimationFrame thay vì chỉ dựa vào autoFocus vì lúc setScanning(false)
+  // vừa chạy, DOM (thuộc tính disabled) chưa kịp cập nhật ngay trong cùng tick,
+  // nên gọi focus() trực tiếp trong finally sẽ không có tác dụng.
+  useEffect(() => {
+    if (open && step === 1 && !scanning) {
+      const raf = requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [open, step, scanning]);
+
+  // Khoá scroll nền khi modal mở + cho phép đóng bằng phím Esc
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") handleClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const resetAll = () => {
+    setStep(1);
+    setScanValue("");
+    setScanError("");
+    setScannedList([]);
+    setMaNhanVien("");
+    setNhanVienInfo(null);
+    setNvError("");
+  };
+
+  const handleOpen = () => {
+    resetAll();
+    setOpen(true);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    resetAll();
+  };
+
+  /** Nhập/quét số đơn hàng rồi Enter → tìm phiếu tương ứng và thêm vào danh sách
+   *  kèm 2 ô nhập kiện/dòng (mặc định lấy theo dữ liệu phiếu nếu có). */
+  const handleScanSubmit = async (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+
+    const code = scanValue.trim();
+    if (!code) return;
+
+    if (
+      scannedList.some(
+        (it) => it.soDonHang.toUpperCase() === code.toUpperCase(),
+      )
+    ) {
+      setScanError(`"${code}" đã có trong danh sách.`);
+      setScanValue("");
+      return;
+    }
+
+    setScanning(true);
+    setScanError("");
+    try {
+      const res = await nhanSuSoanService.getAllNhanSuSoan({
+        soDonHang: code,
+        limit: 5,
+      });
+      const list = res.data || res.items || [];
+      const matched =
+        list.find((it) => it.soDonHang?.toUpperCase() === code.toUpperCase()) ||
+        list[0];
+
+      if (!matched) {
+        setScanError(`Không tìm thấy phiếu "${code}".`);
+        return;
+      }
+
+      // Phiếu chưa được giao soạn thì chưa thể nhập KC
+      if (matched.trangThai === "Chưa soạn") {
+        setScanError(
+          `Phiếu "${code}" đang ở trạng thái "Chưa soạn" — cần giao soạn trước khi nhập KC.`,
+        );
+        return;
+      }
+
+      setScannedList((prev) => [
+        {
+          ...matched,
+          kien: matched.kien != null ? String(matched.kien) : "",
+          dong: matched.dong != null ? String(matched.dong) : "",
+        },
+        ...prev,
+      ]);
+      setScanValue("");
+    } catch (err) {
+      console.error("Lỗi tìm phiếu:", err);
+      setScanError("Có lỗi khi tìm phiếu, thử lại.");
+    } finally {
+      // Dừng khoảng 0.5s trước khi cho phép quét tiếp, tránh máy scan/người
+      // dùng bắn liên tiếp quá nhanh. Trong lúc này input vẫn đang disabled.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      setScanning(false);
+      // Việc focus lại ô input đã được xử lý bằng useEffect ở trên
+      // (chạy sau khi React render xong, đảm bảo input không còn bị disabled).
+    }
+  };
+
+  const handleRemoveScanned = (id) => {
+    setScannedList((prev) => prev.filter((it) => it._id !== id));
+  };
+
+  /** Cập nhật kiện/dòng nhập tay cho từng phiếu trong danh sách đã quét */
+  const handleChangeScannedField = (id, field, value) => {
+    // chỉ cho phép số
+    const cleaned = value.replace(/[^0-9]/g, "");
+    setScannedList((prev) =>
+      prev.map((it) => (it._id === id ? { ...it, [field]: cleaned } : it)),
+    );
+  };
+
+  const isScannedListValid =
+    scannedList.length > 0 &&
+    scannedList.every((it) => it.kien !== "" && it.dong !== "");
+
+  const goToConfirmStep = () => {
+    if (scannedList.length === 0) {
+      setScanError("Vui lòng quét ít nhất 1 phiếu.");
+      return;
+    }
+    if (!isScannedListValid) {
+      setScanError("Vui lòng nhập đủ số kiện và số dòng cho tất cả phiếu.");
+      return;
+    }
+    setStep(2);
+  };
+
+  /** Tra cứu nhân viên theo mã, dùng nhanVienService có sẵn */
+  const handleLookupNhanVien = async () => {
+    const ma = maNhanVien.trim();
+    if (!ma) return;
+
+    setLookingUpNV(true);
+    setNvError("");
+    setNhanVienInfo(null);
+    try {
+      const res = await nhanVienService.traCuu(ma);
+      const nv = res?.data || res;
+      if (!nv || (Array.isArray(nv) && nv.length === 0)) {
+        setNvError(`Không tìm thấy nhân viên mã "${ma}".`);
+        return;
+      }
+      setNhanVienInfo(Array.isArray(nv) ? nv[0] : nv);
+    } catch (err) {
+      console.error("Lỗi tra cứu nhân viên:", err);
+      const backendMsg = err?.response?.data?.message;
+      setNvError(backendMsg || `Không tìm thấy nhân viên mã "${ma}".`);
+    } finally {
+      setLookingUpNV(false);
+    }
+  };
+
+  /** Lấy danh sách mã NV KC hiện có của 1 phiếu (từ nvKC hoặc nvKCChiTiet đã populate) */
+  const getExistingNvKCCodes = (item) => {
+    if (Array.isArray(item.nvKC) && item.nvKC.length > 0) {
+      return item.nvKC;
+    }
+    if (Array.isArray(item.nvKCChiTiet)) {
+      return item.nvKCChiTiet.map((nv) => nv.ma_nhan_vien || nv);
+    }
+    return [];
+  };
+
+  /** Xác nhận: cập nhật trạng thái → "Hoàn thành", ghi nhận kiện/dòng đã nhập
+   *  và gộp mã NV vào nvKC cho từng phiếu */
+  const handleConfirmHoanThanh = async () => {
+    if (!nhanVienInfo) return;
+
+    setSubmitting(true);
+    try {
+      const now = new Date().toISOString();
+      const maNV = nhanVienInfo.ma_nhan_vien;
+
+      await Promise.all(
+        scannedList.map((item) => {
+          const existingCodes = getExistingNvKCCodes(item);
+          const mergedNvKC = Array.from(new Set([...existingCodes, maNV]));
+
+          return nhanSuSoanService.updateNhanSuSoan(item._id, {
+            trangThai: "Hoàn thành",
+            tgHoanThanh: now,
+            kien: Number(item.kien),
+            dong: Number(item.dong),
+            nvKC: mergedNvKC,
+          });
+        }),
+      );
+
+      alert(
+        `Đã hoàn thành ${scannedList.length} phiếu bởi ${nhanVienInfo.ten_nhan_vien || maNhanVien}.`,
+      );
+      onSuccess?.();
+      handleClose();
+    } catch (err) {
+      console.error("Lỗi nhập KC:", err);
+      alert("Nhập KC thất bại. Vui lòng thử lại.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const modal = (
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-[2px] sm:items-center"
+      onClick={handleClose}
+    >
+      <div
+        className="my-8 flex max-h-[calc(100vh-4rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 sm:my-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="text-base font-semibold text-slate-800">
+            {step === 1 ? "Scan Hoàn Thành" : "Xác nhận nhân viên KC"}
+          </h2>
+          <button
+            onClick={handleClose}
+            className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {step === 1 ? (
+          <>
+            {/* Body — bước quét */}
+            <div className="space-y-3 overflow-y-auto px-5 py-4">
+              <input
+                ref={inputRef}
+                type="text"
+                autoFocus
+                value={scanValue}
+                onChange={(e) => {
+                  setScanValue(e.target.value);
+                  setScanError("");
+                }}
+                onKeyDown={handleScanSubmit}
+                disabled={scanning}
+                placeholder="Quét hoặc nhập số đơn hàng rồi nhấn Enter..."
+                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+              />
+              {scanning && (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Loader2 size={14} className="animate-spin" />
+                  Đang tìm phiếu...
+                </div>
+              )}
+              {scanError && <p className="text-xs text-red-600">{scanError}</p>}
+
+              <div className="max-h-80 space-y-1.5 overflow-y-auto">
+                {scannedList.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-400">
+                    Chưa có phiếu nào được quét.
+                  </p>
+                ) : (
+                  scannedList.map((item) => (
+                    <div
+                      key={item._id}
+                      className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <div className="truncate text-sm font-medium text-slate-800">
+                            {item.soDonHang}
+                          </div>
+                          <span
+                            className={`whitespace-nowrap rounded-lg px-2 py-0.5 text-xs font-medium ${
+                              TRANG_THAI_STYLE[item.trangThai] ||
+                              TRANG_THAI_STYLE["Chưa soạn"]
+                            }`}
+                          >
+                            {item.trangThai}
+                          </span>
+                        </div>
+                        <div className="truncate text-xs text-slate-500">
+                          {item.maNXD ? `${item.maNXD} — ` : ""}
+                          {item.noiXuatDen || ""}
+                        </div>
+                      </div>
+
+                      {/* Nhập số kiện / số dòng ngay tại dòng vừa quét */}
+                      <div className="flex flex-shrink-0 items-center gap-1.5">
+                        <div className="flex flex-col items-start">
+                          <label className="text-[10px] font-medium text-slate-400">
+                            Kiện
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={item.kien}
+                            onChange={(e) =>
+                              handleChangeScannedField(
+                                item._id,
+                                "kien",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="0"
+                            className="h-8 w-14 rounded-md border border-slate-300 px-2 text-center text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                          />
+                        </div>
+                        <div className="flex flex-col items-start">
+                          <label className="text-[10px] font-medium text-slate-400">
+                            Dòng
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={item.dong}
+                            onChange={(e) =>
+                              handleChangeScannedField(
+                                item._id,
+                                "dong",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="0"
+                            className="h-8 w-14 rounded-md border border-slate-300 px-2 text-center text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                          />
+                        </div>
+                        <button
+                          onClick={() => handleRemoveScanned(item._id)}
+                          className="ml-1 self-end rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                          title="Bỏ khỏi danh sách"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Footer — bước quét */}
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
+              <span className="text-sm text-slate-500">
+                Đã quét: <b className="text-slate-700">{scannedList.length}</b>{" "}
+                phiếu
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleClose}
+                  className="rounded-lg px-3.5 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+                >
+                  Huỷ
+                </button>
+                <button
+                  onClick={goToConfirmStep}
+                  disabled={!isScannedListValid}
+                  className="flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Nhập KC
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Body — bước xác nhận nhân viên */}
+            <div className="space-y-4 overflow-y-auto px-5 py-4">
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Chuẩn bị hoàn thành{" "}
+                <b className="text-slate-800">{scannedList.length}</b> phiếu.
+                Nhập mã nhân viên KC để xác nhận.
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-600">
+                  Mã nhân viên KC
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={maNhanVien}
+                    onChange={(e) => {
+                      setMaNhanVien(e.target.value);
+                      setNhanVienInfo(null);
+                      setNvError("");
+                    }}
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && handleLookupNhanVien()
+                    }
+                    placeholder="VD: NV0123"
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                  <button
+                    onClick={handleLookupNhanVien}
+                    disabled={!maNhanVien.trim() || lookingUpNV}
+                    className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {lookingUpNV ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <UserCheck size={16} />
+                    )}
+                    Tra cứu
+                  </button>
+                </div>
+                {nvError && <p className="text-xs text-red-600">{nvError}</p>}
+              </div>
+
+              {nhanVienInfo && (
+                <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                  <CheckCircle2
+                    size={20}
+                    className="flex-shrink-0 text-emerald-600"
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-emerald-800">
+                      {nhanVienInfo.ten_nhan_vien || nhanVienInfo.ma_nhan_vien}
+                    </div>
+                    <div className="truncate text-xs text-emerald-700">
+                      Mã: {nhanVienInfo.ma_nhan_vien}
+                      {nhanVienInfo.bo_phan ? ` — ${nhanVienInfo.bo_phan}` : ""}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer — bước xác nhận nhân viên */}
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
+              <button
+                onClick={() => setStep(1)}
+                className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+              >
+                <ArrowLeft size={16} />
+                Quay lại
+              </button>
+              <button
+                onClick={handleConfirmHoanThanh}
+                disabled={!nhanVienInfo || submitting}
+                className="flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting && <Loader2 size={16} className="animate-spin" />}
+                {submitting ? "Đang xác nhận..." : "Xác nhận hoàn thành"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <button
+        onClick={handleOpen}
+        className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+      >
+        <ScanLine size={16} className="text-emerald-100" />
+        Scan Hoàn Thành
+      </button>
+
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(modal, document.body)}
+    </>
+  );
+};
+
+export default ScanHoanThanh;

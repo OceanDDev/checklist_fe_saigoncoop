@@ -1,16 +1,42 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const Header = () => {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user"));
   const [scrolled, setScrolled] = useState(false);
+  const headerRef = useRef(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // ✅ Đo chiều cao thật của header và đồng bộ vào biến CSS --header-h
+  // để MainLayout luôn paddingTop đúng, tránh nội dung bị header (fixed) đè lên.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+
+    const setVar = () => {
+      document.documentElement.style.setProperty(
+        "--header-h",
+        `${el.offsetHeight}px`,
+      );
+    };
+
+    setVar();
+
+    const resizeObserver = new ResizeObserver(setVar);
+    resizeObserver.observe(el);
+    window.addEventListener("resize", setVar);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", setVar);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -44,12 +70,15 @@ const Header = () => {
       30: "CHẤM CÔNG",
       50: "LEARNING",
       51: "LEARNING",
+      52: "QUẢN LÝ PHIẾU SOẠN ",
+
     };
     return roles[role] || "CHECKLIST";
   };
 
   return (
     <header
+      ref={headerRef}
       className={[
         "fixed top-0 left-0 right-0 z-50",
         "px-3 sm:px-6 py-2 sm:py-3",
@@ -65,9 +94,7 @@ const Header = () => {
           to="/"
           className="group relative flex items-center justify-center rounded-2xl bg-white p-1.5 shadow-[0_0_15px_rgba(59,130,246,0.5)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_25px_rgba(59,130,246,0.8)]"
         >
-          {/* Lớp nền phát sáng phía sau */}
           <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-tr from-blue-500 to-cyan-400 opacity-30 blur group-hover:opacity-60 transition duration-300"></div>
-
           <img
             src="/img/logonew.png"
             alt="Logo"

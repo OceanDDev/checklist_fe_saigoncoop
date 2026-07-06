@@ -1,0 +1,718 @@
+/* eslint-disable react/prop-types */
+// components/phieusoan/NhanSuSoan/gopphieu.jsx
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  Combine,
+  X,
+  Trash2,
+  ArrowLeft,
+  Loader2,
+  AlertTriangle,
+  CheckCircle2,
+  UserCheck,
+} from "lucide-react";
+import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
+import { nhanVienService } from "@/services/nhanvien.service";
+
+const TRANG_THAI_STYLE = {
+  "Chưa soạn": "text-slate-600 bg-slate-50 border border-slate-200",
+  "Đang soạn": "text-yellow-700 bg-yellow-50 border border-yellow-200",
+  "Hoàn thành": "text-green-700 bg-green-50 border border-green-200",
+};
+
+/** Lấy danh sách mã NV soạn hiện có của 1 phiếu, dùng để so sánh giữa các phiếu */
+const getNvSoanCodes = (item) => {
+  const list =
+    (Array.isArray(item.nvSoan) && item.nvSoan.length > 0 && item.nvSoan) ||
+    (Array.isArray(item.nvSoanChiTiet) &&
+      item.nvSoanChiTiet.map((nv) => nv.ma_nhan_vien || nv)) ||
+    [];
+  return [...list].map(String).sort();
+};
+
+const sameNvSoan = (a, b) => {
+  const listA = getNvSoanCodes(a);
+  const listB = getNvSoanCodes(b);
+  // Nếu 1 trong 2 phiếu chưa có NV soạn -> không tính là xung đột, vẫn cho gộp
+  if (listA.length === 0 || listB.length === 0) return true;
+  if (listA.length !== listB.length) return false;
+  return listA.every((code, idx) => code === listB[idx]);
+};
+
+/** Lấy danh sách mã NV KC hiện có của 1 phiếu (từ nvKC hoặc nvKCChiTiet đã populate) */
+const getExistingNvKCCodes = (item) => {
+  if (Array.isArray(item.nvKC) && item.nvKC.length > 0) {
+    return item.nvKC;
+  }
+  if (Array.isArray(item.nvKCChiTiet)) {
+    return item.nvKCChiTiet.map((nv) => nv.ma_nhan_vien || nv);
+  }
+  return [];
+};
+
+/** Sinh mã số phiếu gộp tự động: GOP-<maNXD>-<ddMMyy-HHmmss> */
+const generateSoPhieuGop = (maNXD) => {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const dateStr = `${pad(now.getDate())}${pad(now.getMonth() + 1)}${String(
+    now.getFullYear(),
+  ).slice(-2)}`;
+  const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(
+    now.getSeconds(),
+  )}`;
+  const nxd = (maNXD || "").toString().trim().toUpperCase();
+  return `GOP-${nxd ? `${nxd}-` : ""}${dateStr}-${timeStr}`;
+};
+
+const GopPhieu = ({ onSuccess }) => {
+  const inputRef = useRef(null);
+  const nvInputRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState(1); // 1: scan, 2: kiện/dòng + đại diện, 3: xác nhận NV KC
+
+  // --- Bước 1: quét phiếu ---
+  const [scanValue, setScanValue] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [scannedList, setScannedList] = useState([]);
+
+  // --- Bước 2: kiện / dòng / đại diện ---
+  const [soPhieuGop, setSoPhieuGop] = useState("");
+  const [kienGop, setKienGop] = useState(""); // nhập 1 lần duy nhất
+  const [dongGop, setDongGop] = useState(""); // nhập 1 lần duy nhất
+  const [daiDienId, setDaiDienId] = useState(null); // phiếu đại diện nhận Kiện/Dòng
+
+  // --- Bước 3: xác nhận nhân viên KC (giống ScanHoanThanh) ---
+  const [maNhanVien, setMaNhanVien] = useState("");
+  const [lookingUpNV, setLookingUpNV] = useState(false);
+  const [nhanVienInfo, setNhanVienInfo] = useState(null);
+  const [nvError, setNvError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open && step === 1 && !scanning) {
+      const raf = requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [open, step, scanning]);
+
+  // Tự động focus lại ô mã NV KC ở bước 3, mỗi khi mở modal, quay lại bước 3,
+  // hoặc vừa tra cứu/xác nhận xong — giúp thao tác "Enter tra cứu -> Enter xác nhận"
+  // chạy liên tục bằng bàn phím/máy quét mà không cần bấm chuột.
+  useEffect(() => {
+    if (open && step === 3 && !lookingUpNV && !submitting) {
+      const raf = requestAnimationFrame(() => {
+        nvInputRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [open, step, lookingUpNV, submitting]);
+
+  // Khoá scroll nền khi modal mở + cho phép đóng bằng phím Esc
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") handleClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const resetAll = () => {
+    setStep(1);
+    setScanValue("");
+    setScanError("");
+    setScannedList([]);
+    setSoPhieuGop("");
+    setKienGop("");
+    setDongGop("");
+    setDaiDienId(null);
+    setMaNhanVien("");
+    setNhanVienInfo(null);
+    setNvError("");
+  };
+
+  const handleOpen = () => {
+    resetAll();
+    setOpen(true);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    resetAll();
+  };
+
+  /** Nhập/quét số đơn hàng rồi Enter → tìm phiếu, kiểm tra ràng buộc
+   *  (cùng mã NXĐ, cùng NV soạn — không quan tâm trạng thái) rồi thêm vào danh sách gộp. */
+  const handleScanSubmit = async (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+
+    const code = scanValue.trim();
+    if (!code) return;
+
+    if (
+      scannedList.some(
+        (it) => it.soDonHang.toUpperCase() === code.toUpperCase(),
+      )
+    ) {
+      setScanError(`"${code}" đã có trong danh sách.`);
+      setScanValue("");
+      return;
+    }
+
+    setScanning(true);
+    setScanError("");
+    try {
+      const res = await nhanSuSoanService.getAllNhanSuSoan({
+        soDonHang: code,
+        limit: 5,
+      });
+      const list = res.data || res.items || [];
+      const matched =
+        list.find((it) => it.soDonHang?.toUpperCase() === code.toUpperCase()) ||
+        list[0];
+
+      if (!matched) {
+        setScanError(`Không tìm thấy phiếu "${code}".`);
+        return;
+      }
+
+      if (scannedList.length > 0) {
+        const first = scannedList[0];
+
+        if (
+          (matched.maNXD || "").toUpperCase() !==
+          (first.maNXD || "").toUpperCase()
+        ) {
+          setScanError(
+            `Phiếu "${code}" khác mã NXĐ (${matched.maNXD || "—"}) so với các phiếu đã quét (${first.maNXD || "—"}) — không thể gộp.`,
+          );
+          return;
+        }
+
+        if (!sameNvSoan(matched, first)) {
+          setScanError(
+            `Phiếu "${code}" khác nhân viên soạn so với các phiếu đã quét — không thể gộp.`,
+          );
+          return;
+        }
+      }
+
+      setScannedList((prev) => [matched, ...prev]);
+      setScanValue("");
+    } catch (err) {
+      console.error("Lỗi tìm phiếu:", err);
+      setScanError("Có lỗi khi tìm phiếu, thử lại.");
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      setScanning(false);
+    }
+  };
+
+  const handleRemoveScanned = (id) => {
+    setScannedList((prev) => prev.filter((it) => it._id !== id));
+    if (daiDienId === id) setDaiDienId(null);
+  };
+
+  const goToKienDongStep = () => {
+    if (scannedList.length < 2) {
+      setScanError("Vui lòng quét ít nhất 2 phiếu để gộp.");
+      return;
+    }
+    setSoPhieuGop(generateSoPhieuGop(scannedList[0]?.maNXD));
+    setDaiDienId(scannedList[0]._id); // mặc định phiếu vừa quét gần nhất làm đại diện
+    setKienGop("");
+    setDongGop("");
+    setStep(2);
+  };
+
+  const isKienDongValid =
+    !!soPhieuGop.trim() &&
+    kienGop !== "" &&
+    dongGop !== "" &&
+    !!daiDienId &&
+    scannedList.some((it) => it._id === daiDienId);
+
+  const goToNvKcStep = () => {
+    if (!isKienDongValid) return;
+    setMaNhanVien("");
+    setNhanVienInfo(null);
+    setNvError("");
+    setStep(3);
+  };
+
+  /** Tra cứu nhân viên theo mã, dùng nhanVienService có sẵn (giống ScanHoanThanh) */
+  const handleLookupNhanVien = async () => {
+    const ma = maNhanVien.trim();
+    if (!ma) return;
+
+    setLookingUpNV(true);
+    setNvError("");
+    setNhanVienInfo(null);
+    try {
+      const res = await nhanVienService.traCuu(ma);
+      const nv = res?.data || res;
+      if (!nv || (Array.isArray(nv) && nv.length === 0)) {
+        setNvError(`Không tìm thấy nhân viên mã "${ma}".`);
+        return;
+      }
+      setNhanVienInfo(Array.isArray(nv) ? nv[0] : nv);
+    } catch (err) {
+      console.error("Lỗi tra cứu nhân viên:", err);
+      const backendMsg = err?.response?.data?.message;
+      setNvError(backendMsg || `Không tìm thấy nhân viên mã "${ma}".`);
+    } finally {
+      setLookingUpNV(false);
+      // Focus lại ô input được xử lý bằng useEffect ở trên.
+    }
+  };
+
+  /** Enter trong ô mã NV KC: nếu chưa tra cứu (hoặc vừa đổi mã) → tra cứu.
+   *  Nếu đã có kết quả tra cứu hợp lệ rồi → Enter tiếp theo xác nhận gộp luôn,
+   *  giúp thao tác nhanh kiểu "Enter Enter" khi vận hành bằng máy quét/bàn phím. */
+  const handleMaNhanVienKeyDown = (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (lookingUpNV || submitting) return;
+
+    if (nhanVienInfo) {
+      handleConfirmGop();
+    } else {
+      handleLookupNhanVien();
+    }
+  };
+
+  /** Xác nhận gộp: phiếu đại diện nhận Kiện/Dòng vừa nhập, các phiếu còn lại = 0/0,
+   *  gộp mã NV KC vào từng phiếu, tất cả dùng chung 1 mốc tgHoanThanh,
+   *  và chuyển thành "Hoàn thành". */
+  const handleConfirmGop = async () => {
+    if (!isKienDongValid || !nhanVienInfo) return;
+
+    setSubmitting(true);
+    try {
+      const now = new Date().toISOString(); // mốc tgHoanThanh CHUNG cho cả nhóm
+      const maNV = nhanVienInfo.ma_nhan_vien;
+
+      await Promise.all(
+        scannedList.map((item) => {
+          const isDaiDien = item._id === daiDienId;
+          const existingCodes = getExistingNvKCCodes(item);
+          const mergedNvKC = Array.from(new Set([...existingCodes, maNV]));
+
+          const payload = {
+            soPhieuGop: soPhieuGop.trim(),
+            kien: isDaiDien ? Number(kienGop) : 0,
+            dong: isDaiDien ? Number(dongGop) : 0,
+            trangThai: "Hoàn thành",
+            tgHoanThanh: now,
+            nvKC: mergedNvKC,
+          };
+          return nhanSuSoanService.updateNhanSuSoan(item._id, payload);
+        }),
+      );
+
+      alert(
+        `Đã gộp ${scannedList.length} phiếu thành số phiếu gộp "${soPhieuGop.trim()}" bởi ${nhanVienInfo.ten_nhan_vien || maNhanVien}.`,
+      );
+      onSuccess?.();
+      handleClose();
+    } catch (err) {
+      console.error("Lỗi gộp phiếu:", err);
+      alert("Gộp phiếu thất bại. Vui lòng thử lại.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const modal = (
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-[2px] sm:items-center"
+      onClick={handleClose}
+    >
+      <div
+        className="my-8 flex max-h-[calc(100vh-4rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 sm:my-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="text-base font-semibold text-slate-800">
+            {step === 1 && "Gộp Phiếu"}
+            {step === 2 && "Nhập Kiện / Dòng"}
+            {step === 3 && "Xác nhận nhân viên KC"}
+          </h2>
+          <button
+            onClick={handleClose}
+            className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {step === 1 && (
+          <>
+            {/* Body — bước quét */}
+            <div className="space-y-3 overflow-y-auto px-5 py-4">
+              <input
+                ref={inputRef}
+                type="text"
+                autoFocus
+                value={scanValue}
+                onChange={(e) => {
+                  setScanValue(e.target.value);
+                  setScanError("");
+                }}
+                onKeyDown={handleScanSubmit}
+                disabled={scanning}
+                placeholder="Quét hoặc nhập số đơn hàng rồi nhấn Enter..."
+                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+              />
+              {scanning && (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Loader2 size={14} className="animate-spin" />
+                  Đang tìm phiếu...
+                </div>
+              )}
+              {scanError && (
+                <p className="flex items-start gap-1.5 text-xs text-red-600">
+                  <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+                  {scanError}
+                </p>
+              )}
+
+              <div className="max-h-80 space-y-1.5 overflow-y-auto">
+                {scannedList.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-400">
+                    Chưa có phiếu nào được quét. Cần ít nhất 2 phiếu cùng mã NXĐ
+                    và cùng NV soạn để gộp.
+                  </p>
+                ) : (
+                  scannedList.map((item) => (
+                    <div
+                      key={item._id}
+                      className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <div className="truncate text-sm font-medium text-slate-800">
+                            {item.soDonHang}
+                          </div>
+                          <span
+                            className={`whitespace-nowrap rounded-lg px-2 py-0.5 text-xs font-medium ${
+                              TRANG_THAI_STYLE[item.trangThai] ||
+                              TRANG_THAI_STYLE["Chưa soạn"]
+                            }`}
+                          >
+                            {item.trangThai}
+                          </span>
+                        </div>
+                        <div className="truncate text-xs text-slate-500">
+                          {item.maNXD ? `${item.maNXD} — ` : ""}
+                          {item.noiXuatDen || ""}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleRemoveScanned(item._id)}
+                        className="flex-shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                        title="Bỏ khỏi danh sách"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Footer — bước quét */}
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
+              <span className="text-sm text-slate-500">
+                Đã quét: <b className="text-slate-700">{scannedList.length}</b>{" "}
+                phiếu
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleClose}
+                  className="rounded-lg px-3.5 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+                >
+                  Huỷ
+                </button>
+                <button
+                  onClick={goToKienDongStep}
+                  disabled={scannedList.length < 2}
+                  className="flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Tiếp tục
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            {/* Body — bước kiện/dòng + đại diện */}
+            <div className="space-y-4 overflow-y-auto px-5 py-4">
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Chuẩn bị gộp{" "}
+                <b className="text-slate-800">{scannedList.length}</b> phiếu.
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-600">
+                  Số phiếu gộp
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={soPhieuGop}
+                  onChange={(e) => setSoPhieuGop(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Mã được sinh tự động, bạn có thể chỉnh lại nếu cần.
+                </p>
+              </div>
+
+              {/* Kiện / Dòng — nhập 1 lần duy nhất cho cả nhóm */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-600">
+                    Kiện
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={kienGop}
+                    onChange={(e) =>
+                      setKienGop(e.target.value.replace(/[^0-9]/g, ""))
+                    }
+                    placeholder="0"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-600">
+                    Dòng
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={dongGop}
+                    onChange={(e) =>
+                      setDongGop(e.target.value.replace(/[^0-9]/g, ""))
+                    }
+                    placeholder="0"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              </div>
+              <p className="-mt-2 text-[11px] text-slate-400">
+                Chọn 1 phiếu đại diện bên dưới để nhận số Kiện/Dòng này — các
+                phiếu còn lại sẽ tự động là 0/0.
+              </p>
+
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <span className="text-xs font-medium text-slate-500">
+                  Trạng thái sau khi gộp:
+                </span>
+                <span
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${TRANG_THAI_STYLE["Hoàn thành"]}`}
+                >
+                  Hoàn thành
+                </span>
+              </div>
+
+              <div className="max-h-56 space-y-1.5 overflow-y-auto">
+                {scannedList.map((item) => {
+                  const isDaiDien = item._id === daiDienId;
+                  return (
+                    <label
+                      key={item._id}
+                      className={`flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2 transition ${
+                        isDaiDien
+                          ? "border-blue-300 bg-blue-50"
+                          : "border-slate-200"
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <input
+                          type="radio"
+                          name="daiDien"
+                          checked={isDaiDien}
+                          onChange={() => setDaiDienId(item._id)}
+                          className="flex-shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-slate-800">
+                            {item.soDonHang}
+                          </div>
+                          <div className="truncate text-xs text-slate-500">
+                            Kiện/Dòng:{" "}
+                            {isDaiDien
+                              ? `${kienGop || 0}/${dongGop || 0}`
+                              : "0/0"}
+                          </div>
+                        </div>
+                      </div>
+                      {isDaiDien && (
+                        <span className="flex-shrink-0 whitespace-nowrap rounded-lg bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                          Đại diện
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer — bước kiện/dòng */}
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
+              <button
+                onClick={() => setStep(1)}
+                className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+              >
+                <ArrowLeft size={16} />
+                Quay lại
+              </button>
+              <button
+                onClick={goToNvKcStep}
+                disabled={!isKienDongValid}
+                className="flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Tiếp tục
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            {/* Body — bước xác nhận nhân viên KC (giống ScanHoanThanh) */}
+            <div className="space-y-4 overflow-y-auto px-5 py-4">
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Chuẩn bị gộp và hoàn thành{" "}
+                <b className="text-slate-800">{scannedList.length}</b> phiếu.
+                Nhập mã nhân viên KC để xác nhận.
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-600">
+                  Mã nhân viên KC
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    ref={nvInputRef}
+                    type="text"
+                    value={maNhanVien}
+                    onChange={(e) => {
+                      setMaNhanVien(e.target.value);
+                      setNhanVienInfo(null);
+                      setNvError("");
+                    }}
+                    onKeyDown={handleMaNhanVienKeyDown}
+                    disabled={lookingUpNV || submitting}
+                    placeholder="VD: NV0123 — Enter để tra cứu, Enter lần nữa để xác nhận"
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+                  />
+                  <button
+                    onClick={handleLookupNhanVien}
+                    disabled={!maNhanVien.trim() || lookingUpNV}
+                    className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {lookingUpNV ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <UserCheck size={16} />
+                    )}
+                    Tra cứu
+                  </button>
+                </div>
+                {nvError && <p className="text-xs text-red-600">{nvError}</p>}
+                {nhanVienInfo && !nvError && (
+                  <p className="text-[11px] text-emerald-600">
+                    Đã tìm thấy nhân viên — nhấn Enter lần nữa để hoàn tất.
+                  </p>
+                )}
+              </div>
+
+              {nhanVienInfo && (
+                <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                  <CheckCircle2
+                    size={20}
+                    className="flex-shrink-0 text-emerald-600"
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-emerald-800">
+                      {nhanVienInfo.ten_nhan_vien || nhanVienInfo.ma_nhan_vien}
+                    </div>
+                    <div className="truncate text-xs text-emerald-700">
+                      Mã: {nhanVienInfo.ma_nhan_vien}
+                      {nhanVienInfo.bo_phan ? ` — ${nhanVienInfo.bo_phan}` : ""}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-400">
+                Mã NV KC này sẽ được gộp vào <b>tất cả</b> {scannedList.length}{" "}
+                phiếu, và thời gian hoàn thành sẽ giống nhau cho cả nhóm.
+              </p>
+            </div>
+
+            {/* Footer — bước xác nhận nhân viên KC */}
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
+              <button
+                onClick={() => setStep(2)}
+                className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+              >
+                <ArrowLeft size={16} />
+                Quay lại
+              </button>
+              <button
+                onClick={handleConfirmGop}
+                disabled={!nhanVienInfo || submitting}
+                className="flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={16} />
+                )}
+                {submitting ? "Đang gộp..." : "Xác nhận gộp"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <button
+        onClick={handleOpen}
+        className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-md transition-all hover:bg-indigo-700 hover:shadow-lg focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+      >
+        <Combine size={16} className="text-indigo-100" />
+        Gộp Phiếu
+      </button>
+
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(modal, document.body)}
+    </>
+  );
+};
+
+export default GopPhieu;

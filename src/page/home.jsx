@@ -5,9 +5,8 @@ const MainLayout = ({ children }) => {
   return (
     <div>
       <HeaderCheckList />
-      <main style={{ paddingTop: "var(--header-h)" }}>
-        {children}
-      </main>
+      {/* fallback 88px cho lần render đầu tiên trước khi --header-h được đo xong */}
+      <main style={{ paddingTop: "var(--header-h, 88px)" }}>{children}</main>
     </div>
   );
 };

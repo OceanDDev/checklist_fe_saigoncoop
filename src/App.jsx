@@ -44,6 +44,7 @@ import KhoaHocDetail from "./modules/LearningSCL/KhoaHocDetail";
 import ProductLookupMobile from "./modules/TraCuu";
 import QuanLyQR from "./modules/LearningSCL/Admin/Q&A/quanlyQR";
 import TrangLamBai from "./modules/LearningSCL/Admin/Q&A/tranglambai";
+import NhanSuSoanTable from "./modules/NhanSuSoan";
 
 function App() {
   return (
@@ -371,6 +372,16 @@ function App() {
         <Route path="/qr-scan" element={<QrScanner />} />
 
         {/* PHIEU SOAN */}
+<Route
+          path="/nhansusoan"
+          element={
+            <PrivateRoute allowRoles={[52]}>
+              <MainLayout>
+                <NhanSuSoanTable />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
         <Route
           path="/phieusoan"

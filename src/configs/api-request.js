@@ -80,6 +80,8 @@ const URL = {
     phieusoan: ENDPOINT_PREFIX + "/phieusoan",
     phanbo: ENDPOINT_PREFIX + "/phanbo",
     phanbocs: ENDPOINT_PREFIX + "/phanbo-cs",
+    nhansusoan: ENDPOINT_PREFIX + "/nhansusoan",
+
   },
   ttb: {
     ttb: ENDPOINT_PREFIX + "/ttb",
