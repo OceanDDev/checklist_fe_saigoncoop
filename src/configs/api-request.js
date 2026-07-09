@@ -106,6 +106,9 @@ const URL = {
     baihoc: ENDPOINT_PREFIX +"/bai-hoc",
     baikiemtra: ENDPOINT_PREFIX +"/bai-kiem-tra",
     luotlambai:ENDPOINT_PREFIX +"/luot-lam-bai",
+  },
+  quanlyhd:{
+    quanlyhd: ENDPOINT_PREFIX +"/quanlyhd",
   }
 };
 

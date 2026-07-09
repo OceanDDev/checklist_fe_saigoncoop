@@ -45,6 +45,7 @@ import ProductLookupMobile from "./modules/TraCuu";
 import QuanLyQR from "./modules/LearningSCL/Admin/Q&A/quanlyQR";
 import TrangLamBai from "./modules/LearningSCL/Admin/Q&A/tranglambai";
 import NhanSuSoanTable from "./modules/NhanSuSoan";
+import QuanLyHDTable from "./modules/QuanLyHoaDon";
 
 function App() {
   return (
@@ -389,6 +390,18 @@ function App() {
             <PrivateRoute allowRoles={[20, 26, 19]}>
               <MainLayout>
                 <PhieuSoanHome />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+
+         <Route
+          path="/quanlyhd"
+          element={
+            <PrivateRoute allowRoles={[55]}>
+              <MainLayout>
+                <QuanLyHDTable />
               </MainLayout>
             </PrivateRoute>
           }
