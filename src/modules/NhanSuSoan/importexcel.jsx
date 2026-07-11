@@ -10,12 +10,14 @@ import {
   X,
   FileSpreadsheet,
   AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 
 /**
- * Cột theo đúng file mẫu:
- * Số Đơn Hàng | Document No | Mã NXĐ | Nơi Xuất Đến | CHUYEN | LICH DI HANG
+ * Các cột hệ thống có thể nhận diện khi đọc file import (giữ đủ 6 cột để
+ * tương thích ngược với các file cũ có sẵn Nơi Xuất Đến/CHUYEN/LICH DI HANG,
+ * dù bây giờ các giá trị này sẽ được TỰ ĐỘNG tra từ DataCH theo Mã NXĐ).
  */
 const COLUMNS = [
   { key: "soDonHang", header: "Số Đơn Hàng", width: 18 },
@@ -24,6 +26,17 @@ const COLUMNS = [
   { key: "noiXuatDen", header: "Nơi Xuất Đến", width: 26 },
   { key: "chuyen", header: "CHUYEN", width: 14 },
   { key: "lichDiHang", header: "LICH DI HANG", width: 16 },
+];
+
+/**
+ * Cột hiển thị trong file TEMPLATE tải về — chỉ 3 cột người dùng cần nhập.
+ * Nơi Xuất Đến / CHUYEN / LICH DI HANG được tự động tra từ DataCH theo Mã NXĐ
+ * ở phía server khi import, nên không cần có trong template nữa.
+ */
+const TEMPLATE_COLUMNS = [
+  { key: "soDonHang", header: "Số Đơn Hàng", width: 18 },
+  { key: "documentNo", header: "Document No", width: 18 },
+  { key: "maNXD", header: "Mã NXĐ", width: 14 },
 ];
 
 const SHEET_NAME = "NhanSuSoan";
@@ -83,27 +96,17 @@ const unwrapCellValue = (rawValue) => {
   return value;
 };
 
-/** Tìm các soDonHang bị lặp lại trong 1 mảng rows (không phân biệt hoa/thường) */
-const findDuplicatesInRows = (rows) => {
-  const seen = new Map();
-  const dups = new Set();
-  rows.forEach((row) => {
-    const code = (row.soDonHang || "").toString().trim();
-    if (!code) return;
-    const key = code.toUpperCase();
-    if (seen.has(key)) dups.add(code);
-    else seen.set(key, code);
-  });
-  return Array.from(dups);
-};
-
 const ImportNhanSuSoan = ({ onImported }) => {
   const fileInputRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [importError, setImportError] = useState(null); // { message, duplicates? }
+
+  // Kết quả trả về sau khi gọi API import:
+  // - { error: string } khi lỗi hẳn (không đọc được file, lỗi server...)
+  // - { insertedCount: number, skipped: [{ soDonHang, reason }] } khi có kết quả
+  const [importResult, setImportResult] = useState(null);
 
   // Khoá scroll nền khi modal mở + cho phép đóng bằng phím Esc
   useEffect(() => {
@@ -123,11 +126,13 @@ const ImportNhanSuSoan = ({ onImported }) => {
 
   const resetAndClose = () => {
     setSelectedFile(null);
-    setImportError(null);
+    setImportResult(null);
     setOpen(false);
   };
 
-  /** Xuất file template Excel bằng exceljs */
+  /** Xuất file template Excel bằng exceljs — chỉ 3 cột người dùng cần nhập.
+   *  Tô màu header theo TỪNG Ô (không gán fill cho cả Row) để tránh màu nền
+   *  bị "tràn" thành 1 dải kẻ ngang hết bảng tính trong Excel. */
   const handleDownloadTemplate = async () => {
     setExporting(true);
     try {
@@ -136,41 +141,57 @@ const ImportNhanSuSoan = ({ onImported }) => {
       workbook.created = new Date();
 
       const sheet = workbook.addWorksheet(SHEET_NAME);
-      sheet.columns = COLUMNS.map((col) => ({
+      sheet.columns = TEMPLATE_COLUMNS.map((col) => ({
         header: col.header,
         key: col.key,
         width: col.width,
       }));
 
+      // Style header: chỉ áp dụng cho từng ô trong phạm vi cột đang dùng,
+      // KHÔNG dùng headerRow.fill (gây tô màu tràn hết dòng trong Excel).
       const headerRow = sheet.getRow(1);
-      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      headerRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF1E293B" },
-      };
-      headerRow.alignment = { vertical: "middle", horizontal: "center" };
       headerRow.height = 22;
+      TEMPLATE_COLUMNS.forEach((_, idx) => {
+        const cell = headerRow.getCell(idx + 1);
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF1E293B" },
+        };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE2E8F0" } },
+          left: { style: "thin", color: { argb: "FFE2E8F0" } },
+          bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+          right: { style: "thin", color: { argb: "FFE2E8F0" } },
+        };
+      });
 
-      sheet.addRow({
+      const sampleRow = sheet.addRow({
         soDonHang: "TO17493199",
         documentNo: "TO17493199",
         maNXD: "2034",
-        noiXuatDen: "02034-CF HAU LAN",
-        chuyen: "SÁNG",
-        lichDiHang: "T7",
+      });
+      TEMPLATE_COLUMNS.forEach((_, idx) => {
+        const cell = sampleRow.getCell(idx + 1);
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE2E8F0" } },
+          left: { style: "thin", color: { argb: "FFE2E8F0" } },
+          bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+          right: { style: "thin", color: { argb: "FFE2E8F0" } },
+        };
       });
 
-      sheet.eachRow((row) => {
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: "thin", color: { argb: "FFE2E8F0" } },
-            left: { style: "thin", color: { argb: "FFE2E8F0" } },
-            bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
-            right: { style: "thin", color: { argb: "FFE2E8F0" } },
-          };
-        });
-      });
+      // Ghi chú hướng dẫn — gộp ô trong đúng phạm vi 3 cột, không style border
+      // để không bị nhầm là ô nhập liệu.
+      const noteRow = sheet.addRow({});
+      const lastCol = String.fromCharCode(64 + TEMPLATE_COLUMNS.length); // A/B/C...
+      sheet.mergeCells(`A${noteRow.number}:${lastCol}${noteRow.number}`);
+      const noteCell = sheet.getCell(`A${noteRow.number}`);
+      noteCell.value =
+        "* Nơi Xuất Đến, Chuyến, Lịch đi hàng sẽ được hệ thống tự động điền theo Mã NXĐ khi import.";
+      noteCell.font = { italic: true, size: 10, color: { argb: "FF64748B" } };
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
@@ -199,7 +220,7 @@ const ImportNhanSuSoan = ({ onImported }) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      setImportError(null);
+      setImportResult(null);
     }
   };
 
@@ -208,15 +229,22 @@ const ImportNhanSuSoan = ({ onImported }) => {
     const file = e.dataTransfer.files?.[0];
     if (file) {
       setSelectedFile(file);
-      setImportError(null);
+      setImportResult(null);
     }
   };
 
-  /** Đọc file Excel bằng exceljs → map theo header → gọi API import */
+  /**
+   * Đọc file Excel bằng exceljs → map theo header → gọi API import.
+   * Vẫn nhận diện đủ 6 cột (kể cả Nơi Xuất Đến/CHUYEN/LICH DI HANG) để tương
+   * thích ngược nếu người dùng dùng file cũ, nhưng template mới chỉ có 3 cột.
+   * Không tự chặn trùng ở client nữa: gửi hết dữ liệu hợp lệ lên server,
+   * server sẽ tự tra Nơi Xuất Đến/Chuyến/Lịch đi hàng theo Mã NXĐ, bỏ qua
+   * dòng trùng và trả về danh sách đã thêm + danh sách bị bỏ qua kèm lý do.
+   */
   const handleConfirmImport = async () => {
     if (!selectedFile) return;
 
-    setImportError(null);
+    setImportResult(null);
     setImporting(true);
     try {
       const buffer = await selectedFile.arrayBuffer();
@@ -225,7 +253,7 @@ const ImportNhanSuSoan = ({ onImported }) => {
 
       const sheet = workbook.worksheets[0];
       if (!sheet) {
-        setImportError({ message: "File Excel không có sheet nào." });
+        setImportResult({ error: "File Excel không có sheet nào." });
         return;
       }
 
@@ -238,8 +266,8 @@ const ImportNhanSuSoan = ({ onImported }) => {
       });
 
       if (Object.keys(colIndexToKey).length === 0) {
-        setImportError({
-          message:
+        setImportResult({
+          error:
             "Không nhận diện được cột nào khớp với template. Vui lòng dùng đúng file mẫu.",
         });
         return;
@@ -266,17 +294,7 @@ const ImportNhanSuSoan = ({ onImported }) => {
       });
 
       if (!rows.length) {
-        setImportError({ message: "File Excel không có dữ liệu." });
-        return;
-      }
-
-      // Kiểm tra trùng số đơn hàng NGAY TRONG FILE trước khi gửi lên server
-      const dupInFile = findDuplicatesInRows(rows);
-      if (dupInFile.length > 0) {
-        setImportError({
-          message: `Phát hiện ${dupInFile.length} số đơn hàng bị trùng ngay trong file. Vui lòng sửa lại rồi import lại.`,
-          duplicates: dupInFile,
-        });
+        setImportResult({ error: "File Excel không có dữ liệu." });
         return;
       }
 
@@ -287,27 +305,30 @@ const ImportNhanSuSoan = ({ onImported }) => {
         tgImport: now,
       }));
 
-      await nhanSuSoanService.importManyNhanSuSoan(rowsWithImportTime);
-      alert(`Import thành công ${rows.length} dòng.`);
+      const res =
+        await nhanSuSoanService.importManyNhanSuSoan(rowsWithImportTime);
+      const resData = res?.data || res; // tuỳ service trả về response hay response.data
+
+      const insertedCount = resData?.inserted?.length ?? 0;
+      const skipped = resData?.skipped || [];
+
+      setImportResult({ insertedCount, skipped });
       onImported?.();
-      resetAndClose();
+
+      // Không có dòng nào bị bỏ qua -> đóng modal luôn cho gọn
+      // Có dòng bị bỏ qua -> giữ modal mở để xem danh sách, chỉ xoá file đã chọn
+      if (skipped.length === 0) {
+        resetAndClose();
+      } else {
+        setSelectedFile(null);
+      }
     } catch (error) {
       console.error("Lỗi import Excel:", error);
-
-      // Bắt lỗi trùng số đơn hàng trả về từ backend (400/409 kèm 'duplicates')
-      const resData = error?.response?.data;
-      if (resData?.duplicates?.length > 0) {
-        setImportError({
-          message: resData.message || "Có số đơn hàng bị trùng.",
-          duplicates: resData.duplicates,
-        });
-      } else if (resData?.message) {
-        setImportError({ message: resData.message });
-      } else {
-        setImportError({
-          message: "Import thất bại. Vui lòng kiểm tra lại file.",
-        });
-      }
+      setImportResult({
+        error:
+          error?.response?.data?.message ||
+          "Import thất bại. Vui lòng kiểm tra lại file.",
+      });
     } finally {
       setImporting(false);
     }
@@ -337,6 +358,11 @@ const ImportNhanSuSoan = ({ onImported }) => {
 
         {/* Body */}
         <div className="space-y-4 overflow-y-auto px-5 py-4">
+          <p className="-mb-2 text-[11px] text-slate-400">
+            Chỉ cần nhập Số Đơn Hàng, Document No, Mã NXĐ — Nơi Xuất Đến,
+            Chuyến, Lịch đi hàng sẽ tự động điền theo Mã NXĐ khi import.
+          </p>
+
           <button
             onClick={handleDownloadTemplate}
             disabled={exporting}
@@ -386,23 +412,46 @@ const ImportNhanSuSoan = ({ onImported }) => {
             )}
           </div>
 
-          {/* Lỗi trùng số đơn hàng / lỗi import khác */}
-          {importError && (
+          {/* Lỗi hẳn (không đọc được file, lỗi server...) */}
+          {importResult?.error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
               <p className="flex items-start gap-1.5 text-xs font-medium text-red-700">
                 <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
-                {importError.message}
+                {importResult.error}
               </p>
-              {importError.duplicates?.length > 0 && (
-                <div className="mt-2 flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
-                  {importError.duplicates.map((code) => (
-                    <span
-                      key={code}
-                      className="rounded-md border border-red-300 bg-white px-1.5 py-0.5 text-xs font-semibold text-red-600"
-                    >
-                      {code}
-                    </span>
-                  ))}
+            </div>
+          )}
+
+          {/* Kết quả import: số dòng đã thêm + danh sách bị bỏ qua (nếu có) */}
+          {importResult && !importResult.error && (
+            <div className="space-y-2">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                <CheckCircle2 size={14} className="flex-shrink-0" />
+                Đã thêm {importResult.insertedCount} phiếu thành công
+                {importResult.skipped?.length > 0 &&
+                  `, bỏ qua ${importResult.skipped.length} phiếu`}
+                .
+              </p>
+
+              {importResult.skipped?.length > 0 && (
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-700">
+                    <AlertTriangle size={14} className="flex-shrink-0" />
+                    Danh sách bị bỏ qua:
+                  </p>
+                  <ul className="space-y-1">
+                    {importResult.skipped.map((s, idx) => (
+                      <li
+                        key={`${s.soDonHang}-${idx}`}
+                        className="flex items-center justify-between gap-2 text-xs text-amber-800"
+                      >
+                        <span className="font-semibold">{s.soDonHang}</span>
+                        <span className="text-right text-amber-600">
+                          {s.reason}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>
@@ -415,7 +464,7 @@ const ImportNhanSuSoan = ({ onImported }) => {
             onClick={resetAndClose}
             className="rounded-lg px-3.5 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
           >
-            Huỷ
+            {importResult && !importResult.error ? "Đóng" : "Huỷ"}
           </button>
           <button
             onClick={handleConfirmImport}
@@ -445,6 +494,6 @@ const ImportNhanSuSoan = ({ onImported }) => {
         createPortal(modal, document.body)}
     </>
   );
-};  
+};
 
 export default ImportNhanSuSoan;

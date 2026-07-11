@@ -17,6 +17,8 @@ import {
   CalendarDays,
   X,
   PackageSearch,
+  Table2,
+  LayoutDashboard,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
@@ -28,6 +30,7 @@ import ScanHoanThanh from "./scanhoanthanh";
 import GopPhieu from "./gopphieu";
 import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 import HuyGiaoPhieu from "./huygiaophieu";
+import NhanSuSoanDashboard from "./dashboard";
 
 const TRANG_THAI_OPTIONS = ["Chưa soạn", "Đang soạn", "Hoàn thành"];
 
@@ -321,6 +324,36 @@ const DateRangeFilter = ({
   );
 };
 
+/** Tab chuyển đổi giữa Bảng dữ liệu và Dashboard */
+const ViewTabs = ({ view, onChange }) => {
+  const tabs = [
+    { key: "table", label: "Bảng dữ liệu", icon: Table2 },
+    { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  ];
+  return (
+    <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200">
+      {tabs.map(({ key, label, icon: Icon }) => {
+        const active = view === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(key)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all ${
+              active
+                ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Icon size={15} />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 const NhanSuSoanTable = forwardRef(
   (
     {
@@ -329,6 +362,7 @@ const NhanSuSoanTable = forwardRef(
     },
     ref,
   ) => {
+    const [view, setView] = useState("table"); // "table" | "dashboard"
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -361,6 +395,32 @@ const NhanSuSoanTable = forwardRef(
       [filters],
     );
 
+    // Gom các phiếu đã gộp (cùng soPhieuGop) đứng cạnh nhau và đẩy lên đầu bảng.
+    // Phiếu chưa gộp (soPhieuGop rỗng) giữ nguyên thứ tự, xếp sau các nhóm đã gộp.
+    const sortedItems = useMemo(() => {
+      if (!items.length) return items;
+
+      const groupMap = new Map(); // soPhieuGop -> mảng item
+      const groupOrder = []; // thứ tự xuất hiện đầu tiên của mỗi soPhieuGop
+      const ungrouped = [];
+
+      items.forEach((item) => {
+        const key = (item.soPhieuGop || "").toString().trim();
+        if (!key) {
+          ungrouped.push(item);
+          return;
+        }
+        if (!groupMap.has(key)) {
+          groupMap.set(key, []);
+          groupOrder.push(key);
+        }
+        groupMap.get(key).push(item);
+      });
+
+      const grouped = groupOrder.flatMap((key) => groupMap.get(key));
+      return [...grouped, ...ungrouped];
+    }, [items]);
+
     const fetchNhanSuSoan = useCallback(async () => {
       setLoading(true);
       setError("");
@@ -382,8 +442,10 @@ const NhanSuSoanTable = forwardRef(
     }, [page, limit, filters]);
 
     useEffect(() => {
-      fetchNhanSuSoan();
-    }, [fetchNhanSuSoan]);
+      // Chỉ cần gọi API bảng khi đang ở tab "table";
+      // tab "dashboard" tự quản lý fetch dữ liệu riêng của nó.
+      if (view === "table") fetchNhanSuSoan();
+    }, [fetchNhanSuSoan, view]);
 
     useImperativeHandle(ref, () => ({ fetchNhanSuSoan }));
 
@@ -407,431 +469,477 @@ const NhanSuSoanTable = forwardRef(
             </h1>
             <p className="text-sm text-slate-500">{description}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <GopPhieu onSuccess={fetchNhanSuSoan} />
+          <div className="flex flex-wrap items-center gap-3">
+            <ViewTabs view={view} onChange={setView} />
 
-            <ScanGiaoPhieu onSuccess={fetchNhanSuSoan} />
+            {view === "table" && (
+              <div className="flex flex-wrap items-center gap-2">
+                <GopPhieu onSuccess={fetchNhanSuSoan} />
 
-            <HuyGiaoPhieu onSuccess={fetchNhanSuSoan} />
+                <ScanGiaoPhieu onSuccess={fetchNhanSuSoan} />
 
-            <ScanHoanThanh onSuccess={fetchNhanSuSoan} />
+                <HuyGiaoPhieu onSuccess={fetchNhanSuSoan} />
 
-            <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
+                <ScanHoanThanh onSuccess={fetchNhanSuSoan} />
+
+                <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Toolbar filter: khoảng ngày TG import */}
-        <div className="flex flex-wrap items-center gap-3">
-          <DateRangeFilter
-            label="Lọc theo TG import"
-            startValue={filters.tuNgay}
-            endValue={filters.denNgay}
-            onChange={(start, end) => {
-              setFilters((prev) => ({ ...prev, tuNgay: start, denNgay: end }));
-              setPage(1);
-            }}
-            onClear={() => {
-              setFilters((prev) => ({ ...prev, tuNgay: "", denNgay: "" }));
-              setPage(1);
-            }}
-          />
-        </div>
+        {/* Tab Dashboard: render component riêng, tự fetch & tự lọc ngày */}
+        {view === "dashboard" && <NhanSuSoanDashboard />}
 
-        {/* Table */}
-        <div className="overflow-auto rounded-2xl border border-slate-200 shadow-md ring-1 ring-slate-100">
-          <table className="min-w-full text-xs md:text-sm">
-            <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 backdrop-blur">
-              {/* Header row */}
-              <tr className="border-b-2 border-slate-200">
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  Số đơn hàng
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  Số phiếu gộp
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  Mã NXĐ
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  Nơi xuất đến
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  Chuyến
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  Lịch đi hàng
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  NV soạn
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  NV KC
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  Kiện
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  Dòng
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  Trạng thái
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  TG import
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  TG hoàn thành
-                </th>
-                <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                  TG nhận phiếu
-                </th>
-              </tr>
+        {/* Tab Bảng dữ liệu: giữ nguyên toàn bộ bảng + filter + phân trang cũ */}
+        {view === "table" && (
+          <>
+            {/* Toolbar filter: khoảng ngày TG import */}
+            <div className="flex flex-wrap items-center gap-3">
+              <DateRangeFilter
+                label="Lọc theo TG import"
+                startValue={filters.tuNgay}
+                endValue={filters.denNgay}
+                onChange={(start, end) => {
+                  setFilters((prev) => ({
+                    ...prev,
+                    tuNgay: start,
+                    denNgay: end,
+                  }));
+                  setPage(1);
+                }}
+                onClear={() => {
+                  setFilters((prev) => ({ ...prev, tuNgay: "", denNgay: "" }));
+                  setPage(1);
+                }}
+              />
+            </div>
 
-              {/* Search row - ngay dưới header */}
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-1.5">
-                  <input
-                    type="text"
-                    value={filters.soDonHang}
-                    onChange={(e) =>
-                      handleFilterChange("soDonHang", e.target.value)
-                    }
-                    placeholder="Lọc..."
-                    className={filterInputCls}
-                  />
-                </th>
-                <th className="px-3 py-1.5">
-                  <input
-                    type="text"
-                    value={filters.soPhieuGop}
-                    onChange={(e) =>
-                      handleFilterChange("soPhieuGop", e.target.value)
-                    }
-                    placeholder="Lọc..."
-                    className={filterInputCls}
-                  />
-                </th>
-                <th className="px-3 py-1.5">
-                  <input
-                    type="text"
-                    value={filters.maNXD}
-                    onChange={(e) =>
-                      handleFilterChange("maNXD", e.target.value)
-                    }
-                    placeholder="Lọc..."
-                    className={filterInputCls}
-                  />
-                </th>
-                <th className="px-3 py-1.5">
-                  <input
-                    type="text"
-                    value={filters.noiXuatDen}
-                    onChange={(e) =>
-                      handleFilterChange("noiXuatDen", e.target.value)
-                    }
-                    placeholder="Lọc..."
-                    className={filterInputCls}
-                  />
-                </th>
-                <th className="px-3 py-1.5">
-                  <input
-                    type="text"
-                    value={filters.chuyen}
-                    onChange={(e) =>
-                      handleFilterChange("chuyen", e.target.value)
-                    }
-                    placeholder="Lọc..."
-                    className={filterInputCls}
-                  />
-                </th>
-                <th className="px-3 py-1.5">
-                  <input
-                    type="text"
-                    value={filters.lichDiHang}
-                    onChange={(e) =>
-                      handleFilterChange("lichDiHang", e.target.value)
-                    }
-                    placeholder="Lọc..."
-                    className={filterInputCls}
-                  />
-                </th>
-                <th className="px-3 py-1.5">
-                  <input
-                    type="text"
-                    value={filters.nvSoan}
-                    onChange={(e) =>
-                      handleFilterChange("nvSoan", e.target.value)
-                    }
-                    placeholder="Lọc mã NV..."
-                    className={filterInputCls}
-                  />
-                </th>
-                <th className="px-3 py-1.5">
-                  <input
-                    type="text"
-                    value={filters.nvKC}
-                    onChange={(e) => handleFilterChange("nvKC", e.target.value)}
-                    placeholder="Lọc mã NV..."
-                    className={filterInputCls}
-                  />
-                </th>
-                <th className="px-3 py-1.5" />
-                <th className="px-3 py-1.5" />
-                <th className="px-3 py-1.5">
+            {/* Table */}
+            <div className="overflow-auto rounded-2xl border border-slate-200 shadow-md ring-1 ring-slate-100">
+              <table className="min-w-full text-xs md:text-sm">
+                <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 backdrop-blur">
+                  {/* Header row */}
+                  <tr className="border-b-2 border-slate-200">
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Số đơn hàng
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Số phiếu gộp
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Mã NXĐ
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Nơi xuất đến
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Chuyến
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Lịch đi hàng
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      NV soạn
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      NV KC
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Kiện
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Dòng
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Trạng thái
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      TG import
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      TG hoàn thành
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      TG nhận phiếu
+                    </th>
+                  </tr>
+
+                  {/* Search row - ngay dưới header */}
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-3 py-1.5">
+                      <input
+                        type="text"
+                        value={filters.soDonHang}
+                        onChange={(e) =>
+                          handleFilterChange("soDonHang", e.target.value)
+                        }
+                        placeholder="Lọc..."
+                        className={filterInputCls}
+                      />
+                    </th>
+                    <th className="px-3 py-1.5">
+                      <input
+                        type="text"
+                        value={filters.soPhieuGop}
+                        onChange={(e) =>
+                          handleFilterChange("soPhieuGop", e.target.value)
+                        }
+                        placeholder="Lọc..."
+                        className={filterInputCls}
+                      />
+                    </th>
+                    <th className="px-3 py-1.5">
+                      <input
+                        type="text"
+                        value={filters.maNXD}
+                        onChange={(e) =>
+                          handleFilterChange("maNXD", e.target.value)
+                        }
+                        placeholder="Lọc..."
+                        className={filterInputCls}
+                      />
+                    </th>
+                    <th className="px-3 py-1.5">
+                      <input
+                        type="text"
+                        value={filters.noiXuatDen}
+                        onChange={(e) =>
+                          handleFilterChange("noiXuatDen", e.target.value)
+                        }
+                        placeholder="Lọc..."
+                        className={filterInputCls}
+                      />
+                    </th>
+                    <th className="px-3 py-1.5">
+                      <input
+                        type="text"
+                        value={filters.chuyen}
+                        onChange={(e) =>
+                          handleFilterChange("chuyen", e.target.value)
+                        }
+                        placeholder="Lọc..."
+                        className={filterInputCls}
+                      />
+                    </th>
+                    <th className="px-3 py-1.5">
+                      <input
+                        type="text"
+                        value={filters.lichDiHang}
+                        onChange={(e) =>
+                          handleFilterChange("lichDiHang", e.target.value)
+                        }
+                        placeholder="Lọc..."
+                        className={filterInputCls}
+                      />
+                    </th>
+                    <th className="px-3 py-1.5">
+                      <input
+                        type="text"
+                        value={filters.nvSoan}
+                        onChange={(e) =>
+                          handleFilterChange("nvSoan", e.target.value)
+                        }
+                        placeholder="Lọc mã NV..."
+                        className={filterInputCls}
+                      />
+                    </th>
+                    <th className="px-3 py-1.5">
+                      <input
+                        type="text"
+                        value={filters.nvKC}
+                        onChange={(e) =>
+                          handleFilterChange("nvKC", e.target.value)
+                        }
+                        placeholder="Lọc mã NV..."
+                        className={filterInputCls}
+                      />
+                    </th>
+                    <th className="px-3 py-1.5" />
+                    <th className="px-3 py-1.5" />
+                    <th className="px-3 py-1.5">
+                      <select
+                        value={filters.trangThai}
+                        onChange={(e) =>
+                          handleFilterChange("trangThai", e.target.value)
+                        }
+                        className={filterInputCls}
+                      >
+                        <option value="">Tất cả</option>
+                        {TRANG_THAI_OPTIONS.map((tt) => (
+                          <option key={tt} value={tt}>
+                            {tt}
+                          </option>
+                        ))}
+                      </select>
+                    </th>
+                    <th className="px-3 py-1.5" />
+                    <th className="px-3 py-1.5">
+                      <DateRangeFilter
+                        compact
+                        label="Lọc ngày..."
+                        startValue={filters.tuNgayHT}
+                        endValue={filters.denNgayHT}
+                        onChange={(start, end) => {
+                          setFilters((prev) => ({
+                            ...prev,
+                            tuNgayHT: start,
+                            denNgayHT: end,
+                          }));
+                          setPage(1);
+                        }}
+                        onClear={() => {
+                          setFilters((prev) => ({
+                            ...prev,
+                            tuNgayHT: "",
+                            denNgayHT: "",
+                          }));
+                          setPage(1);
+                        }}
+                      />
+                    </th>
+                    <th className="px-3 py-1.5">
+                      <DateRangeFilter
+                        compact
+                        label="Lọc ngày..."
+                        startValue={filters.tuNgayNP}
+                        endValue={filters.denNgayNP}
+                        onChange={(start, end) => {
+                          setFilters((prev) => ({
+                            ...prev,
+                            tuNgayNP: start,
+                            denNgayNP: end,
+                          }));
+                          setPage(1);
+                        }}
+                        onClear={() => {
+                          setFilters((prev) => ({
+                            ...prev,
+                            tuNgayNP: "",
+                            denNgayNP: "",
+                          }));
+                          setPage(1);
+                        }}
+                      />
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {loading &&
+                    Array.from({ length: 6 }).map((_, i) => (
+                      <tr
+                        key={`skeleton-${i}`}
+                        className="border-b border-slate-100"
+                      >
+                        {Array.from({ length: 14 }).map((__, j) => (
+                          <td key={`sk-${i}-${j}`} className="px-3 py-3">
+                            <div className="h-3 w-24 max-w-full animate-pulse rounded bg-gradient-to-r from-slate-200 to-slate-100" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+
+                  {!loading && error && (
+                    <tr>
+                      <td
+                        colSpan={14}
+                        className="px-3 py-8 text-center text-rose-600 font-medium"
+                      >
+                        {error}
+                      </td>
+                    </tr>
+                  )}
+
+                  {!loading && !error && items.length === 0 && (
+                    <tr>
+                      <td colSpan={14} className="px-3 py-6">
+                        <EmptyState />
+                      </td>
+                    </tr>
+                  )}
+
+                  {!loading &&
+                    !error &&
+                    sortedItems.length > 0 &&
+                    sortedItems.map((item, idx) => {
+                      const key = (item.soPhieuGop || "").toString().trim();
+                      const prevKey = (sortedItems[idx - 1]?.soPhieuGop || "")
+                        .toString()
+                        .trim();
+                      // Vẽ đường phân cách đậm hơn khi chuyển sang nhóm phiếu gộp khác
+                      const isGroupBoundary = key !== prevKey && idx !== 0;
+
+                      return (
+                        <tr
+                          key={item._id}
+                          className={`border-b border-slate-100 transition-colors duration-150 hover:bg-blue-50/70 hover:shadow-[inset_3px_0_0_0_theme(colors.blue.400)] ${
+                            key
+                              ? "bg-indigo-50/40 even:bg-indigo-50/60"
+                              : "even:bg-slate-50/70"
+                          } ${
+                            isGroupBoundary
+                              ? "border-t-2 border-t-indigo-200"
+                              : ""
+                          }`}
+                        >
+                          <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-800">
+                            {item.soDonHang}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+                            {item.soPhieuGop ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold text-indigo-700">
+                                {item.soPhieuGop}
+                              </span>
+                            ) : (
+                              ""
+                            )}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+                            {item.maNXD || ""}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+                            {item.noiXuatDen || ""}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <ChuyenBadge value={item.chuyen} />
+                          </td>
+                          {/* lichDiHang là text (VD: "T7/CN"), không phải ngày tháng
+                              -> hiển thị trực tiếp, KHÔNG dùng formatDate() */}
+                          <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+                            {item.lichDiHang || ""}
+                          </td>
+                          <td className="px-3 py-2">
+                            <NhanVienChips
+                              list={item.nvSoanChiTiet || item.nvSoan}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <NhanVienChips
+                              list={item.nvKCChiTiet || item.nvKC}
+                            />
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span className="inline-block rounded-lg bg-gradient-to-r from-green-100 to-emerald-50 px-2 py-1 font-bold text-green-700 shadow-sm">
+                              {item.kien ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span className="inline-block rounded-lg bg-gradient-to-r from-blue-100 to-sky-50 px-2 py-1 font-bold text-blue-700 shadow-sm">
+                              {item.dong ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold whitespace-nowrap ${
+                                TRANG_THAI_STYLE[item.trangThai] ||
+                                TRANG_THAI_STYLE["Chưa soạn"]
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  TRANG_THAI_DOT[item.trangThai] ||
+                                  TRANG_THAI_DOT["Chưa soạn"]
+                                }`}
+                              />
+                              {item.trangThai}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-slate-500">
+                            {formatDateTime(item.tgImport)}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-slate-500">
+                            {formatDateTime(item.tgHoanThanh)}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-slate-500">
+                            {formatDateTime(item.tgNhanPhieu)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {!hasActiveFilter ? (
+              <div className="flex flex-col gap-3 rounded-xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-200 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm text-slate-600">
+                  Đang hiển thị <b className="text-blue-700">{items.length}</b>{" "}
+                  / <b className="text-slate-800">{total}</b> bản ghi
+                </div>
+                <div className="flex items-center gap-2">
                   <select
-                    value={filters.trangThai}
-                    onChange={(e) =>
-                      handleFilterChange("trangThai", e.target.value)
-                    }
-                    className={filterInputCls}
+                    value={limit}
+                    onChange={(e) => {
+                      setPage(1);
+                      setLimit(Number(e.target.value));
+                    }}
+                    className="h-10 rounded-xl border border-teal-300 bg-teal-50 px-3 font-medium text-teal-700 shadow-sm transition-shadow hover:bg-teal-100 hover:shadow-md"
                   >
-                    <option value="">Tất cả</option>
-                    {TRANG_THAI_OPTIONS.map((tt) => (
-                      <option key={tt} value={tt}>
-                        {tt}
+                    {[10, 20, 50, 100].map((n) => (
+                      <option key={n} value={n}>
+                        {n}/trang
                       </option>
                     ))}
                   </select>
-                </th>
-                <th className="px-3 py-1.5" />
-                <th className="px-3 py-1.5">
-                  <DateRangeFilter
-                    compact
-                    label="Lọc ngày..."
-                    startValue={filters.tuNgayHT}
-                    endValue={filters.denNgayHT}
-                    onChange={(start, end) => {
-                      setFilters((prev) => ({
-                        ...prev,
-                        tuNgayHT: start,
-                        denNgayHT: end,
-                      }));
-                      setPage(1);
-                    }}
-                    onClear={() => {
-                      setFilters((prev) => ({
-                        ...prev,
-                        tuNgayHT: "",
-                        denNgayHT: "",
-                      }));
-                      setPage(1);
-                    }}
-                  />
-                </th>
-                <th className="px-3 py-1.5">
-                  <DateRangeFilter
-                    compact
-                    label="Lọc ngày..."
-                    startValue={filters.tuNgayNP}
-                    endValue={filters.denNgayNP}
-                    onChange={(start, end) => {
-                      setFilters((prev) => ({
-                        ...prev,
-                        tuNgayNP: start,
-                        denNgayNP: end,
-                      }));
-                      setPage(1);
-                    }}
-                    onClear={() => {
-                      setFilters((prev) => ({
-                        ...prev,
-                        tuNgayNP: "",
-                        denNgayNP: "",
-                      }));
-                      setPage(1);
-                    }}
-                  />
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {loading &&
-                Array.from({ length: 6 }).map((_, i) => (
-                  <tr
-                    key={`skeleton-${i}`}
-                    className="border-b border-slate-100"
-                  >
-                    {Array.from({ length: 14 }).map((__, j) => (
-                      <td key={`sk-${i}-${j}`} className="px-3 py-3">
-                        <div className="h-3 w-24 max-w-full animate-pulse rounded bg-gradient-to-r from-slate-200 to-slate-100" />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-
-              {!loading && error && (
-                <tr>
-                  <td
-                    colSpan={14}
-                    className="px-3 py-8 text-center text-rose-600 font-medium"
-                  >
-                    {error}
-                  </td>
-                </tr>
-              )}
-
-              {!loading && !error && items.length === 0 && (
-                <tr>
-                  <td colSpan={14} className="px-3 py-6">
-                    <EmptyState />
-                  </td>
-                </tr>
-              )}
-
-              {!loading &&
-                !error &&
-                items.length > 0 &&
-                items.map((item) => {
-                  return (
-                    <tr
-                      key={item._id}
-                      className="border-b border-slate-100 even:bg-slate-50/70 transition-colors duration-150 hover:bg-blue-50/70 hover:shadow-[inset_3px_0_0_0_theme(colors.blue.400)]"
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPage(1)}
+                      disabled={page === 1}
+                      className="h-10 px-2 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-600 ring-1 ring-indigo-200 shadow-sm transition-all hover:from-indigo-100 hover:to-purple-100 hover:shadow-md disabled:opacity-40 disabled:hover:from-indigo-50 disabled:hover:to-purple-50"
                     >
-                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-800">
-                        {item.soDonHang}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-700">
-                        {item.soPhieuGop || ""}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-700">
-                        {item.maNXD || ""}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-700">
-                        {item.noiXuatDen || ""}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <ChuyenBadge value={item.chuyen} />
-                      </td>
-                      {/* lichDiHang là text (VD: "T7/CN"), không phải ngày tháng
-                          -> hiển thị trực tiếp, KHÔNG dùng formatDate() */}
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-700">
-                        {item.lichDiHang || ""}
-                      </td>
-                      <td className="px-3 py-2">
-                        <NhanVienChips
-                          list={item.nvSoanChiTiet || item.nvSoan}
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <NhanVienChips list={item.nvKCChiTiet || item.nvKC} />
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className="inline-block rounded-lg bg-gradient-to-r from-green-100 to-emerald-50 px-2 py-1 font-bold text-green-700 shadow-sm">
-                          {item.kien ?? 0}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className="inline-block rounded-lg bg-gradient-to-r from-blue-100 to-sky-50 px-2 py-1 font-bold text-blue-700 shadow-sm">
-                          {item.dong ?? 0}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold whitespace-nowrap ${
-                            TRANG_THAI_STYLE[item.trangThai] ||
-                            TRANG_THAI_STYLE["Chưa soạn"]
-                          }`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              TRANG_THAI_DOT[item.trangThai] ||
-                              TRANG_THAI_DOT["Chưa soạn"]
-                            }`}
-                          />
-                          {item.trangThai}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-500">
-                        {formatDateTime(item.tgImport)}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-500">
-                        {formatDateTime(item.tgHoanThanh)}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-500">
-                        {formatDateTime(item.tgNhanPhieu)}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {!hasActiveFilter ? (
-          <div className="flex flex-col gap-3 rounded-xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-200 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-slate-600">
-              Đang hiển thị <b className="text-blue-700">{items.length}</b> /{" "}
-              <b className="text-slate-800">{total}</b> bản ghi
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={limit}
-                onChange={(e) => {
-                  setPage(1);
-                  setLimit(Number(e.target.value));
-                }}
-                className="h-10 rounded-xl border border-teal-300 bg-teal-50 px-3 font-medium text-teal-700 shadow-sm transition-shadow hover:bg-teal-100 hover:shadow-md"
-              >
-                {[10, 20, 50, 100].map((n) => (
-                  <option key={n} value={n}>
-                    {n}/trang
-                  </option>
-                ))}
-              </select>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage(1)}
-                  disabled={page === 1}
-                  className="h-10 px-2 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-600 ring-1 ring-indigo-200 shadow-sm transition-all hover:from-indigo-100 hover:to-purple-100 hover:shadow-md disabled:opacity-40 disabled:hover:from-indigo-50 disabled:hover:to-purple-50"
-                >
-                  ⏮
-                </button>
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
-                >
-                  Trước
-                </button>
-                <span className="px-2 text-sm text-slate-600">Trang</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={maxPage}
-                  value={page}
-                  onChange={(e) => {
-                    const v = Number(e.target.value || 1);
-                    setPage(Math.min(Math.max(1, v), maxPage));
-                  }}
-                  className="h-10 w-16 rounded-xl border border-blue-300 bg-blue-50/50 px-2 text-center font-bold text-blue-700 shadow-sm focus:ring-2 focus:ring-blue-300 outline-none"
-                />
-                <span className="px-1 text-sm text-slate-600">/ {maxPage}</span>
-                <button
-                  onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
-                  disabled={page >= maxPage}
-                  className="h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
-                >
-                  Sau
-                </button>
-                <button
-                  onClick={() => setPage(maxPage)}
-                  disabled={page >= maxPage}
-                  className="h-10 px-2 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-600 ring-1 ring-indigo-200 shadow-sm transition-all hover:from-indigo-100 hover:to-purple-100 hover:shadow-md disabled:opacity-40 disabled:hover:from-indigo-50 disabled:hover:to-purple-50"
-                >
-                  ⏭
-                </button>
+                      ⏮
+                    </button>
+                    <button
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
+                    >
+                      Trước
+                    </button>
+                    <span className="px-2 text-sm text-slate-600">Trang</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={maxPage}
+                      value={page}
+                      onChange={(e) => {
+                        const v = Number(e.target.value || 1);
+                        setPage(Math.min(Math.max(1, v), maxPage));
+                      }}
+                      className="h-10 w-16 rounded-xl border border-blue-300 bg-blue-50/50 px-2 text-center font-bold text-blue-700 shadow-sm focus:ring-2 focus:ring-blue-300 outline-none"
+                    />
+                    <span className="px-1 text-sm text-slate-600">
+                      / {maxPage}
+                    </span>
+                    <button
+                      onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
+                      disabled={page >= maxPage}
+                      className="h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
+                    >
+                      Sau
+                    </button>
+                    <button
+                      onClick={() => setPage(maxPage)}
+                      disabled={page >= maxPage}
+                      className="h-10 px-2 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-600 ring-1 ring-indigo-200 shadow-sm transition-all hover:from-indigo-100 hover:to-purple-100 hover:shadow-md disabled:opacity-40 disabled:hover:from-indigo-50 disabled:hover:to-purple-50"
+                    >
+                      ⏭
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center gap-3 text-sm py-4 px-6 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 rounded-xl border border-blue-200 shadow-sm">
-            <span className="font-medium text-slate-700">
-              Đang lọc: Hiển thị <b className="text-blue-600">{items.length}</b>{" "}
-              / <b className="text-slate-800">{total}</b> kết quả
-            </span>
-          </div>
+            ) : (
+              <div className="flex items-center justify-center gap-3 text-sm py-4 px-6 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 rounded-xl border border-blue-200 shadow-sm">
+                <span className="font-medium text-slate-700">
+                  Đang lọc: Hiển thị{" "}
+                  <b className="text-blue-600">{items.length}</b> /{" "}
+                  <b className="text-slate-800">{total}</b> kết quả
+                </span>
+              </div>
+            )}
+          </>
         )}
       </div>
     );

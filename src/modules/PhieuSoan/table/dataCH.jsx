@@ -150,6 +150,7 @@ const DataCHTable = forwardRef((props, ref) => {
 
     { key: "tench", label: "Tên Cửa Hàng" },
     { key: "chuyen", label: "Chuyến" },
+    { key: "lich_di_hang", label: "Lịch Đi Hàng" },
     { key: "ghi_chu_ch", label: "Ghi chú cửa hàng", editable: true },
     { key: "ngay_import", label: "Ngày Import" },
   ];

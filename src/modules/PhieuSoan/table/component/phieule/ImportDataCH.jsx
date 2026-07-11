@@ -19,7 +19,6 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Template");
 
-    // Thêm header row
     const headerRow = worksheet.addRow([
       "Số SD/TF",
       "Số Document",
@@ -27,13 +26,13 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
       "Quận",
       "Tên Cửa Hàng",
       "Chuyến",
+      "Lịch Đi Hàng",
       "Ghi chú cửa hàng",
     ]);
 
-    // Style cho header
     headerRow.height = 25;
 
-    for (let i = 1; i <= 7; i++) {
+    for (let i = 1; i <= 8; i++) {
       const cell = headerRow.getCell(i);
       cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = {
@@ -47,14 +46,14 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
       };
     }
 
-    // Set width cho từng cột
     worksheet.getColumn(1).width = 15;
     worksheet.getColumn(2).width = 15;
     worksheet.getColumn(3).width = 15;
     worksheet.getColumn(4).width = 15;
     worksheet.getColumn(5).width = 30;
     worksheet.getColumn(6).width = 10;
-    worksheet.getColumn(7).width = 30;
+    worksheet.getColumn(7).width = 18;
+    worksheet.getColumn(8).width = 30;
 
     // Thêm border
     const borderStyle = {
@@ -66,7 +65,7 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
 
     for (let i = 1; i <= worksheet.rowCount; i++) {
       const row = worksheet.getRow(i);
-      for (let j = 1; j <= 7; j++) {
+      for (let j = 1; j <= 8; j++) {
         const cell = row.getCell(j);
         cell.border = borderStyle;
       }
@@ -149,6 +148,7 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
         quan: String(row["Quận"] || "").trim(),
         tench: String(row["Tên Cửa Hàng"] || "").trim(),
         chuyen: String(row["Chuyến"] || "").trim(),
+        lich_di_hang: String(row["Lịch Đi Hàng"] || "").trim(),
         ghi_chu_ch: String(row["Ghi chú cửa hàng"] || "").trim(),
         ngay_import: currentDate,
       }));
@@ -188,10 +188,12 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
 
     try {
       // Validate dữ liệu bắt buộc
-      const invalidRows = fullData.filter((row) => !row.mach || !row.tench);
+      const invalidRows = fullData.filter(
+        (row) => !row.mach || !row.tench || !row.lich_di_hang,
+      );
       if (invalidRows.length > 0) {
         setError(
-          `Có ${invalidRows.length} dòng thiếu Mã Cửa Hàng hoặc Tên Cửa Hàng`,
+          `Có ${invalidRows.length} dòng thiếu Mã Cửa Hàng, Tên Cửa Hàng hoặc Lịch Đi Hàng`,
         );
         setImporting(false);
         return;
@@ -202,23 +204,27 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
       // ✅ CHIA THÀNH BATCHES (100 records/batch)
       const BATCH_SIZE = 100;
       const batches = chunkArray(fullData, BATCH_SIZE);
-      
+
       let successCount = 0;
       let errorCount = 0;
       const errorMessages = [];
 
-      console.log(`📦 Chia thành ${batches.length} batches (${BATCH_SIZE} records/batch)`);
+      console.log(
+        `📦 Chia thành ${batches.length} batches (${BATCH_SIZE} records/batch)`,
+      );
 
       // ✅ XỬ LÝ TỪNG BATCH
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
         const batch = batches[batchIndex];
-        
-        console.log(`📦 Đang xử lý batch ${batchIndex + 1}/${batches.length} (${batch.length} records)`);
+
+        console.log(
+          `📦 Đang xử lý batch ${batchIndex + 1}/${batches.length} (${batch.length} records)`,
+        );
 
         try {
           // ✅ GỌI API IMPORT HÀNG LOẠT
           const result = await dataCHService.importManyDataCH(batch);
-          
+
           // Xử lý kết quả từ backend
           if (result.stats) {
             successCount += result.stats.inserted || 0;
@@ -233,13 +239,14 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
             current: (batchIndex + 1) * BATCH_SIZE,
             total: fullData.length,
           });
-
         } catch (err) {
           console.error(`❌ Lỗi batch ${batchIndex + 1}:`, err);
-          
+
           // Nếu batch fail, thử import từng record trong batch đó
-          console.log(`⚠️ Batch ${batchIndex + 1} thất bại, thử import từng record...`);
-          
+          console.log(
+            `⚠️ Batch ${batchIndex + 1} thất bại, thử import từng record...`,
+          );
+
           for (let i = 0; i < batch.length; i++) {
             try {
               await dataCHService.createDataCH(batch[i]);
@@ -259,11 +266,13 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
 
         // ✅ DELAY NHỎ GIỮA CÁC BATCH ĐỂ TRÁNH OVERLOAD SERVER
         if (batchIndex < batches.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay
+          await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms delay
         }
       }
 
-      console.log(`✅ Import hoàn tất: ${successCount} thành công, ${errorCount} lỗi`);
+      console.log(
+        `✅ Import hoàn tất: ${successCount} thành công, ${errorCount} lỗi`,
+      );
 
       // Hiển thị kết quả
       if (errorCount > 0) {
@@ -335,7 +344,7 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
               <li>Tải file template Excel mẫu bằng nút bên dưới</li>
               <li>Điền dữ liệu vào file Excel theo đúng cột template</li>
               <li>Chọn file Excel đã điền để import vào hệ thống</li>
-              <li>Các cột bắt buộc: Mã Cửa Hàng, Tên Cửa Hàng</li>
+              <li>Các cột bắt buộc: Mã Cửa Hàng, Tên Cửa Hàng, Lịch Đi Hàng</li>
               <li className="text-green-700 font-medium">
                 ✓ Ngày import sẽ tự động lấy ngày hiện tại
               </li>
@@ -388,7 +397,8 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
                   Đang import...
                 </span>
                 <span className="text-sm text-blue-700">
-                  {Math.min(progress.current, progress.total).toLocaleString()} / {progress.total.toLocaleString()}
+                  {Math.min(progress.current, progress.total).toLocaleString()}{" "}
+                  / {progress.total.toLocaleString()}
                 </span>
               </div>
               <div className="w-full bg-blue-200 rounded-full h-2.5">
@@ -400,7 +410,11 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
                 ></div>
               </div>
               <p className="mt-2 text-xs text-blue-600">
-                {Math.min(Math.round((progress.current / progress.total) * 100), 100)}% hoàn thành
+                {Math.min(
+                  Math.round((progress.current / progress.total) * 100),
+                  100,
+                )}
+                % hoàn thành
               </p>
             </div>
           )}
@@ -444,6 +458,9 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
                         Chuyến
                       </th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">
+                        Lịch Đi Hàng
+                      </th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">
                         Ghi chú
                       </th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">
@@ -471,6 +488,9 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
                         </td>
                         <td className="px-3 py-2 text-slate-700">
                           {row.chuyen}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {row.lich_di_hang}
                         </td>
                         <td className="px-3 py-2 text-slate-700">
                           {row.ghi_chu_ch}
@@ -509,7 +529,10 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
                 Đang xử lý...
               </>
             ) : (
-              <>📤 Import {fullData.length > 0 && `(${fullData.length.toLocaleString()})`}</>
+              <>
+                📤 Import{" "}
+                {fullData.length > 0 && `(${fullData.length.toLocaleString()})`}
+              </>
             )}
           </button>
         </div>
