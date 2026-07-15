@@ -1,6 +1,13 @@
+/* eslint-disable react/display-name */
 /* eslint-disable react/prop-types */
 // components/phieusoan/NhanSuSoan/HuyGiaoPhieu.jsx
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   Undo2,
@@ -19,7 +26,7 @@ const TRANG_THAI_STYLE = {
   "Hoàn thành": "text-green-700 bg-green-50 border border-green-200",
 };
 
-const HuyGiaoPhieu = ({ onSuccess }) => {
+const HuyGiaoPhieu = forwardRef(({ onSuccess }, ref) => {
   const inputRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1); // 1: scan list, 2: xác nhận huỷ giao
@@ -87,6 +94,8 @@ const HuyGiaoPhieu = ({ onSuccess }) => {
     resetAll();
   };
 
+  useImperativeHandle(ref, () => ({ open: handleOpen }));
+
   /** Nhập/quét số đơn hàng rồi Enter → tìm phiếu, CHỈ CHO PHÉP phiếu đang
    *  ở trạng thái "Đang soạn" (đã giao cho NV nhưng chưa hoàn thành). */
   const handleScanSubmit = async (e) => {
@@ -94,7 +103,10 @@ const HuyGiaoPhieu = ({ onSuccess }) => {
     e.preventDefault();
 
     const code = scanValue.trim();
-    if (!code) return;
+    if (!code) {
+      goToConfirmStep();
+      return;
+    }
 
     if (
       scannedList.some(
@@ -396,6 +408,6 @@ const HuyGiaoPhieu = ({ onSuccess }) => {
         createPortal(modal, document.body)}
     </>
   );
-};
-
+});
+HuyGiaoPhieu.displayName = "HuyGiaoPhieu";
 export default HuyGiaoPhieu;

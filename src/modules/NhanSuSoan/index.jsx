@@ -374,7 +374,10 @@ const NhanSuSoanTable = forwardRef(
       tuNgay: getDefaultTuNgay(),
       denNgay: getDefaultDenNgay(),
     }));
-
+    const gopPhieuRef = useRef(null);
+    const scanGiaoPhieuRef = useRef(null);
+    const huyGiaoPhieuRef = useRef(null);
+    const scanHoanThanhRef = useRef(null);
     const hasActiveFilter = useMemo(
       () =>
         !!(
@@ -440,7 +443,36 @@ const NhanSuSoanTable = forwardRef(
         setLoading(false);
       }
     }, [page, limit, filters]);
+    useEffect(() => {
+      const handleGlobalShortcut = (e) => {
+        if (!e.altKey) return;
+        const tag = document.activeElement?.tagName;
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          document.activeElement?.isContentEditable
+        )
+          return;
 
+        const key = e.key.toLowerCase();
+        if (key === "z") {
+          e.preventDefault();
+          gopPhieuRef.current?.open();
+        } else if (key === "x") {
+          e.preventDefault();
+          scanGiaoPhieuRef.current?.open();
+        } else if (key === "c") {
+          e.preventDefault();
+          huyGiaoPhieuRef.current?.open();
+        } else if (key === "v") {
+          e.preventDefault();
+          scanHoanThanhRef.current?.open();
+        }
+      };
+      document.addEventListener("keydown", handleGlobalShortcut);
+      return () =>
+        document.removeEventListener("keydown", handleGlobalShortcut);
+    }, []);
     useEffect(() => {
       // Chỉ cần gọi API bảng khi đang ở tab "table";
       // tab "dashboard" tự quản lý fetch dữ liệu riêng của nó.
@@ -474,13 +506,19 @@ const NhanSuSoanTable = forwardRef(
 
             {view === "table" && (
               <div className="flex flex-wrap items-center gap-2">
-                <GopPhieu onSuccess={fetchNhanSuSoan} />
-
-                <ScanGiaoPhieu onSuccess={fetchNhanSuSoan} />
-
-                <HuyGiaoPhieu onSuccess={fetchNhanSuSoan} />
-
-                <ScanHoanThanh onSuccess={fetchNhanSuSoan} />
+                <GopPhieu ref={gopPhieuRef} onSuccess={fetchNhanSuSoan} />
+                <ScanGiaoPhieu
+                  ref={scanGiaoPhieuRef}
+                  onSuccess={fetchNhanSuSoan}
+                />
+                <HuyGiaoPhieu
+                  ref={huyGiaoPhieuRef}
+                  onSuccess={fetchNhanSuSoan}
+                />
+                <ScanHoanThanh
+                  ref={scanHoanThanhRef}
+                  onSuccess={fetchNhanSuSoan}
+                />
 
                 <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
               </div>

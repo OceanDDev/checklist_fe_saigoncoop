@@ -1,6 +1,12 @@
 /* eslint-disable react/prop-types */
 // components/phieusoan/NhanSuSoan/ScanGiaoPhieu.jsx
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   ScanLine,
@@ -20,7 +26,7 @@ const TRANG_THAI_STYLE = {
   "Hoàn thành": "text-green-700 bg-green-50 border border-green-200",
 };
 
-const ScanGiaoPhieu = ({ onSuccess }) => {
+const ScanGiaoPhieu = forwardRef(({ onSuccess }, ref) => {
   const inputRef = useRef(null);
   const nvInputRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -102,13 +108,17 @@ const ScanGiaoPhieu = ({ onSuccess }) => {
     resetAll();
   };
 
-  /** Nhập/quét số đơn hàng rồi Enter → tìm phiếu tương ứng và thêm vào danh sách */
+  useImperativeHandle(ref, () => ({ open: handleOpen }));
+
   const handleScanSubmit = async (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
 
     const code = scanValue.trim();
-    if (!code) return;
+    if (!code) {
+      goToConfirmStep();
+      return;
+    }
 
     if (
       scannedList.some(
@@ -143,15 +153,10 @@ const ScanGiaoPhieu = ({ onSuccess }) => {
       console.error("Lỗi tìm phiếu:", err);
       setScanError("Có lỗi khi tìm phiếu, thử lại.");
     } finally {
-      // Dừng khoảng 0.5s trước khi cho phép quét tiếp, tránh máy scan/người
-      // dùng bắn liên tiếp quá nhanh. Trong lúc này input vẫn đang disabled.
       await new Promise((resolve) => setTimeout(resolve, 500));
       setScanning(false);
-      // Việc focus lại ô input đã được xử lý bằng useEffect ở trên
-      // (chạy sau khi React render xong, đảm bảo input không còn bị disabled).
     }
   };
-
   const handleRemoveScanned = (id) => {
     setScannedList((prev) => prev.filter((it) => it._id !== id));
   };
@@ -465,7 +470,7 @@ const ScanGiaoPhieu = ({ onSuccess }) => {
         className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-orange-600 hover:shadow-md active:scale-[0.98]"
       >
         <ScanLine size={16} className="text-orange-50" />
-        Scan Giao Phiếu
+        Giao Phiếu
       </button>
 
       {open &&
@@ -473,6 +478,7 @@ const ScanGiaoPhieu = ({ onSuccess }) => {
         createPortal(modal, document.body)}
     </>
   );
-};
+});
 
+ScanGiaoPhieu.displayName = "ScanGiaoPhieu";
 export default ScanGiaoPhieu;

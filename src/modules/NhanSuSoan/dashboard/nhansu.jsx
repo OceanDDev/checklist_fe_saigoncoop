@@ -1,9 +1,17 @@
 /* eslint-disable react/prop-types */
 // components/phieusoan/NhanSuSoan/nhansu.jsx
-import { Fragment, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
-import { Package, Boxes, Truck, Users, X, Loader2 } from "lucide-react";
+import { Package, Boxes, Truck, Users, X, Loader2, Camera } from "lucide-react";
 import dayjs from "dayjs";
+import html2canvas from "html2canvas";
 import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 // NOTE: chỉnh lại đường dẫn import cho khớp với project của bạn nếu khác
 import { nhanVienService } from "@/services/nhanvien.service";
@@ -39,6 +47,8 @@ const ALL_BO_PHAN = Object.keys(BO_PHAN_CHUC_VU);
 // (khớp với item.trangThai của phiếu soạn)
 const TRANG_THAI_LIST = ["Chưa soạn", "Đang soạn", "Hoàn thành"];
 
+const EMPTY_STATS = { phieu: 0, kien: 0, dong: 0 };
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -52,37 +62,76 @@ const extractMaNVList = (chiTiet, raw) => {
     .filter(Boolean);
 };
 
-// Tính thống kê Phiếu/Kiện/Dòng của 1 mã NV, tách theo từng trạng thái phiếu
-// (Chưa soạn / Đang soạn / Hoàn thành) + tổng cộng — dùng để dựng bảng
-// dashboard theo bộ phận (giống báo cáo "Năng suất soạn").
-const computeStatsByCode = (items, code) => {
-  const byTrangThai = {};
+const makeEmptyByTrangThai = () => {
+  const obj = {};
   TRANG_THAI_LIST.forEach((tt) => {
-    byTrangThai[tt] = { phieu: 0, kien: 0, dong: 0 };
+    obj[tt] = { phieu: 0, kien: 0, dong: 0 };
   });
+  return obj;
+};
 
-  let totalPhieu = 0;
-  let totalKien = 0;
-  let totalDong = 0;
+/**
+ * Duyệt `items` ĐÚNG 1 LẦN và gộp sẵn số liệu Phiếu/Kiện/Dòng cho từng mã NV,
+ * tách riêng theo vai trò "soan" và "kc" + theo trạng thái phiếu.
+ * Trả về: { soan: Map<code, { byTrangThai, totalPhieu, totalKien, totalDong }>, kc: Map<...> }
+ *
+ * Lý do tối ưu: cách làm cũ (computeStatsByCode gọi cho từng nhân viên) là
+ * O(items * nhanVien) — với vài nghìn phiếu và vài chục nhân viên/bộ phận,
+ * số lần lặp tăng rất nhanh. Gộp về 1 lần duyệt items rồi tra cứu theo Map
+ * là O(items + nhanVien), và chỉ cần tính lại khi `items` đổi (không phụ
+ * thuộc bộ phận/chức vụ/vai trò đang chọn).
+ */
+const buildStatsMaps = (items) => {
+  const soanMap = new Map();
+  const kcMap = new Map();
+
+  const addToMap = (map, code, trangThai, kien, dong) => {
+    let entry = map.get(code);
+    if (!entry) {
+      entry = {
+        byTrangThai: makeEmptyByTrangThai(),
+        totalPhieu: 0,
+        totalKien: 0,
+        totalDong: 0,
+      };
+      map.set(code, entry);
+    }
+    if (!entry.byTrangThai[trangThai]) {
+      entry.byTrangThai[trangThai] = { phieu: 0, kien: 0, dong: 0 };
+    }
+    entry.byTrangThai[trangThai].phieu += 1;
+    entry.byTrangThai[trangThai].kien += kien;
+    entry.byTrangThai[trangThai].dong += dong;
+    entry.totalPhieu += 1;
+    entry.totalKien += kien;
+    entry.totalDong += dong;
+  };
 
   items.forEach((item) => {
-    const soanCodes = extractMaNVList(item.nvSoanChiTiet, item.nvSoan);
-    const kcCodes = extractMaNVList(item.nvKCChiTiet, item.nvKC);
-    if (!soanCodes.includes(code) && !kcCodes.includes(code)) return;
-
     const tt = item.trangThai || "Chưa soạn";
-    if (!byTrangThai[tt]) byTrangThai[tt] = { phieu: 0, kien: 0, dong: 0 };
-    byTrangThai[tt].phieu += 1;
-    byTrangThai[tt].kien += item.kien || 0;
-    byTrangThai[tt].dong += item.dong || 0;
+    const kien = item.kien || 0;
+    const dong = item.dong || 0;
 
-    totalPhieu += 1;
-    totalKien += item.kien || 0;
-    totalDong += item.dong || 0;
+    const soanCodes = extractMaNVList(item.nvSoanChiTiet, item.nvSoan);
+    // dùng Set để không cộng trùng nếu 1 mã NV bị lặp trong mảng nvSoan/nvKC
+    new Set(soanCodes).forEach((code) =>
+      addToMap(soanMap, code, tt, kien, dong),
+    );
+
+    const kcCodes = extractMaNVList(item.nvKCChiTiet, item.nvKC);
+    new Set(kcCodes).forEach((code) => addToMap(kcMap, code, tt, kien, dong));
   });
 
-  return { byTrangThai, totalPhieu, totalKien, totalDong };
+  return { soan: soanMap, kc: kcMap };
 };
+
+// Một nhân viên được coi là "record trắng" (0-0-0-0-0-0...) khi cả 3 chỉ số
+// tổng (Phiếu/Kiện/Dòng) đều = 0 — vì totalPhieu = 0 kéo theo mọi ô theo
+// từng trạng thái cũng đều = 0, nên chỉ cần kiểm tra 3 giá trị tổng.
+const isZeroRow = (row) =>
+  (row.totalPhieu || 0) === 0 &&
+  (row.totalKien || 0) === 0 &&
+  (row.totalDong || 0) === 0;
 
 // Mặc định lọc 7 ngày gần nhất khi mở modal
 const getDefaultTuNgay = () => dayjs().subtract(6, "day").format("YYYY-MM-DD");
@@ -98,10 +147,11 @@ const getDefaultDenNgay = () => dayjs().format("YYYY-MM-DD");
  * Modal có khoảng ngày chọn riêng (độc lập với bộ lọc ngày của Dashboard)
  * và tự gọi API lấy dữ liệu theo khoảng ngày đó.
  *
- * Chọn Bộ phận -> (tuỳ chọn) Chức vụ sẽ ra ngay 1 dashboard nhỏ: bảng năng
- * suất Phiếu/Kiện/Dòng của từng nhân viên, tách theo trạng thái phiếu, kèm
- * vài chỉ số tổng quan (SL nhân sự, bình quân đơn/người, bình quân
- * kiện/dòng hoàn thành).
+ * Chọn Bộ phận -> (tuỳ chọn) Chức vụ, và vai trò NV Soạn / NV KC, sẽ ra ngay
+ * 1 dashboard nhỏ: bảng năng suất Phiếu/Kiện/Dòng của từng nhân viên theo
+ * ĐÚNG vai trò đang chọn (tránh cộng gộp nhầm khi 1 người vừa soạn vừa KC),
+ * tách theo trạng thái phiếu, kèm vài chỉ số tổng quan. Có nút "Chụp màn
+ * hình" để xuất bảng ra ảnh PNG, tự động bỏ các nhân viên toàn 0 khỏi ảnh.
  */
 const NhanSuSoanEmployeeLookup = () => {
   const [open, setOpen] = useState(false);
@@ -112,22 +162,28 @@ const NhanSuSoanEmployeeLookup = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // --- Filter theo Bộ phận / Chức vụ ---
+  // --- Filter theo Bộ phận / Chức vụ / Vai trò ---
   const [selectedBoPhan, setSelectedBoPhan] = useState("");
   const [selectedChucVu, setSelectedChucVu] = useState("");
+  // "soan": năng suất theo NV soạn (nvSoan) | "kc": năng suất theo NV kiểm chéo (nvKC)
+  const [vaiTro, setVaiTro] = useState("soan");
   const [dsNhanVien, setDsNhanVien] = useState([]);
   const [loadingNV, setLoadingNV] = useState(false);
   const [errorNV, setErrorNV] = useState("");
+
+  // --- Chụp màn hình ---
+  const captureRef = useRef(null); // bọc quanh phần StatCard + bảng cần chụp
+  const [capturing, setCapturing] = useState(false);
 
   const chucVuOptions = selectedBoPhan
     ? BO_PHAN_CHUC_VU[selectedBoPhan] || []
     : [];
 
-  const handleChangeBoPhan = (e) => {
+  const handleChangeBoPhan = useCallback((e) => {
     setSelectedBoPhan(e.target.value);
     setSelectedChucVu(""); // reset chức vụ khi đổi bộ phận
     setDsNhanVien([]);
-  };
+  }, []);
 
   // Lấy danh sách nhân viên theo Bộ phận (+ Chức vụ nếu có chọn)
   useEffect(() => {
@@ -200,14 +256,29 @@ const NhanSuSoanEmployeeLookup = () => {
     return dsNhanVien.filter((nv) => nv.chuc_vu === selectedChucVu);
   }, [dsNhanVien, selectedChucVu]);
 
-  // Dashboard nhỏ: bảng năng suất theo bộ phận/chức vụ đã chọn, tách theo
-  // trạng thái phiếu + vài chỉ số bình quân, tính trên khoảng ngày đang lọc.
+  // Gộp sẵn số liệu của TOÀN BỘ nhân viên xuất hiện trong `items`, tách theo
+  // vai trò Soạn/KC, chỉ tính lại khi `items` thay đổi (không phụ thuộc bộ
+  // phận/chức vụ/vai trò đang chọn) — đây là phần tốn chi phí nhất nên phải
+  // tách riêng khỏi các lựa chọn lọc để tránh tính lại không cần thiết.
+  const statsMaps = useMemo(() => buildStatsMaps(items), [items]);
+
+  // Dashboard nhỏ: bảng năng suất theo bộ phận/chức vụ/vai trò đã chọn, tách
+  // theo trạng thái phiếu + vài chỉ số bình quân, tính trên khoảng ngày đang lọc.
+  // Phần này giờ chỉ còn tra cứu trong Map đã gộp sẵn (O(nhanVien)), không
+  // phải duyệt lại toàn bộ `items` cho mỗi nhân viên như trước.
   const boPhanStats = useMemo(() => {
     if (!selectedBoPhan || !filteredDsNhanVien.length) return null;
 
+    const map = vaiTro === "kc" ? statsMaps.kc : statsMaps.soan;
+
     const rows = filteredDsNhanVien.map((nv) => {
       const code = (nv.ma_nhan_vien || "").toString().trim().toUpperCase();
-      const s = computeStatsByCode(items, code);
+      const s = map.get(code) || {
+        byTrangThai: makeEmptyByTrangThai(),
+        totalPhieu: 0,
+        totalKien: 0,
+        totalDong: 0,
+      };
       return {
         maNhanVien: nv.ma_nhan_vien,
         tenNhanVien: nv.ten_nhan_vien,
@@ -238,7 +309,7 @@ const NhanSuSoanEmployeeLookup = () => {
       },
       {
         byTrangThai: Object.fromEntries(
-          visibleTrangThai.map((tt) => [tt, { phieu: 0, kien: 0, dong: 0 }]),
+          visibleTrangThai.map((tt) => [tt, { ...EMPTY_STATS }]),
         ),
         totalPhieu: 0,
         totalKien: 0,
@@ -269,16 +340,92 @@ const NhanSuSoanEmployeeLookup = () => {
       bqDongHoanThanh,
       bqKienHoanThanh,
     };
-  }, [selectedBoPhan, filteredDsNhanVien, items]);
+  }, [selectedBoPhan, filteredDsNhanVien, statsMaps, vaiTro]);
 
-  const closeModal = () => setOpen(false);
+  // Danh sách dòng dùng riêng cho lúc chụp ảnh: bỏ hết nhân viên có toàn bộ
+  // số liệu (Phiếu/Kiện/Dòng ở mọi trạng thái + Total) bằng 0, để ảnh xuất
+  // ra chỉ còn những người thực sự có phát sinh trong khoảng ngày đang lọc.
+  const captureRows = useMemo(() => {
+    if (!boPhanStats) return [];
+    return boPhanStats.rows.filter((r) => !isZeroRow(r));
+  }, [boPhanStats]);
+
+  const closeModal = useCallback(() => setOpen(false), []);
+  const openModal = useCallback(() => setOpen(true), []);
+
+  /** Chụp ảnh PNG của khối StatCard + bảng, tạm ẩn các dòng toàn 0 trong
+   *  lúc chụp (không ảnh hưởng bảng đang hiển thị cho người dùng), sau đó
+   *  tải ảnh xuống máy.
+   *
+   *  Sửa lỗi chữ trong các StatCard bị cắt cụt khi xuất ảnh:
+   *  1) Đợi `document.fonts.ready` trước khi chụp — nếu html2canvas đọc DOM
+   *     lúc web font chưa load xong, trình duyệt tính sai chiều rộng chữ,
+   *     khiến label tràn ra ngoài rồi bị `overflow-hidden`/`truncate` cắt.
+   *  2) Truyền `windowWidth`/`windowHeight` = kích thước thật của khối đang
+   *     chụp, để html2canvas không render theo viewport hẹp của modal.
+   *  3) Trong lúc `capturing === true`, class `capture-no-truncate` (định
+   *     nghĩa ở <style> ngay bên dưới) ép toàn bộ text con trong captureRef
+   *     bỏ `truncate`/`whitespace-nowrap`/`overflow-hidden`, cho phép chữ
+   *     xuống dòng thay vì bị cắt — không cần biết StatCard viết class gì.
+   */
+  const handleCapture = useCallback(async () => {
+    if (!captureRef.current || !boPhanStats || capturing) return;
+
+    setCapturing(true);
+    // Đợi 1 khung hình để React re-render bảng với danh sách đã lọc (capturing=true)
+    // trước khi html2canvas đọc DOM, tránh chụp nhầm bảng còn dòng 0.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    // Đợi web font load xong hẳn trước khi chụp (fix chính cho lỗi mất chữ).
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+    // Đợi thêm 1 khung hình nữa để layout ổn định sau khi font sẵn sàng.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    try {
+      const canvas = await html2canvas(captureRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2, // nét hơn khi phóng to ảnh
+        useCORS: true,
+        // Ép html2canvas render đúng kích thước thật của khối đang chụp,
+        // không bị bóp theo viewport hẹp của modal -> tránh label bị cắt chữ.
+        windowWidth: captureRef.current.scrollWidth,
+        windowHeight: captureRef.current.scrollHeight,
+      });
+
+      const link = document.createElement("a");
+      const vaiTroSlug = vaiTro === "kc" ? "KC" : "Soan";
+      const boPhanSlug = (selectedChucVu || selectedBoPhan || "TatCa").replace(
+        /\s+/g,
+        "",
+      );
+      link.download = `NangSuat-${vaiTroSlug}-${boPhanSlug}-${dayjs().format(
+        "YYYYMMDD-HHmmss",
+      )}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (err) {
+      console.error("Lỗi chụp màn hình:", err);
+      alert("Chụp màn hình thất bại. Vui lòng thử lại.");
+    } finally {
+      setCapturing(false);
+    }
+  }, [boPhanStats, capturing, vaiTro, selectedChucVu, selectedBoPhan]);
+
+  const vaiTroLabel = vaiTro === "kc" ? "Kiểm chéo (KC)" : "Soạn";
+
+  // Dòng dữ liệu thực sự render trong bảng: lúc chụp ảnh dùng captureRows
+  // (đã lọc bỏ dòng toàn 0), lúc bình thường vẫn hiện đầy đủ như cũ.
+  const displayRows =
+    capturing && boPhanStats ? captureRows : boPhanStats?.rows || [];
 
   return (
     <>
       {/* Nút mở modal — cùng chiều cao với ô chọn ngày để thẳng hàng trong header */}
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openModal}
         className="flex h-[42px] items-center gap-2 rounded-xl border border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50 px-3 text-sm font-semibold text-slate-700 shadow-sm outline-none transition-all hover:from-blue-100 hover:to-indigo-100 hover:shadow-md"
       >
         <Users size={16} className="text-blue-500" />
@@ -312,8 +459,36 @@ const NhanSuSoanEmployeeLookup = () => {
 
               {/* Body (scroll) */}
               <div className="flex-1 overflow-y-auto px-5 py-4">
-                {/* Bộ lọc: Bộ phận / Chức vụ + khoảng ngày riêng của modal */}
+                {/* Bộ lọc: Vai trò / Bộ phận / Chức vụ + khoảng ngày riêng của modal */}
                 <div className="mb-4 flex flex-wrap items-center gap-2">
+                  {/* Toggle chọn vai trò: năng suất Soạn hay năng suất KC — tách
+                      riêng vì 1 nhân viên có thể vừa soạn vừa kiểm chéo và
+                      không nên bị cộng gộp chung 1 con số. */}
+                  <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setVaiTro("soan")}
+                      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-all ${
+                        vaiTro === "soan"
+                          ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      NV Soạn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVaiTro("kc")}
+                      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-all ${
+                        vaiTro === "kc"
+                          ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      NV KC
+                    </button>
+                  </div>
+
                   <select
                     value={selectedBoPhan}
                     onChange={handleChangeBoPhan}
@@ -354,6 +529,22 @@ const NhanSuSoanEmployeeLookup = () => {
                     }}
                   />
 
+                  {/* Nút chụp màn hình — chỉ bật khi đã có bảng dữ liệu để chụp */}
+                  <button
+                    type="button"
+                    onClick={handleCapture}
+                    disabled={!boPhanStats || capturing}
+                    title="Chụp bảng năng suất thành ảnh PNG (tự bỏ nhân viên toàn 0)"
+                    className="flex h-[42px] items-center gap-2 rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-50 to-green-50 px-3 text-sm font-semibold text-emerald-700 shadow-sm outline-none transition-all hover:from-emerald-100 hover:to-green-100 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {capturing ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Camera size={16} />
+                    )}
+                    {capturing ? "Đang chụp..." : "Chụp màn hình"}
+                  </button>
+
                   {(loading || loadingNV) && (
                     <Loader2 size={18} className="animate-spin text-blue-500" />
                   )}
@@ -373,9 +564,9 @@ const NhanSuSoanEmployeeLookup = () => {
                 {!selectedBoPhan && (
                   <div className="flex items-center gap-2 py-6 text-sm text-slate-400">
                     <Users size={16} />
-                    Chọn bộ phận (và chức vụ nếu muốn) ở trên để xem năng suất
-                    Phiếu / Kiện / Dòng của từng nhân viên trong khoảng ngày{" "}
-                    {dayjs(tuNgay).format("DD/MM/YYYY")} -{" "}
+                    Chọn bộ phận (và chức vụ nếu muốn) ở trên để xem năng suất{" "}
+                    {vaiTroLabel} — Phiếu / Kiện / Dòng của từng nhân viên trong
+                    khoảng ngày {dayjs(tuNgay).format("DD/MM/YYYY")} -{" "}
                     {dayjs(denNgay).format("DD/MM/YYYY")}.
                   </div>
                 )}
@@ -393,14 +584,30 @@ const NhanSuSoanEmployeeLookup = () => {
                   !loading &&
                   boPhanStats &&
                   filteredDsNhanVien.length > 0 && (
-                    <div className="space-y-4">
+                    // Đây là phần được html2canvas chụp lại — bọc trong captureRef
+                    // để ảnh xuất ra chỉ gồm tiêu đề, StatCard và bảng, không dính
+                    // header/footer modal hay các bộ lọc phía trên.
+                    //
+                    // Khi capturing=true, thêm class "capture-no-truncate" — style
+                    // tương ứng (khai báo bên dưới, ngay trước </>) sẽ ép mọi phần
+                    // tử con bỏ truncate/whitespace-nowrap/overflow-hidden, tránh
+                    // label trong StatCard bị cắt cụt chữ lúc xuất ảnh PNG.
+                    <div
+                      ref={captureRef}
+                      className={`space-y-4 bg-white p-2 ${
+                        capturing ? "capture-no-truncate" : ""
+                      }`}
+                    >
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                        Năng suất {selectedChucVu || selectedBoPhan} (
+                        Năng suất {vaiTroLabel} —{" "}
+                        {selectedChucVu || selectedBoPhan} (
                         {dayjs(tuNgay).format("DD/MM/YYYY")} -{" "}
                         {dayjs(denNgay).format("DD/MM/YYYY")})
                       </div>
 
-                      {/* Chỉ số tổng quan */}
+                      {/* Chỉ số tổng quan — luôn tính trên TOÀN BỘ nhân viên
+                          (kể cả người có 0 phiếu), vì đây là số liệu tổng quan
+                          của cả bộ phận, không phải danh sách hiển thị. */}
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                         <StatCard
                           icon={Users}
@@ -416,19 +623,21 @@ const NhanSuSoanEmployeeLookup = () => {
                         />
                         <StatCard
                           icon={Truck}
-                          label="BQ dòng hoàn thành"
+                          label={`BQ dòng hoàn thành (${vaiTroLabel})`}
                           value={boPhanStats.bqDongHoanThanh.toFixed(2)}
                           accent="bg-gradient-to-br from-emerald-500 to-green-600"
                         />
                         <StatCard
                           icon={Boxes}
-                          label="BQ kiện hoàn thành"
+                          label={`BQ kiện hoàn thành (${vaiTroLabel})`}
                           value={boPhanStats.bqKienHoanThanh.toFixed(2)}
                           accent="bg-gradient-to-br from-amber-500 to-orange-600"
                         />
                       </div>
 
-                      {/* Bảng năng suất theo từng nhân viên, tách theo trạng thái phiếu */}
+                      {/* Bảng năng suất theo từng nhân viên, tách theo trạng thái phiếu.
+                          Khi đang chụp (capturing=true), displayRows đã lọc bỏ hết
+                          các dòng toàn 0; bình thường vẫn hiển thị đầy đủ. */}
                       <div className="overflow-auto rounded-xl border border-slate-200 bg-white">
                         <table className="min-w-full text-xs md:text-sm">
                           <thead className="sticky top-0 bg-slate-100">
@@ -493,51 +702,64 @@ const NhanSuSoanEmployeeLookup = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {boPhanStats.rows.map((r) => (
-                              <tr
-                                key={r.maNhanVien}
-                                className="border-t border-slate-100"
-                              >
-                                <td className="px-3 py-1.5 text-slate-500">
-                                  {r.chucVu}
-                                </td>
-                                <td className="px-3 py-1.5 font-semibold text-slate-700">
-                                  {r.maNhanVien}
-                                </td>
-                                <td className="px-3 py-1.5 text-slate-700">
-                                  {r.tenNhanVien}
-                                </td>
-                                {boPhanStats.visibleTrangThai.map((tt) => {
-                                  const s = r.byTrangThai[tt] || {
-                                    phieu: 0,
-                                    kien: 0,
-                                    dong: 0,
-                                  };
-                                  return (
-                                    <Fragment key={tt}>
-                                      <td className="border-l border-slate-100 px-2 py-1.5 text-right">
-                                        {s.phieu || ""}
-                                      </td>
-                                      <td className="px-2 py-1.5 text-right">
-                                        {s.kien || ""}
-                                      </td>
-                                      <td className="px-2 py-1.5 text-right">
-                                        {s.dong || ""}
-                                      </td>
-                                    </Fragment>
-                                  );
-                                })}
-                                <td className="border-l border-slate-100 px-2 py-1.5 text-right font-semibold text-slate-700">
-                                  {r.totalPhieu}
-                                </td>
-                                <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
-                                  {r.totalKien}
-                                </td>
-                                <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
-                                  {r.totalDong}
+                            {displayRows.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={
+                                    3 +
+                                    boPhanStats.visibleTrangThai.length * 3 +
+                                    3
+                                  }
+                                  className="px-3 py-6 text-center text-slate-400"
+                                >
+                                  {capturing
+                                    ? "Không có nhân viên nào phát sinh số liệu trong khoảng ngày này."
+                                    : "Không có dữ liệu."}
                                 </td>
                               </tr>
-                            ))}
+                            ) : (
+                              displayRows.map((r) => (
+                                <tr
+                                  key={r.maNhanVien}
+                                  className="border-t border-slate-100"
+                                >
+                                  <td className="px-3 py-1.5 text-slate-500">
+                                    {r.chucVu}
+                                  </td>
+                                  <td className="px-3 py-1.5 font-semibold text-slate-700">
+                                    {r.maNhanVien}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-slate-700">
+                                    {r.tenNhanVien}
+                                  </td>
+                                  {boPhanStats.visibleTrangThai.map((tt) => {
+                                    const s = r.byTrangThai[tt] || EMPTY_STATS;
+                                    return (
+                                      <Fragment key={tt}>
+                                        <td className="border-l border-slate-100 px-2 py-1.5 text-right">
+                                          {s.phieu || ""}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right">
+                                          {s.kien || ""}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right">
+                                          {s.dong || ""}
+                                        </td>
+                                      </Fragment>
+                                    );
+                                  })}
+                                  <td className="border-l border-slate-100 px-2 py-1.5 text-right font-semibold text-slate-700">
+                                    {r.totalPhieu}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
+                                    {r.totalKien}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
+                                    {r.totalDong}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
                           </tbody>
                           <tfoot>
                             <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-800">
@@ -580,6 +802,21 @@ const NhanSuSoanEmployeeLookup = () => {
           </div>,
           document.body,
         )}
+
+      {/* Style dùng riêng lúc chụp ảnh: khi captureRef có class
+          "capture-no-truncate" (tức capturing === true), ép TẤT CẢ phần tử
+          con (kể cả label trong StatCard, dù không sửa được code StatCard)
+          bỏ truncate/nowrap/overflow-hidden, cho chữ tự xuống dòng thay vì
+          bị cắt cụt trong ảnh PNG xuất ra. Không ảnh hưởng giao diện lúc
+          xem bình thường vì class này chỉ gắn khi đang chụp. */}
+      <style>{`
+        .capture-no-truncate, .capture-no-truncate * {
+          white-space: normal !important;
+          overflow: visible !important;
+          text-overflow: clip !important;
+          word-break: break-word !important;
+        }
+      `}</style>
     </>
   );
 };

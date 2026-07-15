@@ -1,6 +1,12 @@
 /* eslint-disable react/prop-types */
 // components/phieusoan/NhanSuSoan/ScanHoanThanh.jsx
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   ScanLine,
@@ -20,8 +26,9 @@ const TRANG_THAI_STYLE = {
   "Hoàn thành": "text-green-700 bg-green-50 border border-green-200",
 };
 
-const ScanHoanThanh = ({ onSuccess }) => {
+const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
   const inputRef = useRef(null);
+  const nvInputRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1); // 1: scan list + nhập kiện/dòng, 2: confirm nhân viên
 
@@ -52,6 +59,18 @@ const ScanHoanThanh = ({ onSuccess }) => {
       return () => cancelAnimationFrame(raf);
     }
   }, [open, step, scanning]);
+
+  // Tự động focus lại ô mã NV KC ở bước 2, mỗi khi mở modal, quay lại bước 2,
+  // hoặc vừa tra cứu/xác nhận xong — giúp thao tác "Enter tra cứu -> Enter xác nhận"
+  // chạy liên tục bằng bàn phím/máy quét mà không cần bấm chuột.
+  useEffect(() => {
+    if (open && step === 2 && !lookingUpNV && !submitting) {
+      const raf = requestAnimationFrame(() => {
+        nvInputRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [open, step, lookingUpNV, submitting]);
 
   // Khoá scroll nền khi modal mở + cho phép đóng bằng phím Esc
   useEffect(() => {
@@ -88,15 +107,19 @@ const ScanHoanThanh = ({ onSuccess }) => {
     setOpen(false);
     resetAll();
   };
-
+  useImperativeHandle(ref, () => ({ open: handleOpen }));
   /** Nhập/quét số đơn hàng rồi Enter → tìm phiếu tương ứng và thêm vào danh sách
-   *  kèm 2 ô nhập kiện/dòng (mặc định lấy theo dữ liệu phiếu nếu có). */
+   *  kèm 2 ô nhập kiện/dòng (mặc định lấy theo dữ liệu phiếu nếu có).
+   *  Ô trống + Enter => coi như đã quét xong, tự chuyển sang bước xác nhận NV. */
   const handleScanSubmit = async (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
 
     const code = scanValue.trim();
-    if (!code) return;
+    if (!code) {
+      goToConfirmStep();
+      return;
+    }
 
     if (
       scannedList.some(
@@ -206,6 +229,7 @@ const ScanHoanThanh = ({ onSuccess }) => {
       setNvError(backendMsg || `Không tìm thấy nhân viên mã "${ma}".`);
     } finally {
       setLookingUpNV(false);
+      // Việc focus lại ô input mã NV đã được xử lý bằng useEffect ở trên.
     }
   };
 
@@ -255,6 +279,21 @@ const ScanHoanThanh = ({ onSuccess }) => {
       alert("Nhập KC thất bại. Vui lòng thử lại.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /** Enter trong ô mã NV KC: nếu chưa tra cứu (hoặc vừa đổi mã) → tra cứu.
+   *  Nếu đã có kết quả tra cứu hợp lệ rồi → Enter tiếp theo xác nhận hoàn thành
+   *  luôn, giúp thao tác nhanh kiểu "Enter Enter" khi vận hành bằng máy quét/bàn phím. */
+  const handleMaNhanVienKeyDown = (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (lookingUpNV || submitting) return;
+
+    if (nhanVienInfo) {
+      handleConfirmHoanThanh();
+    } else {
+      handleLookupNhanVien();
     }
   };
 
@@ -354,6 +393,12 @@ const ScanHoanThanh = ({ onSuccess }) => {
                                 e.target.value,
                               )
                             }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                goToConfirmStep();
+                              }
+                            }}
                             placeholder="0"
                             className="h-8 w-14 rounded-md border border-slate-300 px-2 text-center text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
                           />
@@ -373,6 +418,12 @@ const ScanHoanThanh = ({ onSuccess }) => {
                                 e.target.value,
                               )
                             }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                goToConfirmStep();
+                              }
+                            }}
                             placeholder="0"
                             className="h-8 w-14 rounded-md border border-slate-300 px-2 text-center text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
                           />
@@ -430,6 +481,7 @@ const ScanHoanThanh = ({ onSuccess }) => {
                 </label>
                 <div className="flex gap-2">
                   <input
+                    ref={nvInputRef}
                     type="text"
                     autoFocus
                     value={maNhanVien}
@@ -438,11 +490,10 @@ const ScanHoanThanh = ({ onSuccess }) => {
                       setNhanVienInfo(null);
                       setNvError("");
                     }}
-                    onKeyDown={(e) =>
-                      e.key === "Enter" && handleLookupNhanVien()
-                    }
-                    placeholder="VD: NV0123"
-                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    onKeyDown={handleMaNhanVienKeyDown}
+                    disabled={lookingUpNV || submitting}
+                    placeholder="VD: NV0123 — Enter để tra cứu, Enter lần nữa để xác nhận"
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
                   />
                   <button
                     onClick={handleLookupNhanVien}
@@ -458,6 +509,11 @@ const ScanHoanThanh = ({ onSuccess }) => {
                   </button>
                 </div>
                 {nvError && <p className="text-xs text-red-600">{nvError}</p>}
+                {nhanVienInfo && !nvError && (
+                  <p className="text-[11px] text-emerald-600">
+                    Đã tìm thấy nhân viên — nhấn Enter lần nữa để hoàn tất.
+                  </p>
+                )}
               </div>
 
               {nhanVienInfo && (
@@ -510,7 +566,7 @@ const ScanHoanThanh = ({ onSuccess }) => {
         className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
       >
         <ScanLine size={16} className="text-emerald-100" />
-        Scan Hoàn Thành
+        Hoàn Thành
       </button>
 
       {open &&
@@ -518,6 +574,6 @@ const ScanHoanThanh = ({ onSuccess }) => {
         createPortal(modal, document.body)}
     </>
   );
-};
-
+});
+ScanHoanThanh.displayName = "ScanHoanThanh";
 export default ScanHoanThanh;

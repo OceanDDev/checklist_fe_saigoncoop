@@ -3,6 +3,31 @@ import { useState, useRef } from "react";
 import ExcelJS from "exceljs";
 import { dataCHService } from "@/services/phieusoan/dataCH.service";
 
+/** Chuẩn hoá header: bỏ dấu, viết thường, gộp khoảng trắng — để so khớp
+ *  không phân biệt hoa/thường hay dấu tiếng Việt (VD: "Lịch Đi Hàng" và
+ *  "Lịch đi hàng" phải được coi là cùng 1 cột). */
+const normalizeHeader = (str = "") =>
+  str
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+/** Map header đã chuẩn hoá -> field key trong DB */
+const HEADER_KEY_MAP = {
+  [normalizeHeader("Số SD/TF")]: "sd_tf",
+  [normalizeHeader("Số Document")]: "so_document",
+  [normalizeHeader("Mã Cửa Hàng")]: "mach",
+  [normalizeHeader("Quận")]: "quan",
+  [normalizeHeader("Tên Cửa Hàng")]: "tench",
+  [normalizeHeader("Chuyến")]: "chuyen",
+  [normalizeHeader("Lịch Đi Hàng")]: "lich_di_hang",
+  [normalizeHeader("Ghi chú cửa hàng")]: "ghi_chu_ch",
+};
+
 const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
   const [file, setFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -106,21 +131,27 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
       }
 
       const jsonData = [];
-      let headers = [];
+      // colIndexToKey: số cột (1-indexed) -> field key trong DB,
+      // xác định bằng cách so khớp header đã chuẩn hoá (không phân biệt
+      // hoa/thường, dấu) thay vì so string tuyệt đối như trước — tránh lỗi
+      // "Lịch Đi Hàng" (template) khác "Lịch đi hàng" (file người dùng) bị
+      // coi là 2 cột khác nhau và không đọc được dữ liệu.
+      let colIndexToKey = {};
 
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) {
-          headers = [];
+          colIndexToKey = {};
           row.eachCell((cell, colNumber) => {
-            headers[colNumber - 1] = cell.text || cell.value;
+            const rawHeader = cell.text || cell.value || "";
+            const key = HEADER_KEY_MAP[normalizeHeader(rawHeader)];
+            if (key) colIndexToKey[colNumber] = key;
           });
         } else {
           const rowData = {};
           row.eachCell((cell, colNumber) => {
-            const header = headers[colNumber - 1];
-            if (header) {
-              rowData[header] = cell.text || cell.value || "";
-            }
+            const key = colIndexToKey[colNumber];
+            if (!key) return;
+            rowData[key] = cell.text || cell.value || "";
           });
 
           const hasData = Object.values(rowData).some(
@@ -137,19 +168,27 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
         return;
       }
 
+      if (Object.keys(colIndexToKey).length === 0) {
+        setError(
+          "Không nhận diện được cột nào khớp với template. Vui lòng dùng đúng file mẫu.",
+        );
+        return;
+      }
+
       // Lấy ngày hiện tại
       const currentDate = new Date().toISOString().split("T")[0];
 
-      // Map cột từ tiếng Việt sang key database
+      // jsonData đã có key chuẩn (sd_tf, so_document, mach, ...) nhờ
+      // colIndexToKey ở trên, chỉ cần ép kiểu string + trim + gắn ngày import
       const mappedData = jsonData.map((row) => ({
-        sd_tf: String(row["Số SD/TF"] || "").trim(),
-        so_document: String(row["Số Document"] || "").trim(),
-        mach: String(row["Mã Cửa Hàng"] || "").trim(),
-        quan: String(row["Quận"] || "").trim(),
-        tench: String(row["Tên Cửa Hàng"] || "").trim(),
-        chuyen: String(row["Chuyến"] || "").trim(),
-        lich_di_hang: String(row["Lịch Đi Hàng"] || "").trim(),
-        ghi_chu_ch: String(row["Ghi chú cửa hàng"] || "").trim(),
+        sd_tf: String(row.sd_tf || "").trim(),
+        so_document: String(row.so_document || "").trim(),
+        mach: String(row.mach || "").trim(),
+        quan: String(row.quan || "").trim(),
+        tench: String(row.tench || "").trim(),
+        chuyen: String(row.chuyen || "").trim(),
+        lich_di_hang: String(row.lich_di_hang || "").trim(),
+        ghi_chu_ch: String(row.ghi_chu_ch || "").trim(),
         ngay_import: currentDate,
       }));
 

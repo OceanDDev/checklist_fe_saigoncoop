@@ -48,8 +48,8 @@ const classifyChain = (soDonHang) => {
 
 const CHAIN_COLORS = { CF: "#6366f1", CS: "#0d9488", Khác: "#94a3b8" };
 const CHAIN_LABEL = {
-  CF: "Co.opXtra / CF",
-  CS: "Co.opmart / CS",
+  CF: "Co.op Food/ CF",
+  CS: "Co.op Smile / CS",
   Khác: "Khác",
 };
 

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 // components/phieusoan/NhanSuSoan/gopphieu.jsx
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Combine,
@@ -152,7 +152,9 @@ const DaiDienRow = memo(function DaiDienRow({
   );
 });
 
-const GopPhieu = ({ onSuccess }) => {
+  const GopPhieu = forwardRef(({ onSuccess }, ref) => {
+
+
   const inputRef = useRef(null);
   const nvInputRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -238,15 +240,48 @@ const GopPhieu = ({ onSuccess }) => {
     resetAll();
   }, [resetAll]);
 
-  /** Nhập/quét số đơn hàng rồi Enter → tìm phiếu, kiểm tra ràng buộc
-   *  (cùng mã NXĐ, cùng NV soạn — không quan tâm trạng thái) rồi thêm vào danh sách gộp. */
+    useImperativeHandle(ref, () => ({ open: handleOpen }), [handleOpen]);
+
+  const goToKienDongStep = useCallback(() => {
+    if (scannedList.length < 2) {
+      setScanError("Vui lòng quét ít nhất 2 phiếu để gộp.");
+      return;
+    }
+
+    // Bắt buộc: trong nhóm phải có ít nhất 1 phiếu đã có NV soạn,
+    // không cho gộp nếu toàn bộ đều "chưa có NV soạn".
+    if (resolveNvSoanForGroup(scannedList).length === 0) {
+      setScanError(
+        "Cần ít nhất 1 phiếu trong danh sách đã có nhân viên soạn thì mới được gộp.",
+      );
+      return;
+    }
+
+    setSoPhieuGop(generateSoPhieuGop(scannedList[0]?.maNXD));
+    setDaiDienId(scannedList[0]._id); // mặc định phiếu vừa quét gần nhất làm đại diện
+    setKienGop("");
+    setDongGop("");
+    setStep(2);
+  }, [scannedList]);
+
   const handleScanSubmit = useCallback(
     async (e) => {
       if (e.key !== "Enter") return;
       e.preventDefault();
 
       const code = scanValue.trim();
-      if (!code) return;
+
+      // Ô đang trống + Enter => coi như đã quét xong, tự chuyển sang bước
+      // Kiện/Dòng (chỉ khi đã đủ tối thiểu 2 phiếu), để có thể thao tác
+      // hoàn toàn bằng bàn phím: quét ... quét ... Enter (trống) để tiếp tục.
+      if (!code) {
+        if (scannedList.length >= 2) {
+          goToKienDongStep();
+        } else {
+          setScanError("Vui lòng quét ít nhất 2 phiếu để gộp.");
+        }
+        return;
+      }
 
       if (
         scannedList.some(
@@ -307,25 +342,12 @@ const GopPhieu = ({ onSuccess }) => {
         setScanning(false);
       }
     },
-    [scanValue, scannedList],
+    [scanValue, scannedList, goToKienDongStep],
   );
-
   const handleRemoveScanned = useCallback((id) => {
     setScannedList((prev) => prev.filter((it) => it._id !== id));
     setDaiDienId((prev) => (prev === id ? null : prev));
   }, []);
-
-  const goToKienDongStep = useCallback(() => {
-    if (scannedList.length < 2) {
-      setScanError("Vui lòng quét ít nhất 2 phiếu để gộp.");
-      return;
-    }
-    setSoPhieuGop(generateSoPhieuGop(scannedList[0]?.maNXD));
-    setDaiDienId(scannedList[0]._id); // mặc định phiếu vừa quét gần nhất làm đại diện
-    setKienGop("");
-    setDongGop("");
-    setStep(2);
-  }, [scannedList]);
 
   const isKienDongValid = useMemo(
     () =>
@@ -785,6 +807,6 @@ const GopPhieu = ({ onSuccess }) => {
   return typeof document !== "undefined"
     ? createPortal(modal, document.body)
     : null;
-};
-
+});
+GopPhieu.displayName = "GopPhieu";
 export default memo(GopPhieu);

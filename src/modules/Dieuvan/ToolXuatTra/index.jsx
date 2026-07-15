@@ -51,7 +51,7 @@ const ToolXuatTra = () => {
   const [viewMode, setViewMode] = useState("xuattra");
   const [statusMode, setStatusMode] = useState("chua");
   const [showAllColumns, setShowAllColumns] = useState(false);
-  
+
   const [data, setData] = useState([]);
   const [cuahangs, setCuahangs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -99,29 +99,64 @@ const ToolXuatTra = () => {
 
       const passMaCH = (item?.maCH || "").toLowerCase().includes(q);
       const ngayXuatTraDate = getLocalYMD(item?.ngayXuatTra);
-      const passNgay = !filterNgayXuatTra || ngayXuatTraDate === filterNgayXuatTra;
+      const passNgay =
+        !filterNgayXuatTra || ngayXuatTraDate === filterNgayXuatTra;
       const passBoPhan = !filterBoPhan || item?.boPhan === filterBoPhan;
       const passDuplicate = !filterDuplicate || item?.kiem_tra_trung > 1;
 
       return passMaCH && passNgay && passBoPhan && passDuplicate;
     });
-  }, [safeData, debouncedSearch, filterNgayXuatTra, filterBoPhan, statusMode, filterDuplicate]);
+  }, [
+    safeData,
+    debouncedSearch,
+    filterNgayXuatTra,
+    filterBoPhan,
+    statusMode,
+    filterDuplicate,
+  ]);
 
   const filteredDataChuaHT = useMemo(() => {
-    return filteredData.filter(item => !item?.trangThai);
-  }, [filteredData]);
-  
-  const filteredDataDaHT = useMemo(() => {
-    return filteredData.filter(item => !!item?.trangThai);
+    return filteredData.filter((item) => !item?.trangThai);
   }, [filteredData]);
 
+  const filteredDataDaHT = useMemo(() => {
+    return filteredData.filter((item) => !!item?.trangThai);
+  }, [filteredData]);
+
+  // Reset về trang đầu khi filter thay đổi
   useEffect(() => {
     setPageChua(0);
     setPageDa(0);
-  }, [debouncedSearch, filterNgayXuatTra, filterBoPhan, statusMode, filterDuplicate]);
+  }, [
+    debouncedSearch,
+    filterNgayXuatTra,
+    filterBoPhan,
+    statusMode,
+    filterDuplicate,
+  ]);
 
-  const pageCountChua = Math.max(0, Math.ceil(filteredDataChuaHT.length / pageSize));
-  const pageCountDa = Math.max(0, Math.ceil(filteredDataDaHT.length / pageSize));
+  const pageCountChua = Math.max(
+    0,
+    Math.ceil(filteredDataChuaHT.length / pageSize),
+  );
+  const pageCountDa = Math.max(
+    0,
+    Math.ceil(filteredDataDaHT.length / pageSize),
+  );
+
+  // FIX PAGINATION: clamp lại trang hiện tại nếu data thay đổi (vd: complete/uncomplete)
+  // khiến trang đang xem vượt quá số trang thực tế còn lại -> tránh hiển thị trống oan.
+  useEffect(() => {
+    if (pageChua > 0 && pageChua > pageCountChua - 1) {
+      setPageChua(Math.max(0, pageCountChua - 1));
+    }
+  }, [pageCountChua, pageChua]);
+
+  useEffect(() => {
+    if (pageDa > 0 && pageDa > pageCountDa - 1) {
+      setPageDa(Math.max(0, pageCountDa - 1));
+    }
+  }, [pageCountDa, pageDa]);
 
   const currentSliceChua = useMemo(() => {
     const start = pageChua * pageSize;
@@ -135,38 +170,47 @@ const ToolXuatTra = () => {
     return filteredDataDaHT.slice(start, end);
   }, [filteredDataDaHT, pageDa]);
 
-  const handleComplete = useCallback(async (id) => {
-    try {
-      await xuatTraService.updateXuatTra(id, { trangThai: true });
-      fetchData();
-      toast.success("✅ Đánh dấu hoàn thành!");
-    } catch (err) {
-      console.error("Lỗi cập nhật:", err);
-      toast.error("❌ Lỗi cập nhật");
-    }
-  }, [fetchData]);
+  const handleComplete = useCallback(
+    async (id) => {
+      try {
+        await xuatTraService.updateXuatTra(id, { trangThai: true });
+        fetchData();
+        toast.success("✅ Đánh dấu hoàn thành!");
+      } catch (err) {
+        console.error("Lỗi cập nhật:", err);
+        toast.error("❌ Lỗi cập nhật");
+      }
+    },
+    [fetchData],
+  );
 
-  const handleUncomplete = useCallback(async (id) => {
-    try {
-      await xuatTraService.updateXuatTra(id, { trangThai: false });
-      fetchData();
-      toast.success("↩ Đã đưa về trạng thái chưa hoàn thành!");
-    } catch (err) {
-      console.error("Lỗi hoàn tác:", err);
-      toast.error("❌ Lỗi hoàn tác");
-    }
-  }, [fetchData]);
+  const handleUncomplete = useCallback(
+    async (id) => {
+      try {
+        await xuatTraService.updateXuatTra(id, { trangThai: false });
+        fetchData();
+        toast.success("↩ Đã đưa về trạng thái chưa hoàn thành!");
+      } catch (err) {
+        console.error("Lỗi hoàn tác:", err);
+        toast.error("❌ Lỗi hoàn tác");
+      }
+    },
+    [fetchData],
+  );
 
-  const handleCreate = useCallback(async (payload) => {
-    try {
-      await xuatTraService.createXuatTra(payload);
-      fetchData();
-      toast.success("✅ Thêm xuất trả thành công!");
-    } catch (err) {
-      console.error("Lỗi tạo xuất trả:", err);
-      toast.error("❌ Lỗi tạo xuất trả");
-    }
-  }, [fetchData]);
+  const handleCreate = useCallback(
+    async (payload) => {
+      try {
+        await xuatTraService.createXuatTra(payload);
+        fetchData();
+        toast.success("✅ Thêm xuất trả thành công!");
+      } catch (err) {
+        console.error("Lỗi tạo xuất trả:", err);
+        toast.error("❌ Lỗi tạo xuất trả");
+      }
+    },
+    [fetchData],
+  );
 
   const handleClearFilter = useCallback(() => {
     setSearchMaCH("");
@@ -178,17 +222,21 @@ const ToolXuatTra = () => {
   const stamp = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(
+      d.getHours(),
+    )}${pad(d.getMinutes())}`;
   };
 
   const mapRowsForExcel = (rows) => {
     return rows.map((item, i) => ({
       STT: i + 1,
       "Ngày nhập trả": item?.ngayNhapTra ? formatDateVN(item.ngayNhapTra) : "",
-      "Số": item?.so || "",
+      Số: item?.so || "",
       "Tài xế": item?.taiXe || "",
       "Biển số xe": item?.bienSoXe || "",
-      "Ngày CH trả NVC": item?.ngayCHTraNVC ? formatDateVN(item.ngayCHTraNVC) : "",
+      "Ngày CH trả NVC": item?.ngayCHTraNVC
+        ? formatDateVN(item.ngayCHTraNVC)
+        : "",
       "NV nhập trả": item?.nvNhapTra || "",
       "Ký hiệu": item?.kyHieu || "",
       "Số hóa đơn": item?.soHoaDon || "",
@@ -196,16 +244,20 @@ const ToolXuatTra = () => {
       "Ngày hóa đơn": item?.ngayHoaDon ? formatDateVN(item.ngayHoaDon) : "",
       "Mã CH": item?.maCH || "",
       "Tên CH": item?.tenCH || "",
-      "SKU": item?.sku || "",
-      "UPC": item?.upc || "",
+      SKU: item?.sku || "",
+      UPC: item?.upc || "",
       "Tên hàng": item?.tenHang || "",
-      "Lượng": item?.luong ?? "",
-      "Vendor": item?.vendor || "",
+      Lượng: item?.luong ?? "",
+      Vendor: item?.vendor || "",
       "Vendor Name": item?.vendorName || "",
-      "Ngày BG kế toán": item?.ngayBGKeToan ? formatDateVN(item.ngayBGKeToan) : "",
+      "Ngày BG kế toán": item?.ngayBGKeToan
+        ? formatDateVN(item.ngayBGKeToan)
+        : "",
       "Số RTV": item?.soRTV || "",
       "NV kế toán nhập trả": item?.nvKeToanNhapTra || "",
-      "Ngày BG xuất trả": item?.ngayBGXuatTra ? formatDateVN(item.ngayBGXuatTra) : "",
+      "Ngày BG xuất trả": item?.ngayBGXuatTra
+        ? formatDateVN(item.ngayBGXuatTra)
+        : "",
       "Ngày sản xuất": item?.ngaySanXuat ? formatDateVN(item.ngaySanXuat) : "",
       "Hạn sử dụng": item?.hanSuDung ? formatDateVN(item.hanSuDung) : "",
       "Ghi chú": item?.ghiChu || "",
@@ -308,7 +360,8 @@ const ToolXuatTra = () => {
   };
 
   const handleExportVisible = async () => {
-    const visible = statusMode === "chua" ? filteredDataChuaHT : filteredDataDaHT;
+    const visible =
+      statusMode === "chua" ? filteredDataChuaHT : filteredDataDaHT;
     const suffix = statusMode === "chua" ? "chuaHT" : "daHT";
     await exportToExcel(visible, `xuat-tra_${suffix}_${stamp()}.xlsx`);
   };
@@ -345,7 +398,9 @@ const ToolXuatTra = () => {
       <div className="bg-white rounded-lg shadow p-4 mb-4">
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">Trạng thái:</label>
+            <label className="text-sm font-medium text-gray-700">
+              Trạng thái:
+            </label>
             <select
               value={statusMode}
               onChange={(e) => setStatusMode(e.target.value)}
@@ -406,39 +461,128 @@ const ToolXuatTra = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">STT</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Trùng</th>
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày nhập trả</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Số</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tài xế</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Biển số xe</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày CH trả NVC</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">NV nhập trả</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ký hiệu</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Số HĐ</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Số tiền</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày HĐ</th>}
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Mã CH</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tên CH</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">SKU</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">UPC</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tên hàng</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Lượng</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Vendor</th>
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày BG KT</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Số RTV</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">NV KT nhập trả</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ngày BG xuất trả</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">NSX</th>}
-                  {showAllColumns && <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">HSD</th>}
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Ghi chú</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Trạng thái</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    STT
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Trùng
+                  </th>
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Ngày nhập trả
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Số
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Tài xế
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Biển số xe
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Ngày CH trả NVC
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      NV nhập trả
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Ký hiệu
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Số HĐ
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Số tiền
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Ngày HĐ
+                    </th>
+                  )}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Mã CH
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Tên CH
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    SKU
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    UPC
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Tên hàng
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Lượng
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Vendor
+                  </th>
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Ngày BG KT
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Số RTV
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      NV KT nhập trả
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      Ngày BG xuất trả
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      NSX
+                    </th>
+                  )}
+                  {showAllColumns && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                      HSD
+                    </th>
+                  )}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Ghi chú
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Trạng thái
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentSliceChua.length === 0 ? (
                   <tr>
-                    <td colSpan="100" className="px-4 py-8 text-center text-gray-500">
+                    <td
+                      colSpan="100"
+                      className="px-4 py-8 text-center text-gray-500"
+                    >
                       Không có dữ liệu
                     </td>
                   </tr>
