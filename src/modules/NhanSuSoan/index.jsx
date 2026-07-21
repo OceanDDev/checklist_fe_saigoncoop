@@ -19,6 +19,7 @@ import {
   PackageSearch,
   Table2,
   LayoutDashboard,
+  Loader2,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
@@ -31,6 +32,7 @@ import GopPhieu from "./gopphieu";
 import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 import HuyGiaoPhieu from "./huygiaophieu";
 import NhanSuSoanDashboard from "./dashboard";
+import NhanSuSoanEmployeeLookup from "./dashboard/nhansu";
 
 const TRANG_THAI_OPTIONS = ["Chưa soạn", "Đang soạn", "Hoàn thành"];
 
@@ -159,19 +161,41 @@ const NhanVienChips = ({ list }) => {
     return <span className="text-slate-300">—</span>;
   return (
     <div className="flex flex-wrap gap-1">
-      {list.map((nv, idx) => (
-        <span
-          key={idx}
-          title={nv.ten_nhan_vien || ""}
-          className="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-xs font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 hover:shadow-md"
-        >
-          {nv.ma_nhan_vien || nv}
-        </span>
-      ))}
+      {list.map((nv, idx) => {
+        const isObj = nv && typeof nv === "object";
+        // ✅ Ưu tiên hiển thị đúng mã đã nhập gốc (ma_hien_thi) — có thể là
+        // mã phụ. Fallback ma_nhan_vien cho dữ liệu cũ chưa có field này.
+        const maHienThi = isObj ? nv.ma_hien_thi || nv.ma_nhan_vien : nv;
+        const tenNV = isObj ? nv.ten_nhan_vien : "";
+        const viaMaPhu = isObj && !!nv.via_ma_phu;
+
+        return (
+          <span
+            key={idx}
+            title={
+              viaMaPhu
+                ? `${tenNV || ""} — mã phụ (mã chính: ${nv.ma_nhan_vien})`
+                : tenNV || ""
+            }
+            className={`relative rounded-md border bg-white px-1.5 py-0.5 text-xs font-semibold shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${
+              viaMaPhu
+                ? "border-blue-300 text-blue-700 hover:border-blue-400 hover:bg-blue-50"
+                : "border-slate-300 text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+            }`}
+          >
+            {maHienThi}
+            {viaMaPhu && (
+              <span
+                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white bg-blue-500"
+                aria-hidden="true"
+              />
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 };
-
 const EmptyState = ({
   title = "Không có dữ liệu",
   subtitle = "Nhập dữ liệu hoặc điều chỉnh bộ lọc để thấy kết quả.",
@@ -188,8 +212,8 @@ const EmptyState = ({
 const filterInputCls =
   "w-full h-7 px-2 text-xs rounded-md border border-slate-300 bg-white/70 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-shadow";
 
-/** Nút lọc theo khoảng ngày (dùng chung cho TG import / TG hoàn thành / TG nhận phiếu).
- *  Tự quản lý state chọn ngày + đóng khi click ra ngoài, báo lên cha qua onChange/onClear.
+/** Nút lọc theo khoảng ngày (dùng chung cho TG import / TG hoàn thành / TG nhận phiếu / dashboard).
+ *  Tự quản lý state hiển thị popup + đóng khi click ra ngoài, báo lên cha qua onChange/onClear.
  *  compact=true: hiển thị nhỏ gọn để đặt vừa trong ô lọc của header bảng. */
 const DateRangeFilter = ({
   label,
@@ -208,6 +232,17 @@ const DateRangeFilter = ({
   ]);
   const [show, setShow] = useState(false);
   const wrapRef = useRef(null);
+
+  // Đồng bộ lại nếu giá trị được điều khiển từ cha thay đổi (vd: nút "Xoá lọc" ở nơi khác)
+  useEffect(() => {
+    setRange([
+      {
+        startDate: startValue ? new Date(startValue) : null,
+        endDate: endValue ? new Date(endValue) : null,
+        key: "selection",
+      },
+    ]);
+  }, [startValue, endValue]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -292,7 +327,7 @@ const DateRangeFilter = ({
             : ""
         }
         placeholder={label}
-        className="w-64 cursor-pointer rounded-xl border border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-2 pl-9 text-sm text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 hover:from-blue-100 hover:to-indigo-100 hover:shadow-md"
+        className="w-60 cursor-pointer rounded-xl border border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-2 pl-9 text-sm text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 hover:from-blue-100 hover:to-indigo-100 hover:shadow-md"
       />
       <CalendarDays
         size={16}
@@ -311,7 +346,7 @@ const DateRangeFilter = ({
       )}
 
       {show && (
-        <div className="absolute z-50 mt-2 overflow-hidden rounded-xl shadow-xl ring-1 ring-slate-200">
+        <div className="absolute right-0 z-50 mt-2 overflow-hidden rounded-xl shadow-xl ring-1 ring-slate-200">
           <DateRange
             ranges={range}
             onChange={handleRangeChange}
@@ -374,6 +409,17 @@ const NhanSuSoanTable = forwardRef(
       tuNgay: getDefaultTuNgay(),
       denNgay: getDefaultDenNgay(),
     }));
+
+    // Lọc ngày + trạng thái tải riêng cho tab Dashboard, hiển thị chung
+    // trong header (thay vì Dashboard tự vẽ header của riêng nó)
+    const [dashTuNgay, setDashTuNgay] = useState(getDefaultTuNgay());
+    const [dashDenNgay, setDashDenNgay] = useState(getDefaultDenNgay());
+    const [dashMeta, setDashMeta] = useState({
+      loading: false,
+      count: 0,
+      error: "",
+    });
+
     const gopPhieuRef = useRef(null);
     const scanGiaoPhieuRef = useRef(null);
     const huyGiaoPhieuRef = useRef(null);
@@ -475,7 +521,7 @@ const NhanSuSoanTable = forwardRef(
     }, []);
     useEffect(() => {
       // Chỉ cần gọi API bảng khi đang ở tab "table";
-      // tab "dashboard" tự quản lý fetch dữ liệu riêng của nó.
+      // tab "dashboard" tự quản lý fetch dữ liệu riêng của nó (qua props ngày).
       if (view === "table") fetchNhanSuSoan();
     }, [fetchNhanSuSoan, view]);
 
@@ -493,14 +539,19 @@ const NhanSuSoanTable = forwardRef(
 
     return (
       <div className="mx-auto max-w-[1900px] space-y-4 p-4 md:p-6 bg-gradient-to-b from-slate-50 to-white min-h-screen">
-        {/* Header */}
+        {/* Header dùng chung cho cả 2 tab: tiêu đề + tabs + control theo view đang chọn */}
         <div className="flex flex-col gap-3 rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-200 backdrop-blur md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <h1 className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
               {title}
             </h1>
-            <p className="text-sm text-slate-500">{description}</p>
+            <p className="text-sm text-slate-500">
+              {view === "table"
+                ? description
+                : "Tổng quan đơn hàng theo chuỗi, chuyến, trạng thái và tiến độ xử lý"}
+            </p>
           </div>
+
           <div className="flex flex-wrap items-center gap-3">
             <ViewTabs view={view} onChange={setView} />
 
@@ -519,15 +570,47 @@ const NhanSuSoanTable = forwardRef(
                   ref={scanHoanThanhRef}
                   onSuccess={fetchNhanSuSoan}
                 />
-
                 <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
+              </div>
+            )}
+
+            {view === "dashboard" && (
+              <div className="flex flex-wrap items-center gap-2">
+                {dashMeta.loading && (
+                  <Loader2 size={18} className="animate-spin text-blue-500" />
+                )}
+                {!dashMeta.loading && !dashMeta.error && (
+                  <span className="text-xs text-slate-400">
+                    ({dashMeta.count} bản ghi)
+                  </span>
+                )}
+                <DateRangeFilter
+                  label="Lọc theo TG import"
+                  startValue={dashTuNgay}
+                  endValue={dashDenNgay}
+                  onChange={(s, e) => {
+                    setDashTuNgay(s);
+                    setDashDenNgay(e);
+                  }}
+                  onClear={() => {
+                    setDashTuNgay(getDefaultTuNgay());
+                    setDashDenNgay(getDefaultDenNgay());
+                  }}
+                />
+                <NhanSuSoanEmployeeLookup />
               </div>
             )}
           </div>
         </div>
 
-        {/* Tab Dashboard: render component riêng, tự fetch & tự lọc ngày */}
-        {view === "dashboard" && <NhanSuSoanDashboard />}
+        {/* Tab Dashboard: nhận ngày lọc từ header dùng chung ở trên */}
+        {view === "dashboard" && (
+          <NhanSuSoanDashboard
+            tuNgay={dashTuNgay}
+            denNgay={dashDenNgay}
+            onMeta={setDashMeta}
+          />
+        )}
 
         {/* Tab Bảng dữ liệu: giữ nguyên toàn bộ bảng + filter + phân trang cũ */}
         {view === "table" && (

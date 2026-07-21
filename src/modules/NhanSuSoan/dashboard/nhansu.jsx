@@ -9,7 +9,16 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Package, Boxes, Truck, Users, X, Loader2, Camera } from "lucide-react";
+import {
+  Package,
+  Boxes,
+  Truck,
+  Users,
+  X,
+  Loader2,
+  Camera,
+  Target,
+} from "lucide-react";
 import dayjs from "dayjs";
 import html2canvas from "html2canvas";
 import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
@@ -20,10 +29,6 @@ import { StatCard, DateRangeFilter } from "./index";
 /* ------------------------------------------------------------------ */
 /* Hằng số Bộ phận / Chức vụ                                           */
 /* ------------------------------------------------------------------ */
-// ⚠️ Copy y hệt từ models/nhanvien/nhanvien.js (BO_PHAN_CHUC_VU) để tránh
-// gọi thêm 1 API riêng chỉ để lấy danh mục. Nếu backend đổi danh mục này,
-// nhớ đồng bộ lại ở đây. Cách tốt hơn về lâu dài: expose 1 endpoint
-// GET /nhanvien/bo-phan-chuc-vu trả về mapping này để chỉ có 1 nguồn sự thật.
 const BO_PHAN_CHUC_VU = {
   "Ngọc Phú": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất", "Tăng Ca Soạn"],
   "Xuất hàng": [
@@ -43,23 +48,55 @@ const BO_PHAN_CHUC_VU = {
 };
 const ALL_BO_PHAN = Object.keys(BO_PHAN_CHUC_VU);
 
-// Danh sách trạng thái phiếu theo thứ tự hiển thị cột trong bảng
-// (khớp với item.trangThai của phiếu soạn)
 const TRANG_THAI_LIST = ["Chưa soạn", "Đang soạn", "Hoàn thành"];
+const TRANG_THAI_HOAN_THANH = "Hoàn thành";
 
 const EMPTY_STATS = { phieu: 0, kien: 0, dong: 0 };
+
+const KPI_STORAGE_KEY = "nhansusoan_kpi_target_v1";
+const KPI_DEFAULT = { phieu: 35, kien: 100, dong: 200 };
+
+const loadKpiFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(KPI_STORAGE_KEY);
+    if (!raw) return { ...KPI_DEFAULT };
+    const parsed = JSON.parse(raw);
+    return {
+      phieu: Number(parsed.phieu) || KPI_DEFAULT.phieu,
+      kien: Number(parsed.kien) || KPI_DEFAULT.kien,
+      dong: Number(parsed.dong) || KPI_DEFAULT.dong,
+    };
+  } catch {
+    return { ...KPI_DEFAULT };
+  }
+};
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-// Lấy danh sách mã NV chuẩn hoá (uppercase, trim) từ mảng chi tiết
-// (vd. nvSoanChiTiet: [{ma_nhan_vien, ten_nhan_vien}]) hoặc mảng thô (nvSoan: ["NV001"])
+// ✅ Trả về danh sách { code, viaPhu } thay vì chỉ mã. `code` LUÔN LÀ MÃ CHÍNH
+// (backend đã resolve qua ganThongTinNhanVien), `viaPhu` = true nếu phiếu này
+// ghi nhận bằng mã phụ của nhân viên đó.
+// Fallback dùng mảng thô (nvSoan/nvKC — chỉ có mã, không có via_ma_phu) khi
+// backend chưa trả nvSoanChiTiet/nvKCChiTiet — trường hợp này coi như mã
+// chính (viaPhu: false) vì không có thông tin để phân biệt.
 const extractMaNVList = (chiTiet, raw) => {
   const list = chiTiet && chiTiet.length ? chiTiet : raw || [];
   return list
-    .map((x) => (x?.ma_nhan_vien ?? x ?? "").toString().trim().toUpperCase())
-    .filter(Boolean);
+    .map((x) => {
+      if (x && typeof x === "object") {
+        return {
+          code: (x.ma_nhan_vien ?? "").toString().trim().toUpperCase(),
+          viaPhu: !!x.via_ma_phu,
+        };
+      }
+      return {
+        code: (x ?? "").toString().trim().toUpperCase(),
+        viaPhu: false,
+      };
+    })
+    .filter((x) => x.code);
 };
 
 const makeEmptyByTrangThai = () => {
@@ -70,22 +107,11 @@ const makeEmptyByTrangThai = () => {
   return obj;
 };
 
-/**
- * Duyệt `items` ĐÚNG 1 LẦN và gộp sẵn số liệu Phiếu/Kiện/Dòng cho từng mã NV,
- * tách riêng theo vai trò "soan" và "kc" + theo trạng thái phiếu.
- * Trả về: { soan: Map<code, { byTrangThai, totalPhieu, totalKien, totalDong }>, kc: Map<...> }
- *
- * Lý do tối ưu: cách làm cũ (computeStatsByCode gọi cho từng nhân viên) là
- * O(items * nhanVien) — với vài nghìn phiếu và vài chục nhân viên/bộ phận,
- * số lần lặp tăng rất nhanh. Gộp về 1 lần duyệt items rồi tra cứu theo Map
- * là O(items + nhanVien), và chỉ cần tính lại khi `items` đổi (không phụ
- * thuộc bộ phận/chức vụ/vai trò đang chọn).
- */
 const buildStatsMaps = (items) => {
   const soanMap = new Map();
   const kcMap = new Map();
 
-  const addToMap = (map, code, trangThai, kien, dong) => {
+  const addToMap = (map, code, trangThai, kien, dong, viaPhu) => {
     let entry = map.get(code);
     if (!entry) {
       entry = {
@@ -93,6 +119,10 @@ const buildStatsMaps = (items) => {
         totalPhieu: 0,
         totalKien: 0,
         totalDong: 0,
+        // ✅ true nếu CÓ ÍT NHẤT 1 phiếu của người này (trong toàn bộ items
+        // đang xét) được chấm bằng mã phụ -> loại người này khỏi đánh giá
+        // KPI ngày hôm đó, dù số liệu vẫn cộng dồn bình thường.
+        hasMaPhu: false,
       };
       map.set(code, entry);
     }
@@ -105,6 +135,7 @@ const buildStatsMaps = (items) => {
     entry.totalPhieu += 1;
     entry.totalKien += kien;
     entry.totalDong += dong;
+    if (viaPhu) entry.hasMaPhu = true;
   };
 
   items.forEach((item) => {
@@ -112,28 +143,35 @@ const buildStatsMaps = (items) => {
     const kien = item.kien || 0;
     const dong = item.dong || 0;
 
-    const soanCodes = extractMaNVList(item.nvSoanChiTiet, item.nvSoan);
-    // dùng Set để không cộng trùng nếu 1 mã NV bị lặp trong mảng nvSoan/nvKC
-    new Set(soanCodes).forEach((code) =>
-      addToMap(soanMap, code, tt, kien, dong),
+    // Dùng Map<code, viaPhu> để không cộng trùng nếu 1 mã NV lặp lại trong
+    // cùng 1 phiếu, đồng thời giữ lại cờ viaPhu nếu bất kỳ lần lặp nào là mã phụ.
+    const soanEntries = extractMaNVList(item.nvSoanChiTiet, item.nvSoan);
+    const soanSeen = new Map();
+    soanEntries.forEach(({ code, viaPhu }) => {
+      soanSeen.set(code, soanSeen.get(code) || false || viaPhu);
+    });
+    soanSeen.forEach((viaPhu, code) =>
+      addToMap(soanMap, code, tt, kien, dong, viaPhu),
     );
 
-    const kcCodes = extractMaNVList(item.nvKCChiTiet, item.nvKC);
-    new Set(kcCodes).forEach((code) => addToMap(kcMap, code, tt, kien, dong));
+    const kcEntries = extractMaNVList(item.nvKCChiTiet, item.nvKC);
+    const kcSeen = new Map();
+    kcEntries.forEach(({ code, viaPhu }) => {
+      kcSeen.set(code, kcSeen.get(code) || false || viaPhu);
+    });
+    kcSeen.forEach((viaPhu, code) =>
+      addToMap(kcMap, code, tt, kien, dong, viaPhu),
+    );
   });
 
   return { soan: soanMap, kc: kcMap };
 };
 
-// Một nhân viên được coi là "record trắng" (0-0-0-0-0-0...) khi cả 3 chỉ số
-// tổng (Phiếu/Kiện/Dòng) đều = 0 — vì totalPhieu = 0 kéo theo mọi ô theo
-// từng trạng thái cũng đều = 0, nên chỉ cần kiểm tra 3 giá trị tổng.
 const isZeroRow = (row) =>
   (row.totalPhieu || 0) === 0 &&
   (row.totalKien || 0) === 0 &&
   (row.totalDong || 0) === 0;
 
-// Mặc định lọc 7 ngày gần nhất khi mở modal
 const getDefaultTuNgay = () => dayjs().subtract(6, "day").format("YYYY-MM-DD");
 const getDefaultDenNgay = () => dayjs().format("YYYY-MM-DD");
 
@@ -141,18 +179,6 @@ const getDefaultDenNgay = () => dayjs().format("YYYY-MM-DD");
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-/**
- * Nút mở modal "Tra cứu theo mã nhân viên" — đặt trong header của Dashboard,
- * cùng hàng với ô chọn khoảng ngày để dễ thấy, không phải cuộn xuống đáy trang.
- * Modal có khoảng ngày chọn riêng (độc lập với bộ lọc ngày của Dashboard)
- * và tự gọi API lấy dữ liệu theo khoảng ngày đó.
- *
- * Chọn Bộ phận -> (tuỳ chọn) Chức vụ, và vai trò NV Soạn / NV KC, sẽ ra ngay
- * 1 dashboard nhỏ: bảng năng suất Phiếu/Kiện/Dòng của từng nhân viên theo
- * ĐÚNG vai trò đang chọn (tránh cộng gộp nhầm khi 1 người vừa soạn vừa KC),
- * tách theo trạng thái phiếu, kèm vài chỉ số tổng quan. Có nút "Chụp màn
- * hình" để xuất bảng ra ảnh PNG, tự động bỏ các nhân viên toàn 0 khỏi ảnh.
- */
 const NhanSuSoanEmployeeLookup = () => {
   const [open, setOpen] = useState(false);
   const [tuNgay, setTuNgay] = useState(getDefaultTuNgay());
@@ -162,17 +188,37 @@ const NhanSuSoanEmployeeLookup = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // --- Filter theo Bộ phận / Chức vụ / Vai trò ---
   const [selectedBoPhan, setSelectedBoPhan] = useState("");
   const [selectedChucVu, setSelectedChucVu] = useState("");
-  // "soan": năng suất theo NV soạn (nvSoan) | "kc": năng suất theo NV kiểm chéo (nvKC)
   const [vaiTro, setVaiTro] = useState("soan");
   const [dsNhanVien, setDsNhanVien] = useState([]);
   const [loadingNV, setLoadingNV] = useState(false);
   const [errorNV, setErrorNV] = useState("");
 
-  // --- Chụp màn hình ---
-  const captureRef = useRef(null); // bọc quanh phần StatCard + bảng cần chụp
+  const [kpi, setKpi] = useState(loadKpiFromStorage);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(KPI_STORAGE_KEY, JSON.stringify(kpi));
+    } catch {
+      // bỏ qua nếu localStorage bị chặn
+    }
+  }, [kpi]);
+
+  const handleChangeKpi = useCallback(
+    (field) => (e) => {
+      const raw = e.target.value;
+      setKpi((prev) => ({
+        ...prev,
+        [field]: raw === "" ? "" : Number(raw),
+      }));
+    },
+    [],
+  );
+
+  const isSingleDay = tuNgay === denNgay;
+
+  const captureRef = useRef(null);
   const [capturing, setCapturing] = useState(false);
 
   const chucVuOptions = selectedBoPhan
@@ -181,11 +227,10 @@ const NhanSuSoanEmployeeLookup = () => {
 
   const handleChangeBoPhan = useCallback((e) => {
     setSelectedBoPhan(e.target.value);
-    setSelectedChucVu(""); // reset chức vụ khi đổi bộ phận
+    setSelectedChucVu("");
     setDsNhanVien([]);
   }, []);
 
-  // Lấy danh sách nhân viên theo Bộ phận (+ Chức vụ nếu có chọn)
   useEffect(() => {
     if (!open || !selectedBoPhan) {
       setDsNhanVien([]);
@@ -219,7 +264,6 @@ const NhanSuSoanEmployeeLookup = () => {
     };
   }, [open, selectedBoPhan, selectedChucVu]);
 
-  // Chỉ fetch khi modal đang mở, và fetch lại mỗi khi đổi khoảng ngày
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -248,24 +292,13 @@ const NhanSuSoanEmployeeLookup = () => {
     };
   }, [open, tuNgay, denNgay]);
 
-  // Lọc lại theo chức vụ ở FE để chắc chắn đúng, phòng trường hợp API
-  // getDanhSach chưa thực sự filter theo chuc_vu ở backend (chỉ filter theo
-  // bo_phan rồi trả về hết các chức vụ).
   const filteredDsNhanVien = useMemo(() => {
     if (!selectedChucVu) return dsNhanVien;
     return dsNhanVien.filter((nv) => nv.chuc_vu === selectedChucVu);
   }, [dsNhanVien, selectedChucVu]);
 
-  // Gộp sẵn số liệu của TOÀN BỘ nhân viên xuất hiện trong `items`, tách theo
-  // vai trò Soạn/KC, chỉ tính lại khi `items` thay đổi (không phụ thuộc bộ
-  // phận/chức vụ/vai trò đang chọn) — đây là phần tốn chi phí nhất nên phải
-  // tách riêng khỏi các lựa chọn lọc để tránh tính lại không cần thiết.
   const statsMaps = useMemo(() => buildStatsMaps(items), [items]);
 
-  // Dashboard nhỏ: bảng năng suất theo bộ phận/chức vụ/vai trò đã chọn, tách
-  // theo trạng thái phiếu + vài chỉ số bình quân, tính trên khoảng ngày đang lọc.
-  // Phần này giờ chỉ còn tra cứu trong Map đã gộp sẵn (O(nhanVien)), không
-  // phải duyệt lại toàn bộ `items` cho mỗi nhân viên như trước.
   const boPhanStats = useMemo(() => {
     if (!selectedBoPhan || !filteredDsNhanVien.length) return null;
 
@@ -278,6 +311,7 @@ const NhanSuSoanEmployeeLookup = () => {
         totalPhieu: 0,
         totalKien: 0,
         totalDong: 0,
+        hasMaPhu: false,
       };
       return {
         maNhanVien: nv.ma_nhan_vien,
@@ -287,8 +321,6 @@ const NhanSuSoanEmployeeLookup = () => {
       };
     });
 
-    // Chỉ hiện cột trạng thái nào có ít nhất 1 phiếu trong toàn danh sách,
-    // để tránh bảng có quá nhiều cột trống.
     const visibleTrangThai = TRANG_THAI_LIST.filter((tt) =>
       rows.some((r) => (r.byTrangThai[tt]?.phieu || 0) > 0),
     );
@@ -320,8 +352,6 @@ const NhanSuSoanEmployeeLookup = () => {
     const slNhanSu = rows.length;
     const bqOrder = slNhanSu > 0 ? total.totalPhieu / slNhanSu : 0;
 
-    // Bình quân Kiện/Dòng của trạng thái "Hoàn thành", tính trên số người
-    // thực sự có phiếu hoàn thành (khớp cách tính trong báo cáo mẫu).
     const hoanThanh = total.byTrangThai["Hoàn thành"];
     const soNguoiHoanThanh = rows.filter(
       (r) => (r.byTrangThai["Hoàn thành"]?.phieu || 0) > 0,
@@ -342,9 +372,48 @@ const NhanSuSoanEmployeeLookup = () => {
     };
   }, [selectedBoPhan, filteredDsNhanVien, statsMaps, vaiTro]);
 
-  // Danh sách dòng dùng riêng cho lúc chụp ảnh: bỏ hết nhân viên có toàn bộ
-  // số liệu (Phiếu/Kiện/Dòng ở mọi trạng thái + Total) bằng 0, để ảnh xuất
-  // ra chỉ còn những người thực sự có phát sinh trong khoảng ngày đang lọc.
+  // ✅ Trạng thái KPI của 1 dòng — 5 nhánh, xét theo thứ tự ưu tiên:
+  // 1. "khong-ap-dung": đang lọc nhiều ngày, KPI theo ngày không áp dụng
+  // 2. "khong-tinh-kpi": trong ngày này có phiếu được chấm bằng MÃ PHỤ của
+  //    người này -> vẫn cộng năng suất bình thường nhưng KHÔNG đánh giá KPI
+  // 3. "chua-bat-dau": totalPhieu === 0 -> chưa chạm phiếu nào, chưa tính KPI
+  // 4. "dat" / "chua-dat": so số liệu "Hoàn thành" với ngưỡng KPI đang cấu hình
+  const trangThaiKPI = useCallback(
+    (row) => {
+      if (!isSingleDay) return "khong-ap-dung";
+      if (row.hasMaPhu) return "khong-tinh-kpi";
+      if ((row.totalPhieu || 0) === 0) return "chua-bat-dau";
+
+      const ht = row.byTrangThai[TRANG_THAI_HOAN_THANH] || EMPTY_STATS;
+      const target = {
+        phieu: Number(kpi.phieu) || 0,
+        kien: Number(kpi.kien) || 0,
+        dong: Number(kpi.dong) || 0,
+      };
+      const dat =
+        (ht.phieu || 0) >= target.phieu &&
+        (ht.kien || 0) >= target.kien &&
+        (ht.dong || 0) >= target.dong;
+      return dat ? "dat" : "chua-dat";
+    },
+    [isSingleDay, kpi],
+  );
+
+  // ✅ Mẫu số chỉ gồm người đã "bắt đầu" và KHÔNG dùng mã phụ hôm đó
+  const kpiSummary = useMemo(() => {
+    if (!isSingleDay || !boPhanStats) return null;
+    let dat = 0;
+    let tong = 0;
+    boPhanStats.rows.forEach((r) => {
+      const tt = trangThaiKPI(r);
+      if (tt === "dat" || tt === "chua-dat") {
+        tong += 1;
+        if (tt === "dat") dat += 1;
+      }
+    });
+    return { dat, tong };
+  }, [isSingleDay, boPhanStats, trangThaiKPI]);
+
   const captureRows = useMemo(() => {
     if (!boPhanStats) return [];
     return boPhanStats.rows.filter((r) => !isZeroRow(r));
@@ -353,43 +422,22 @@ const NhanSuSoanEmployeeLookup = () => {
   const closeModal = useCallback(() => setOpen(false), []);
   const openModal = useCallback(() => setOpen(true), []);
 
-  /** Chụp ảnh PNG của khối StatCard + bảng, tạm ẩn các dòng toàn 0 trong
-   *  lúc chụp (không ảnh hưởng bảng đang hiển thị cho người dùng), sau đó
-   *  tải ảnh xuống máy.
-   *
-   *  Sửa lỗi chữ trong các StatCard bị cắt cụt khi xuất ảnh:
-   *  1) Đợi `document.fonts.ready` trước khi chụp — nếu html2canvas đọc DOM
-   *     lúc web font chưa load xong, trình duyệt tính sai chiều rộng chữ,
-   *     khiến label tràn ra ngoài rồi bị `overflow-hidden`/`truncate` cắt.
-   *  2) Truyền `windowWidth`/`windowHeight` = kích thước thật của khối đang
-   *     chụp, để html2canvas không render theo viewport hẹp của modal.
-   *  3) Trong lúc `capturing === true`, class `capture-no-truncate` (định
-   *     nghĩa ở <style> ngay bên dưới) ép toàn bộ text con trong captureRef
-   *     bỏ `truncate`/`whitespace-nowrap`/`overflow-hidden`, cho phép chữ
-   *     xuống dòng thay vì bị cắt — không cần biết StatCard viết class gì.
-   */
   const handleCapture = useCallback(async () => {
     if (!captureRef.current || !boPhanStats || capturing) return;
 
     setCapturing(true);
-    // Đợi 1 khung hình để React re-render bảng với danh sách đã lọc (capturing=true)
-    // trước khi html2canvas đọc DOM, tránh chụp nhầm bảng còn dòng 0.
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
-    // Đợi web font load xong hẳn trước khi chụp (fix chính cho lỗi mất chữ).
     if (document.fonts && document.fonts.ready) {
       await document.fonts.ready;
     }
-    // Đợi thêm 1 khung hình nữa để layout ổn định sau khi font sẵn sàng.
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
     try {
       const canvas = await html2canvas(captureRef.current, {
         backgroundColor: "#ffffff",
-        scale: 2, // nét hơn khi phóng to ảnh
+        scale: 2,
         useCORS: true,
-        // Ép html2canvas render đúng kích thước thật của khối đang chụp,
-        // không bị bóp theo viewport hẹp của modal -> tránh label bị cắt chữ.
         windowWidth: captureRef.current.scrollWidth,
         windowHeight: captureRef.current.scrollHeight,
       });
@@ -415,14 +463,11 @@ const NhanSuSoanEmployeeLookup = () => {
 
   const vaiTroLabel = vaiTro === "kc" ? "Kiểm chéo (KC)" : "Soạn";
 
-  // Dòng dữ liệu thực sự render trong bảng: lúc chụp ảnh dùng captureRows
-  // (đã lọc bỏ dòng toàn 0), lúc bình thường vẫn hiện đầy đủ như cũ.
   const displayRows =
     capturing && boPhanStats ? captureRows : boPhanStats?.rows || [];
 
   return (
     <>
-      {/* Nút mở modal — cùng chiều cao với ô chọn ngày để thẳng hàng trong header */}
       <button
         type="button"
         onClick={openModal}
@@ -459,11 +504,7 @@ const NhanSuSoanEmployeeLookup = () => {
 
               {/* Body (scroll) */}
               <div className="flex-1 overflow-y-auto px-5 py-4">
-                {/* Bộ lọc: Vai trò / Bộ phận / Chức vụ + khoảng ngày riêng của modal */}
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  {/* Toggle chọn vai trò: năng suất Soạn hay năng suất KC — tách
-                      riêng vì 1 nhân viên có thể vừa soạn vừa kiểm chéo và
-                      không nên bị cộng gộp chung 1 con số. */}
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200">
                     <button
                       type="button"
@@ -529,7 +570,6 @@ const NhanSuSoanEmployeeLookup = () => {
                     }}
                   />
 
-                  {/* Nút chụp màn hình — chỉ bật khi đã có bảng dữ liệu để chụp */}
                   <button
                     type="button"
                     onClick={handleCapture}
@@ -547,6 +587,67 @@ const NhanSuSoanEmployeeLookup = () => {
 
                   {(loading || loadingNV) && (
                     <Loader2 size={18} className="animate-spin text-blue-500" />
+                  )}
+                </div>
+
+                {/* Khối cài đặt KPI/ngày */}
+                <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
+                    <Target size={16} />
+                    KPI/ngày (Hoàn thành):
+                  </div>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                    Phiếu
+                    <input
+                      type="number"
+                      min={0}
+                      value={kpi.phieu}
+                      onChange={handleChangeKpi("phieu")}
+                      className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+                    />
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                    Kiện
+                    <input
+                      type="number"
+                      min={0}
+                      value={kpi.kien}
+                      onChange={handleChangeKpi("kien")}
+                      className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+                    />
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                    Dòng
+                    <input
+                      type="number"
+                      min={0}
+                      value={kpi.dong}
+                      onChange={handleChangeKpi("dong")}
+                      className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+                    />
+                  </label>
+
+                  {isSingleDay ? (
+                    kpiSummary && (
+                      <span
+                        className={`ml-auto rounded-full px-3 py-1 text-xs font-semibold ${
+                          kpiSummary.tong === 0
+                            ? "bg-slate-100 text-slate-500"
+                            : kpiSummary.dat === kpiSummary.tong
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-rose-100 text-rose-700"
+                        }`}
+                      >
+                        {kpiSummary.tong === 0
+                          ? "Chưa có ai bắt đầu soạn"
+                          : `${kpiSummary.dat}/${kpiSummary.tong} đạt KPI`}
+                      </span>
+                    )
+                  ) : (
+                    <span className="ml-auto text-xs font-medium text-amber-600">
+                      ⚠️ Chỉ áp dụng cảnh báo KPI khi Từ ngày = Đến ngày (chọn 1
+                      ngày)
+                    </span>
                   )}
                 </div>
 
@@ -584,14 +685,6 @@ const NhanSuSoanEmployeeLookup = () => {
                   !loading &&
                   boPhanStats &&
                   filteredDsNhanVien.length > 0 && (
-                    // Đây là phần được html2canvas chụp lại — bọc trong captureRef
-                    // để ảnh xuất ra chỉ gồm tiêu đề, StatCard và bảng, không dính
-                    // header/footer modal hay các bộ lọc phía trên.
-                    //
-                    // Khi capturing=true, thêm class "capture-no-truncate" — style
-                    // tương ứng (khai báo bên dưới, ngay trước </>) sẽ ép mọi phần
-                    // tử con bỏ truncate/whitespace-nowrap/overflow-hidden, tránh
-                    // label trong StatCard bị cắt cụt chữ lúc xuất ảnh PNG.
                     <div
                       ref={captureRef}
                       className={`space-y-4 bg-white p-2 ${
@@ -605,9 +698,6 @@ const NhanSuSoanEmployeeLookup = () => {
                         {dayjs(denNgay).format("DD/MM/YYYY")})
                       </div>
 
-                      {/* Chỉ số tổng quan — luôn tính trên TOÀN BỘ nhân viên
-                          (kể cả người có 0 phiếu), vì đây là số liệu tổng quan
-                          của cả bộ phận, không phải danh sách hiển thị. */}
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                         <StatCard
                           icon={Users}
@@ -635,9 +725,6 @@ const NhanSuSoanEmployeeLookup = () => {
                         />
                       </div>
 
-                      {/* Bảng năng suất theo từng nhân viên, tách theo trạng thái phiếu.
-                          Khi đang chụp (capturing=true), displayRows đã lọc bỏ hết
-                          các dòng toàn 0; bình thường vẫn hiển thị đầy đủ. */}
                       <div className="overflow-auto rounded-xl border border-slate-200 bg-white">
                         <table className="min-w-full text-xs md:text-sm">
                           <thead className="sticky top-0 bg-slate-100">
@@ -675,6 +762,12 @@ const NhanSuSoanEmployeeLookup = () => {
                               >
                                 Total
                               </th>
+                              <th
+                                rowSpan={2}
+                                className="border-b border-l border-slate-200 px-3 py-2 text-center align-bottom font-bold uppercase tracking-wide text-[11px] text-slate-700"
+                              >
+                                KPI
+                              </th>
                             </tr>
                             <tr>
                               {boPhanStats.visibleTrangThai.map((tt) => (
@@ -708,7 +801,8 @@ const NhanSuSoanEmployeeLookup = () => {
                                   colSpan={
                                     3 +
                                     boPhanStats.visibleTrangThai.length * 3 +
-                                    3
+                                    3 +
+                                    1
                                   }
                                   className="px-3 py-6 text-center text-slate-400"
                                 >
@@ -718,47 +812,86 @@ const NhanSuSoanEmployeeLookup = () => {
                                 </td>
                               </tr>
                             ) : (
-                              displayRows.map((r) => (
-                                <tr
-                                  key={r.maNhanVien}
-                                  className="border-t border-slate-100"
-                                >
-                                  <td className="px-3 py-1.5 text-slate-500">
-                                    {r.chucVu}
-                                  </td>
-                                  <td className="px-3 py-1.5 font-semibold text-slate-700">
-                                    {r.maNhanVien}
-                                  </td>
-                                  <td className="px-3 py-1.5 text-slate-700">
-                                    {r.tenNhanVien}
-                                  </td>
-                                  {boPhanStats.visibleTrangThai.map((tt) => {
-                                    const s = r.byTrangThai[tt] || EMPTY_STATS;
-                                    return (
-                                      <Fragment key={tt}>
-                                        <td className="border-l border-slate-100 px-2 py-1.5 text-right">
-                                          {s.phieu || ""}
-                                        </td>
-                                        <td className="px-2 py-1.5 text-right">
-                                          {s.kien || ""}
-                                        </td>
-                                        <td className="px-2 py-1.5 text-right">
-                                          {s.dong || ""}
-                                        </td>
-                                      </Fragment>
-                                    );
-                                  })}
-                                  <td className="border-l border-slate-100 px-2 py-1.5 text-right font-semibold text-slate-700">
-                                    {r.totalPhieu}
-                                  </td>
-                                  <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
-                                    {r.totalKien}
-                                  </td>
-                                  <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
-                                    {r.totalDong}
-                                  </td>
-                                </tr>
-                              ))
+                              displayRows.map((r) => {
+                                const kpiTt = trangThaiKPI(r);
+                                return (
+                                  <tr
+                                    key={r.maNhanVien}
+                                    className={`border-t border-slate-100 ${
+                                      kpiTt === "chua-dat"
+                                        ? "bg-rose-50/60"
+                                        : ""
+                                    }`}
+                                  >
+                                    <td className="px-3 py-1.5 text-slate-500">
+                                      {r.chucVu}
+                                    </td>
+                                    <td className="px-3 py-1.5 font-semibold text-slate-700">
+                                      {r.maNhanVien}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-slate-700">
+                                      {r.tenNhanVien}
+                                    </td>
+                                    {boPhanStats.visibleTrangThai.map((tt) => {
+                                      const s =
+                                        r.byTrangThai[tt] || EMPTY_STATS;
+                                      return (
+                                        <Fragment key={tt}>
+                                          <td className="border-l border-slate-100 px-2 py-1.5 text-right">
+                                            {s.phieu || ""}
+                                          </td>
+                                          <td className="px-2 py-1.5 text-right">
+                                            {s.kien || ""}
+                                          </td>
+                                          <td className="px-2 py-1.5 text-right">
+                                            {s.dong || ""}
+                                          </td>
+                                        </Fragment>
+                                      );
+                                    })}
+                                    <td className="border-l border-slate-100 px-2 py-1.5 text-right font-semibold text-slate-700">
+                                      {r.totalPhieu}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
+                                      {r.totalKien}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
+                                      {r.totalDong}
+                                    </td>
+                                    {/* ✅ Trạng thái KPI — 5 nhánh hiển thị */}
+                                    <td className="border-l border-slate-100 px-2 py-1.5 text-center">
+                                      {kpiTt === "khong-ap-dung" && (
+                                        <span className="text-slate-300">
+                                          —
+                                        </span>
+                                      )}
+                                      {kpiTt === "khong-tinh-kpi" && (
+                                        <span
+                                          className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700"
+                                          title="Có phiếu được chấm bằng mã phụ trong ngày này -> không đánh giá KPI"
+                                        >
+                                          Không tính KPI
+                                        </span>
+                                      )}
+                                      {kpiTt === "chua-bat-dau" && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                                          Chưa bắt đầu
+                                        </span>
+                                      )}
+                                      {kpiTt === "dat" && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                          ✅ Đạt
+                                        </span>
+                                      )}
+                                      {kpiTt === "chua-dat" && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                                          ⚠️ Chưa đạt
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })
                             )}
                           </tbody>
                           <tfoot>
@@ -791,6 +924,13 @@ const NhanSuSoanEmployeeLookup = () => {
                               <td className="px-2 py-2 text-right">
                                 {boPhanStats.total.totalDong}
                               </td>
+                              <td className="border-l border-slate-200 px-2 py-2 text-center text-xs">
+                                {isSingleDay && kpiSummary
+                                  ? kpiSummary.tong === 0
+                                    ? "—"
+                                    : `${kpiSummary.dat}/${kpiSummary.tong} đạt`
+                                  : "—"}
+                              </td>
                             </tr>
                           </tfoot>
                         </table>
@@ -803,12 +943,6 @@ const NhanSuSoanEmployeeLookup = () => {
           document.body,
         )}
 
-      {/* Style dùng riêng lúc chụp ảnh: khi captureRef có class
-          "capture-no-truncate" (tức capturing === true), ép TẤT CẢ phần tử
-          con (kể cả label trong StatCard, dù không sửa được code StatCard)
-          bỏ truncate/nowrap/overflow-hidden, cho chữ tự xuống dòng thay vì
-          bị cắt cụt trong ảnh PNG xuất ra. Không ảnh hưởng giao diện lúc
-          xem bình thường vì class này chỉ gắn khi đang chụp. */}
       <style>{`
         .capture-no-truncate, .capture-no-truncate * {
           white-space: normal !important;

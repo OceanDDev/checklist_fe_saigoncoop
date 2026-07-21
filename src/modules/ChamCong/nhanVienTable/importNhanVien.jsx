@@ -44,6 +44,7 @@ async function downloadTemplate() {
 
   sheet.columns = [
     { header: "ma_nhan_vien",  key: "ma_nhan_vien",  width: 18 },
+    { header: "ma_phu",        key: "ma_phu",        width: 18 },
     { header: "ten_nhan_vien", key: "ten_nhan_vien",  width: 28 },
     { header: "bo_phan",       key: "bo_phan",        width: 20 },
     { header: "chuc_vu",       key: "chuc_vu",        width: 20 },
@@ -243,6 +244,7 @@ export default function ImportNhanVien({ onDone }) {
             <div className="font-semibold text-foreground mb-1.5">Cấu trúc cột trong file Excel</div>
             {[
               ["ma_nhan_vien",  "Bắt buộc", "VD: NV001"],
+              ["ma_phu",        "Bắt buộc", "VD: PH001, không trùng ma_nhan_vien"],
               ["ten_nhan_vien", "Bắt buộc", "Tên đầy đủ"],
               ["bo_phan",       "Bắt buộc", "VD: Kỹ Thuật"],
               ["chuc_vu",       "Tùy chọn", "VD: Kỹ Sư"],

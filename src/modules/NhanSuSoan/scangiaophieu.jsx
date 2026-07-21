@@ -228,7 +228,12 @@ const ScanGiaoPhieu = forwardRef(({ onSuccess }, ref) => {
     setSubmitting(true);
     try {
       const now = new Date().toISOString();
-      const maNV = nhanVienInfo.ma_nhan_vien;
+      // ✅ Dùng ĐÚNG mã người dùng đã gõ/quét (maNhanVien), KHÔNG dùng
+      // nhanVienInfo.ma_nhan_vien — vì nhanVienInfo là document nhân viên trả
+      // về từ tra cứu, field ma_nhan_vien trong đó LUÔN LÀ MÃ CHÍNH dù bạn
+      // gõ mã phụ. Backend (ganThongTinNhanVien) sẽ tự resolve mã phụ này về
+      // đúng nhân viên khi trả dữ liệu, đồng thời biết đây là "via_ma_phu".
+      const maNV = maNhanVien.trim().toUpperCase();
 
       await Promise.all(
         scannedList.map((item) => {

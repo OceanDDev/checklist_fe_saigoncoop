@@ -8,7 +8,7 @@ const ROLE_FULL = 28;
 
 // ✅ Single source of truth — phải khớp với schema backend
 const BO_PHAN_CHUC_VU = {
-  "Ngọc Phú": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất","Tăng Ca Soạn"],
+  "Ngọc Phú": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất", "Tăng Ca Soạn"],
   "Xuất hàng": [
     "Xử lý đơn hàng TV",
     "Soạn hàng CT",
@@ -18,12 +18,12 @@ const BO_PHAN_CHUC_VU = {
     "Điều vận TV",
     "Điều vận CT",
     "Sinh Viên",
-    "Tăng Ca Soạn"
+    "Tăng Ca Soạn",
   ],
-  "Nhập hàng": ["Nhập hàng TV", "Nhập hàng CT", "Sinh Viên","Tăng Ca Soạn"],
+  "Nhập hàng": ["Nhập hàng TV", "Nhập hàng CT", "Sinh Viên", "Tăng Ca Soạn"],
 
-  "Hỗ trợ Kho": ["Kiểm chéo", "Điều phối Xuất", "Sinh Viên","Tăng Ca Soạn"],
-  "Kế toán": ["Kế toán TV", "Kế Toán CT", "Sinh Viên","Tăng Ca Soạn"],
+  "Hỗ trợ Kho": ["Kiểm chéo", "Điều phối Xuất", "Sinh Viên", "Tăng Ca Soạn"],
+  "Kế toán": ["Kế toán TV", "Kế Toán CT", "Sinh Viên", "Tăng Ca Soạn"],
 };
 const ALL_BO_PHAN = Object.keys(BO_PHAN_CHUC_VU);
 
@@ -41,8 +41,11 @@ function getRoleFromStorage() {
 // ─── Modal Thêm / Sửa ────────────────────────────────────────────────────────
 const NhanVienModal = ({ editData, onClose, onSaved }) => {
   const isEdit = !!editData;
+
+  // ✅ Thêm ma_phu vào state form
   const [form, setForm] = useState({
     ma_nhan_vien: editData?.ma_nhan_vien || "",
+    ma_phu: editData?.ma_phu || "",
     ten_nhan_vien: editData?.ten_nhan_vien || "",
     bo_phan: editData?.bo_phan || "",
     chuc_vu: editData?.chuc_vu || "",
@@ -73,6 +76,7 @@ const NhanVienModal = ({ editData, onClose, onSaved }) => {
 
   const handleSubmit = async () => {
     setError("");
+    // ✅ ma_phu không còn bắt buộc
     if (!form.ma_nhan_vien || !form.ten_nhan_vien || !form.bo_phan) {
       setError("Vui lòng điền đầy đủ mã, tên, bộ phận");
       return;
@@ -112,6 +116,7 @@ const NhanVienModal = ({ editData, onClose, onSaved }) => {
         </div>
 
         <div className="space-y-4">
+          {/* ✅ Mã NV + Mã Phụ */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Mã NV *</label>
@@ -124,26 +129,36 @@ const NhanVienModal = ({ editData, onClose, onSaved }) => {
               />
             </div>
 
-            {/* ✅ Bộ Phận → Select */}
             <div>
-              <label className={labelCls}>Bộ Phận *</label>
-              <div className="relative">
-                <select
-                  value={form.bo_phan}
-                  onChange={set("bo_phan")}
-                  className={selectCls}
-                >
-                  <option value="">-- Chọn bộ phận --</option>
-                  {ALL_BO_PHAN.map((bp) => (
-                    <option key={bp} value={bp}>
-                      {bp}
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
-                  ▾
-                </span>
-              </div>
+              <label className={labelCls}>Mã Phụ</label>
+              <input
+                value={form.ma_phu}
+                onChange={set("ma_phu")}
+                placeholder="PH001 (không bắt buộc)"
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          {/* ✅ Bộ Phận → Select (tách riêng dòng vì đã dùng 2 ô cho mã NV/mã phụ) */}
+          <div>
+            <label className={labelCls}>Bộ Phận *</label>
+            <div className="relative">
+              <select
+                value={form.bo_phan}
+                onChange={set("bo_phan")}
+                className={selectCls}
+              >
+                <option value="">-- Chọn bộ phận --</option>
+                {ALL_BO_PHAN.map((bp) => (
+                  <option key={bp} value={bp}>
+                    {bp}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
+                ▾
+              </span>
             </div>
           </div>
 
@@ -279,11 +294,13 @@ export default function NhanVienTable() {
     fetchData();
   }, [fetchData]);
 
+  // ✅ Cho tìm kiếm luôn theo ma_phu
   const filtered = data.filter((r) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
       r.ma_nhan_vien?.toLowerCase().includes(q) ||
+      r.ma_phu?.toLowerCase().includes(q) ||
       r.ten_nhan_vien?.toLowerCase().includes(q) ||
       r.bo_phan?.toLowerCase().includes(q)
     );
@@ -373,7 +390,7 @@ export default function NhanVienTable() {
           </span>
           <input
             type="text"
-            placeholder="Tìm mã / tên / bộ phận..."
+            placeholder="Tìm mã / mã phụ / tên / bộ phận..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-card border border-border rounded-xl pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-ring transition-all"
@@ -397,6 +414,8 @@ export default function NhanVienTable() {
                 <tr>
                   <th className={th}>#</th>
                   <th className={th}>Mã NV</th>
+                  {/* ✅ Cột Mã Phụ */}
+                  <th className={th}>Mã Phụ</th>
                   <th className={th}>Tên Nhân Viên</th>
                   <th className={th}>Bộ Phận</th>
                   <th className={th}>Chức Vụ</th>
@@ -410,8 +429,9 @@ export default function NhanVienTable() {
               <tbody>
                 {loading ? (
                   <tr>
+                    {/* ✅ colSpan +1 vì thêm cột Mã Phụ */}
                     <td
-                      colSpan={isFullAccess ? 8 : 7}
+                      colSpan={isFullAccess ? 9 : 8}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -422,7 +442,7 @@ export default function NhanVienTable() {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={isFullAccess ? 8 : 7}
+                      colSpan={isFullAccess ? 9 : 8}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="text-4xl mb-3 opacity-30">👥</div>
@@ -443,6 +463,12 @@ export default function NhanVienTable() {
                       <td className={td}>
                         <span className="font-mono text-sm font-semibold text-emerald-400 bg-emerald-500/8 px-2 py-0.5 rounded-md">
                           {r.ma_nhan_vien}
+                        </span>
+                      </td>
+                      {/* ✅ Hiển thị Mã Phụ */}
+                      <td className={td}>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {r.ma_phu || "—"}
                         </span>
                       </td>
                       <td className={`${td} font-medium text-foreground`}>
