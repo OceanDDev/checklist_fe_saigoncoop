@@ -1,6 +1,15 @@
 /* eslint-disable react/prop-types */
 // components/phieusoan/NhanSuSoan/gopphieu.jsx
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   Combine,
@@ -152,9 +161,7 @@ const DaiDienRow = memo(function DaiDienRow({
   );
 });
 
-  const GopPhieu = forwardRef(({ onSuccess }, ref) => {
-
-
+const GopPhieu = forwardRef(({ onSuccess }, ref) => {
   const inputRef = useRef(null);
   const nvInputRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -230,17 +237,49 @@ const DaiDienRow = memo(function DaiDienRow({
     setNvError("");
   }, []);
 
-  const handleOpen = useCallback(() => {
-    resetAll();
-    setOpen(true);
-  }, [resetAll]);
+  const handleOpen = useCallback(
+    (initialItems = []) => {
+      resetAll();
 
+      if (Array.isArray(initialItems) && initialItems.length > 0) {
+        // Loại trùng theo _id (phòng khi bảng truyền dữ liệu trùng)
+        const seen = new Set();
+        const uniqueItems = initialItems.filter((it) => {
+          if (!it?._id || seen.has(it._id)) return false;
+          seen.add(it._id);
+          return true;
+        });
+
+        // Kiểm tra cùng mã NXĐ và cùng NV soạn giữa các phiếu chọn sẵn,
+        // dùng đúng quy tắc như khi quét từng phiếu ở bước 1.
+        const first = uniqueItems[0];
+        const conflict = uniqueItems
+          .slice(1)
+          .find(
+            (cur) =>
+              (cur.maNXD || "").toUpperCase() !==
+                (first.maNXD || "").toUpperCase() || !sameNvSoan(cur, first),
+          );
+
+        if (conflict) {
+          setScanError(
+            `Phiếu "${conflict.soDonHang}" khác mã NXĐ hoặc khác NV soạn so với các phiếu còn lại đã chọn — không thể gộp chung.`,
+          );
+        } else {
+          setScannedList(uniqueItems);
+        }
+      }
+
+      setOpen(true);
+    },
+    [resetAll],
+  );
   const handleClose = useCallback(() => {
     setOpen(false);
     resetAll();
   }, [resetAll]);
 
-    useImperativeHandle(ref, () => ({ open: handleOpen }), [handleOpen]);
+  useImperativeHandle(ref, () => ({ open: handleOpen }), [handleOpen]);
 
   const goToKienDongStep = useCallback(() => {
     if (scannedList.length < 2) {

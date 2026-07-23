@@ -98,10 +98,36 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
     setNvError("");
   };
 
-  const handleOpen = () => {
-    resetAll();
-    setOpen(true);
-  };
+ const handleOpen = (initialItems = []) => {
+  resetAll();
+
+  if (Array.isArray(initialItems) && initialItems.length > 0) {
+    const seen = new Set();
+    const uniqueItems = initialItems.filter((it) => {
+      if (!it?._id || seen.has(it._id)) return false;
+      seen.add(it._id);
+      return true;
+    });
+
+    const validItems = uniqueItems.filter((it) => it.trangThai !== "Chưa soạn");
+    const skippedCount = uniqueItems.length - validItems.length;
+
+    setScannedList(
+      validItems.map((matched) => ({
+        ...matched,
+        kien: matched.kien != null ? String(matched.kien) : "",
+        dong: matched.dong != null ? String(matched.dong) : "",
+      })),
+    );
+    if (skippedCount > 0) {
+      setScanError(
+        `Đã bỏ qua ${skippedCount} phiếu đang ở trạng thái "Chưa soạn" trong số phiếu đã chọn — cần giao soạn trước.`,
+      );
+    }
+  }
+
+  setOpen(true);
+};
 
   const handleClose = () => {
     setOpen(false);

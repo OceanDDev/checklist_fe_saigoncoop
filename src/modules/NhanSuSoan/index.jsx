@@ -2,6 +2,7 @@
 // components/phieusoan/NhanSuSoan/NhanSuSoanTable.jsx
 import {
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -51,7 +52,6 @@ const TRANG_THAI_DOT = {
 };
 
 // Style riêng cho từng ca: Sáng / Trưa / Chiều / Tối
-// Có thêm icon-dot màu để nhận diện nhanh hơn nữa
 const CHUYEN_STYLE = {
   SÁNG: {
     badge:
@@ -97,12 +97,13 @@ const getChuyenStyle = (chuyen) => {
       badge: "text-slate-500 bg-slate-50 border border-slate-200",
     };
   const key = chuyen.toString().trim().toUpperCase().normalize("NFC");
-  // match theo từ khoá chứa trong chuỗi (vd: "CHUYẾN SÁNG 1")
   const found = Object.keys(CHUYEN_STYLE).find((k) => key.includes(k));
   return (found && CHUYEN_STYLE[found]) || CHUYEN_FALLBACK_STYLE;
 };
 
-const ChuyenBadge = ({ value }) => {
+// Wrap memo — badge chỉ phụ thuộc `value`, không cần tính lại khi các dòng
+// khác trong bảng re-render.
+const ChuyenBadge = memo(function ChuyenBadge({ value }) {
   if (!value) return <span className="text-slate-300">—</span>;
   const style = getChuyenStyle(value);
   const Icon = style.icon;
@@ -118,7 +119,7 @@ const ChuyenBadge = ({ value }) => {
       {value}
     </span>
   );
-};
+});
 
 const DEFAULT_FILTERS = {
   soDonHang: "",
@@ -138,7 +139,19 @@ const DEFAULT_FILTERS = {
   denNgayNP: "",
 };
 
-// Mặc định lọc TG import trong 7 ngày gần nhất (tính cả hôm nay)
+// Các trường lọc dạng gõ chữ — sẽ debounce trước khi thật sự lọc/gọi API,
+// tránh gọi lại bảng mỗi lần gõ 1 ký tự.
+const TEXT_FILTER_KEYS = [
+  "soDonHang",
+  "soPhieuGop",
+  "maNXD",
+  "noiXuatDen",
+  "chuyen",
+  "lichDiHang",
+  "nvSoan",
+  "nvKC",
+];
+
 const getDefaultTuNgay = () => dayjs().subtract(6, "day").format("YYYY-MM-DD");
 const getDefaultDenNgay = () => dayjs().format("YYYY-MM-DD");
 
@@ -155,16 +168,14 @@ const formatDateTime = (d) => {
   }).format(date);
 };
 
-// Mã nhân viên được làm nổi bật hơn: nền trắng, viền rõ, chữ đậm, có hover
-const NhanVienChips = ({ list }) => {
+// Mã nhân viên được làm nổi bật hơn — memo vì props chỉ phụ thuộc `list`.
+const NhanVienChips = memo(function NhanVienChips({ list }) {
   if (!list || list.length === 0)
     return <span className="text-slate-300">—</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {list.map((nv, idx) => {
         const isObj = nv && typeof nv === "object";
-        // ✅ Ưu tiên hiển thị đúng mã đã nhập gốc (ma_hien_thi) — có thể là
-        // mã phụ. Fallback ma_nhan_vien cho dữ liệu cũ chưa có field này.
         const maHienThi = isObj ? nv.ma_hien_thi || nv.ma_nhan_vien : nv;
         const tenNV = isObj ? nv.ten_nhan_vien : "";
         const viaMaPhu = isObj && !!nv.via_ma_phu;
@@ -195,34 +206,35 @@ const NhanVienChips = ({ list }) => {
       })}
     </div>
   );
-};
-const EmptyState = ({
+});
+
+const EmptyState = memo(function EmptyState({
   title = "Không có dữ liệu",
   subtitle = "Nhập dữ liệu hoặc điều chỉnh bộ lọc để thấy kết quả.",
-}) => (
-  <div className="flex flex-col items-center justify-center py-16 text-center">
-    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-50 to-indigo-100 ring-1 ring-indigo-200 grid place-items-center shadow-inner">
-      <PackageSearch size={28} className="text-indigo-400" />
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-50 to-indigo-100 ring-1 ring-indigo-200 grid place-items-center shadow-inner">
+        <PackageSearch size={28} className="text-indigo-400" />
+      </div>
+      <div className="mt-4 text-lg font-semibold text-slate-700">{title}</div>
+      <p className="mt-1 text-slate-500 max-w-md text-sm">{subtitle}</p>
     </div>
-    <div className="mt-4 text-lg font-semibold text-slate-700">{title}</div>
-    <p className="mt-1 text-slate-500 max-w-md text-sm">{subtitle}</p>
-  </div>
-);
+  );
+});
 
 const filterInputCls =
   "w-full h-7 px-2 text-xs rounded-md border border-slate-300 bg-white/70 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-shadow";
 
-/** Nút lọc theo khoảng ngày (dùng chung cho TG import / TG hoàn thành / TG nhận phiếu / dashboard).
- *  Tự quản lý state hiển thị popup + đóng khi click ra ngoài, báo lên cha qua onChange/onClear.
- *  compact=true: hiển thị nhỏ gọn để đặt vừa trong ô lọc của header bảng. */
-const DateRangeFilter = ({
+/** Nút lọc theo khoảng ngày (dùng chung cho TG import / TG hoàn thành / TG nhận phiếu / dashboard). */
+const DateRangeFilter = memo(function DateRangeFilter({
   label,
   startValue,
   endValue,
   onChange,
   onClear,
   compact = false,
-}) => {
+}) {
   const [range, setRange] = useState([
     {
       startDate: startValue ? new Date(startValue) : null,
@@ -233,7 +245,6 @@ const DateRangeFilter = ({
   const [show, setShow] = useState(false);
   const wrapRef = useRef(null);
 
-  // Đồng bộ lại nếu giá trị được điều khiển từ cha thay đổi (vd: nút "Xoá lọc" ở nơi khác)
   useEffect(() => {
     setRange([
       {
@@ -357,10 +368,10 @@ const DateRangeFilter = ({
       )}
     </div>
   );
-};
+});
 
 /** Tab chuyển đổi giữa Bảng dữ liệu và Dashboard */
-const ViewTabs = ({ view, onChange }) => {
+const ViewTabs = memo(function ViewTabs({ view, onChange }) {
   const tabs = [
     { key: "table", label: "Bảng dữ liệu", icon: Table2 },
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -387,7 +398,107 @@ const ViewTabs = ({ view, onChange }) => {
       })}
     </div>
   );
-};
+});
+
+/** 1 dòng dữ liệu trong bảng — tách riêng + memo để khi chỉ có 1-2 dòng đổi
+ *  trạng thái chọn/focus, các dòng còn lại không phải render lại. */
+const TableRow = memo(function TableRow({
+  item,
+  isSelected,
+  isFocused,
+  isGroupBoundary,
+  onToggleSelect,
+  rowRef,
+}) {
+  return (
+    <tr
+      ref={rowRef}
+      className={`border-b border-slate-100 transition-all duration-150 hover:bg-blue-50/70 hover:shadow-[inset_3px_0_0_0_theme(colors.blue.400)] ${
+        isSelected
+          ? "bg-blue-50"
+          : item.soPhieuGop
+            ? "bg-indigo-50/40 even:bg-indigo-50/60"
+            : "even:bg-slate-50/70"
+      } ${isGroupBoundary ? "border-t-2 border-t-indigo-200" : ""} ${
+        isFocused
+          ? "!bg-blue-50/60 shadow-[inset_3px_0_0_0_theme(colors.blue.500)]"
+          : ""
+      }`}
+    >
+      <td className="px-3 py-2 whitespace-nowrap">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect(item._id)}
+          className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
+        />
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-800">
+        {item.soDonHang}
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+        {item.soPhieuGop ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold text-indigo-700">
+            {item.soPhieuGop}
+          </span>
+        ) : (
+          ""
+        )}
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+        {item.maNXD || ""}
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+        {item.noiXuatDen || ""}
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap">
+        <ChuyenBadge value={item.chuyen} />
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+        {item.lichDiHang || ""}
+      </td>
+      <td className="px-3 py-2">
+        <NhanVienChips list={item.nvSoanChiTiet || item.nvSoan} />
+      </td>
+      <td className="px-3 py-2">
+        <NhanVienChips list={item.nvKCChiTiet || item.nvKC} />
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap">
+        <span className="inline-block rounded-lg bg-gradient-to-r from-green-100 to-emerald-50 px-2 py-1 font-bold text-green-700 shadow-sm">
+          {item.kien ?? 0}
+        </span>
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap">
+        <span className="inline-block rounded-lg bg-gradient-to-r from-blue-100 to-sky-50 px-2 py-1 font-bold text-blue-700 shadow-sm">
+          {item.dong ?? 0}
+        </span>
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold whitespace-nowrap ${
+            TRANG_THAI_STYLE[item.trangThai] || TRANG_THAI_STYLE["Chưa soạn"]
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              TRANG_THAI_DOT[item.trangThai] || TRANG_THAI_DOT["Chưa soạn"]
+            }`}
+          />
+          {item.trangThai}
+        </span>
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap text-slate-500">
+        {formatDateTime(item.tgImport)}
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap text-slate-500">
+        {formatDateTime(item.tgHoanThanh)}
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap text-slate-500">
+        {formatDateTime(item.tgNhanPhieu)}
+      </td>
+    </tr>
+  );
+});
 
 const NhanSuSoanTable = forwardRef(
   (
@@ -410,8 +521,34 @@ const NhanSuSoanTable = forwardRef(
       denNgay: getDefaultDenNgay(),
     }));
 
-    // Lọc ngày + trạng thái tải riêng cho tab Dashboard, hiển thị chung
-    // trong header (thay vì Dashboard tự vẽ header của riêng nó)
+    // Bản nháp của các ô lọc dạng gõ chữ — cập nhật UI ngay lập tức,
+    // nhưng chỉ đẩy vào `filters` (và gọi API) sau khi ngừng gõ ~350ms.
+    const [textFilterDrafts, setTextFilterDrafts] = useState(() => {
+      const draft = {};
+      TEXT_FILTER_KEYS.forEach((k) => (draft[k] = DEFAULT_FILTERS[k]));
+      return draft;
+    });
+    const appliedTextFiltersRef = useRef(textFilterDrafts);
+
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        const changed = TEXT_FILTER_KEYS.some(
+          (k) => appliedTextFiltersRef.current[k] !== textFilterDrafts[k],
+        );
+        if (changed) {
+          appliedTextFiltersRef.current = textFilterDrafts;
+          setFilters((prev) => ({ ...prev, ...textFilterDrafts }));
+          setPage(1);
+        }
+      }, 350);
+      return () => clearTimeout(timer);
+    }, [textFilterDrafts]);
+
+    const handleTextFilterChange = useCallback((key, value) => {
+      setTextFilterDrafts((prev) => ({ ...prev, [key]: value }));
+    }, []);
+
+    // Lọc ngày + trạng thái tải riêng cho tab Dashboard
     const [dashTuNgay, setDashTuNgay] = useState(getDefaultTuNgay());
     const [dashDenNgay, setDashDenNgay] = useState(getDefaultDenNgay());
     const [dashMeta, setDashMeta] = useState({
@@ -420,10 +557,16 @@ const NhanSuSoanTable = forwardRef(
       error: "",
     });
 
+    // Danh sách phiếu đang được tick chọn + dòng đang focus bằng bàn phím
+    const [selectedIds, setSelectedIds] = useState(() => new Set());
+    const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
+    const rowRefs = useRef([]);
+
     const gopPhieuRef = useRef(null);
     const scanGiaoPhieuRef = useRef(null);
     const huyGiaoPhieuRef = useRef(null);
     const scanHoanThanhRef = useRef(null);
+
     const hasActiveFilter = useMemo(
       () =>
         !!(
@@ -445,12 +588,11 @@ const NhanSuSoanTable = forwardRef(
     );
 
     // Gom các phiếu đã gộp (cùng soPhieuGop) đứng cạnh nhau và đẩy lên đầu bảng.
-    // Phiếu chưa gộp (soPhieuGop rỗng) giữ nguyên thứ tự, xếp sau các nhóm đã gộp.
     const sortedItems = useMemo(() => {
       if (!items.length) return items;
 
-      const groupMap = new Map(); // soPhieuGop -> mảng item
-      const groupOrder = []; // thứ tự xuất hiện đầu tiên của mỗi soPhieuGop
+      const groupMap = new Map();
+      const groupOrder = [];
       const ungrouped = [];
 
       items.forEach((item) => {
@@ -469,6 +611,66 @@ const NhanSuSoanTable = forwardRef(
       const grouped = groupOrder.flatMap((key) => groupMap.get(key));
       return [...grouped, ...ungrouped];
     }, [items]);
+
+    // Đánh dấu ranh giới nhóm gộp 1 lần duy nhất khi sortedItems đổi,
+    // thay vì tính lại prevKey mỗi lần render bảng.
+    const groupBoundaryFlags = useMemo(
+      () =>
+        sortedItems.map((item, idx) => {
+          if (idx === 0) return false;
+          const key = (item.soPhieuGop || "").toString().trim();
+          const prevKey = (sortedItems[idx - 1]?.soPhieuGop || "")
+            .toString()
+            .trim();
+          return key !== prevKey;
+        }),
+      [sortedItems],
+    );
+
+    // Callback ref ổn định theo từng vị trí dòng — chỉ tạo lại khi số dòng
+    // thay đổi, giúp TableRow (đã memo) không bị re-render vì prop ref đổi
+    // định danh ở mỗi lần render cha.
+    const rowRefCallbacks = useMemo(
+      () =>
+        sortedItems.map((_, idx) => (el) => {
+          rowRefs.current[idx] = el;
+        }),
+      [sortedItems.length],
+    );
+
+    const selectedItems = useMemo(
+      () => sortedItems.filter((it) => selectedIds.has(it._id)),
+      [sortedItems, selectedIds],
+    );
+
+    const toggleSelectRow = useCallback((id) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    }, []);
+
+    const toggleSelectAll = useCallback(() => {
+      setSelectedIds((prev) => {
+        if (prev.size === sortedItems.length && sortedItems.length > 0) {
+          return new Set();
+        }
+        return new Set(sortedItems.map((it) => it._id));
+      });
+    }, [sortedItems]);
+
+    useEffect(() => {
+      setFocusedRowIndex((prev) => {
+        if (sortedItems.length === 0) return -1;
+        return Math.min(Math.max(prev, 0), sortedItems.length - 1);
+      });
+    }, [sortedItems]);
+
+    useEffect(() => {
+      rowRefs.current[focusedRowIndex]?.scrollIntoView({ block: "nearest" });
+    }, [focusedRowIndex]);
 
     const fetchNhanSuSoan = useCallback(async () => {
       setLoading(true);
@@ -489,48 +691,78 @@ const NhanSuSoanTable = forwardRef(
         setLoading(false);
       }
     }, [page, limit, filters]);
+
+    // Sau khi bất kỳ thao tác nào (gộp / giao / huỷ giao / hoàn thành) thành
+    // công: tải lại bảng và bỏ tích các phiếu đang chọn.
+    const handleActionSuccess = useCallback(() => {
+      fetchNhanSuSoan();
+      setSelectedIds(new Set());
+    }, [fetchNhanSuSoan]);
+
     useEffect(() => {
-      const handleGlobalShortcut = (e) => {
-        if (!e.altKey) return;
-        const tag = document.activeElement?.tagName;
-        if (
-          tag === "INPUT" ||
+      const handleGlobalKeyDown = (e) => {
+        const active = document.activeElement;
+        const tag = active?.tagName;
+        const isTypingField =
+          (tag === "INPUT" && !["checkbox", "radio"].includes(active.type)) ||
           tag === "TEXTAREA" ||
-          document.activeElement?.isContentEditable
-        )
-          return;
+          active?.isContentEditable;
+        if (isTypingField) return;
+
+        // Điều hướng dòng bằng mũi tên + tick chọn bằng Space (không cần Alt)
+        if (!e.altKey && view === "table" && sortedItems.length > 0) {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setFocusedRowIndex((prev) =>
+              Math.min(prev < 0 ? 0 : prev + 1, sortedItems.length - 1),
+            );
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setFocusedRowIndex((prev) => Math.max(prev - 1, 0));
+            return;
+          }
+          if (e.key === " " || e.key === "Spacebar") {
+            e.preventDefault();
+            if (focusedRowIndex >= 0 && focusedRowIndex < sortedItems.length) {
+              toggleSelectRow(sortedItems[focusedRowIndex]._id);
+            }
+            return;
+          }
+        }
+
+        if (!e.altKey) return;
 
         const key = e.key.toLowerCase();
         if (key === "z") {
           e.preventDefault();
-          gopPhieuRef.current?.open();
+          gopPhieuRef.current?.open(selectedItems);
         } else if (key === "x") {
           e.preventDefault();
-          scanGiaoPhieuRef.current?.open();
+          scanGiaoPhieuRef.current?.open(selectedItems);
         } else if (key === "c") {
           e.preventDefault();
-          huyGiaoPhieuRef.current?.open();
+          huyGiaoPhieuRef.current?.open(selectedItems);
         } else if (key === "v") {
           e.preventDefault();
-          scanHoanThanhRef.current?.open();
+          scanHoanThanhRef.current?.open(selectedItems);
         }
       };
-      document.addEventListener("keydown", handleGlobalShortcut);
-      return () =>
-        document.removeEventListener("keydown", handleGlobalShortcut);
-    }, []);
+      document.addEventListener("keydown", handleGlobalKeyDown);
+      return () => document.removeEventListener("keydown", handleGlobalKeyDown);
+    }, [selectedItems, focusedRowIndex, sortedItems, view, toggleSelectRow]);
+
     useEffect(() => {
-      // Chỉ cần gọi API bảng khi đang ở tab "table";
-      // tab "dashboard" tự quản lý fetch dữ liệu riêng của nó (qua props ngày).
       if (view === "table") fetchNhanSuSoan();
     }, [fetchNhanSuSoan, view]);
 
     useImperativeHandle(ref, () => ({ fetchNhanSuSoan }));
 
-    const handleFilterChange = (key, value) => {
+    const handleFilterChange = useCallback((key, value) => {
       setFilters((prev) => ({ ...prev, [key]: value }));
       setPage(1);
-    };
+    }, []);
 
     const maxPage = useMemo(
       () => Math.max(1, Math.ceil(total / limit)),
@@ -539,7 +771,7 @@ const NhanSuSoanTable = forwardRef(
 
     return (
       <div className="mx-auto max-w-[1900px] space-y-4 p-4 md:p-6 bg-gradient-to-b from-slate-50 to-white min-h-screen">
-        {/* Header dùng chung cho cả 2 tab: tiêu đề + tabs + control theo view đang chọn */}
+        {/* Header dùng chung cho cả 2 tab */}
         <div className="flex flex-col gap-3 rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-200 backdrop-blur md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <h1 className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
@@ -557,18 +789,23 @@ const NhanSuSoanTable = forwardRef(
 
             {view === "table" && (
               <div className="flex flex-wrap items-center gap-2">
-                <GopPhieu ref={gopPhieuRef} onSuccess={fetchNhanSuSoan} />
+                {selectedIds.size > 0 && (
+                  <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
+                    Đã chọn {selectedIds.size} phiếu
+                  </span>
+                )}
+                <GopPhieu ref={gopPhieuRef} onSuccess={handleActionSuccess} />
                 <ScanGiaoPhieu
                   ref={scanGiaoPhieuRef}
-                  onSuccess={fetchNhanSuSoan}
+                  onSuccess={handleActionSuccess}
                 />
                 <HuyGiaoPhieu
                   ref={huyGiaoPhieuRef}
-                  onSuccess={fetchNhanSuSoan}
+                  onSuccess={handleActionSuccess}
                 />
                 <ScanHoanThanh
                   ref={scanHoanThanhRef}
-                  onSuccess={fetchNhanSuSoan}
+                  onSuccess={handleActionSuccess}
                 />
                 <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
               </div>
@@ -603,7 +840,7 @@ const NhanSuSoanTable = forwardRef(
           </div>
         </div>
 
-        {/* Tab Dashboard: nhận ngày lọc từ header dùng chung ở trên */}
+        {/* Tab Dashboard */}
         {view === "dashboard" && (
           <NhanSuSoanDashboard
             tuNgay={dashTuNgay}
@@ -612,10 +849,9 @@ const NhanSuSoanTable = forwardRef(
           />
         )}
 
-        {/* Tab Bảng dữ liệu: giữ nguyên toàn bộ bảng + filter + phân trang cũ */}
+        {/* Tab Bảng dữ liệu */}
         {view === "table" && (
           <>
-            {/* Toolbar filter: khoảng ngày TG import */}
             <div className="flex flex-wrap items-center gap-3">
               <DateRangeFilter
                 label="Lọc theo TG import"
@@ -640,8 +876,19 @@ const NhanSuSoanTable = forwardRef(
             <div className="overflow-auto rounded-2xl border border-slate-200 shadow-md ring-1 ring-slate-100">
               <table className="min-w-full text-xs md:text-sm">
                 <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 backdrop-blur">
-                  {/* Header row */}
                   <tr className="border-b-2 border-slate-200">
+                    <th className="w-8 px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={
+                          sortedItems.length > 0 &&
+                          selectedIds.size === sortedItems.length
+                        }
+                        onChange={toggleSelectAll}
+                        title="Chọn tất cả"
+                        className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
+                      />
+                    </th>
                     <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
                       Số đơn hàng
                     </th>
@@ -686,14 +933,14 @@ const NhanSuSoanTable = forwardRef(
                     </th>
                   </tr>
 
-                  {/* Search row - ngay dưới header */}
                   <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-3 py-1.5" />
                     <th className="px-3 py-1.5">
                       <input
                         type="text"
-                        value={filters.soDonHang}
+                        value={textFilterDrafts.soDonHang}
                         onChange={(e) =>
-                          handleFilterChange("soDonHang", e.target.value)
+                          handleTextFilterChange("soDonHang", e.target.value)
                         }
                         placeholder="Lọc..."
                         className={filterInputCls}
@@ -702,9 +949,9 @@ const NhanSuSoanTable = forwardRef(
                     <th className="px-3 py-1.5">
                       <input
                         type="text"
-                        value={filters.soPhieuGop}
+                        value={textFilterDrafts.soPhieuGop}
                         onChange={(e) =>
-                          handleFilterChange("soPhieuGop", e.target.value)
+                          handleTextFilterChange("soPhieuGop", e.target.value)
                         }
                         placeholder="Lọc..."
                         className={filterInputCls}
@@ -713,9 +960,9 @@ const NhanSuSoanTable = forwardRef(
                     <th className="px-3 py-1.5">
                       <input
                         type="text"
-                        value={filters.maNXD}
+                        value={textFilterDrafts.maNXD}
                         onChange={(e) =>
-                          handleFilterChange("maNXD", e.target.value)
+                          handleTextFilterChange("maNXD", e.target.value)
                         }
                         placeholder="Lọc..."
                         className={filterInputCls}
@@ -724,9 +971,9 @@ const NhanSuSoanTable = forwardRef(
                     <th className="px-3 py-1.5">
                       <input
                         type="text"
-                        value={filters.noiXuatDen}
+                        value={textFilterDrafts.noiXuatDen}
                         onChange={(e) =>
-                          handleFilterChange("noiXuatDen", e.target.value)
+                          handleTextFilterChange("noiXuatDen", e.target.value)
                         }
                         placeholder="Lọc..."
                         className={filterInputCls}
@@ -735,9 +982,9 @@ const NhanSuSoanTable = forwardRef(
                     <th className="px-3 py-1.5">
                       <input
                         type="text"
-                        value={filters.chuyen}
+                        value={textFilterDrafts.chuyen}
                         onChange={(e) =>
-                          handleFilterChange("chuyen", e.target.value)
+                          handleTextFilterChange("chuyen", e.target.value)
                         }
                         placeholder="Lọc..."
                         className={filterInputCls}
@@ -746,9 +993,9 @@ const NhanSuSoanTable = forwardRef(
                     <th className="px-3 py-1.5">
                       <input
                         type="text"
-                        value={filters.lichDiHang}
+                        value={textFilterDrafts.lichDiHang}
                         onChange={(e) =>
-                          handleFilterChange("lichDiHang", e.target.value)
+                          handleTextFilterChange("lichDiHang", e.target.value)
                         }
                         placeholder="Lọc..."
                         className={filterInputCls}
@@ -757,9 +1004,9 @@ const NhanSuSoanTable = forwardRef(
                     <th className="px-3 py-1.5">
                       <input
                         type="text"
-                        value={filters.nvSoan}
+                        value={textFilterDrafts.nvSoan}
                         onChange={(e) =>
-                          handleFilterChange("nvSoan", e.target.value)
+                          handleTextFilterChange("nvSoan", e.target.value)
                         }
                         placeholder="Lọc mã NV..."
                         className={filterInputCls}
@@ -768,9 +1015,9 @@ const NhanSuSoanTable = forwardRef(
                     <th className="px-3 py-1.5">
                       <input
                         type="text"
-                        value={filters.nvKC}
+                        value={textFilterDrafts.nvKC}
                         onChange={(e) =>
-                          handleFilterChange("nvKC", e.target.value)
+                          handleTextFilterChange("nvKC", e.target.value)
                         }
                         placeholder="Lọc mã NV..."
                         className={filterInputCls}
@@ -853,7 +1100,7 @@ const NhanSuSoanTable = forwardRef(
                         key={`skeleton-${i}`}
                         className="border-b border-slate-100"
                       >
-                        {Array.from({ length: 14 }).map((__, j) => (
+                        {Array.from({ length: 15 }).map((__, j) => (
                           <td key={`sk-${i}-${j}`} className="px-3 py-3">
                             <div className="h-3 w-24 max-w-full animate-pulse rounded bg-gradient-to-r from-slate-200 to-slate-100" />
                           </td>
@@ -864,7 +1111,7 @@ const NhanSuSoanTable = forwardRef(
                   {!loading && error && (
                     <tr>
                       <td
-                        colSpan={14}
+                        colSpan={15}
                         className="px-3 py-8 text-center text-rose-600 font-medium"
                       >
                         {error}
@@ -874,7 +1121,7 @@ const NhanSuSoanTable = forwardRef(
 
                   {!loading && !error && items.length === 0 && (
                     <tr>
-                      <td colSpan={14} className="px-3 py-6">
+                      <td colSpan={15} className="px-3 py-6">
                         <EmptyState />
                       </td>
                     </tr>
@@ -883,101 +1130,17 @@ const NhanSuSoanTable = forwardRef(
                   {!loading &&
                     !error &&
                     sortedItems.length > 0 &&
-                    sortedItems.map((item, idx) => {
-                      const key = (item.soPhieuGop || "").toString().trim();
-                      const prevKey = (sortedItems[idx - 1]?.soPhieuGop || "")
-                        .toString()
-                        .trim();
-                      // Vẽ đường phân cách đậm hơn khi chuyển sang nhóm phiếu gộp khác
-                      const isGroupBoundary = key !== prevKey && idx !== 0;
-
-                      return (
-                        <tr
-                          key={item._id}
-                          className={`border-b border-slate-100 transition-colors duration-150 hover:bg-blue-50/70 hover:shadow-[inset_3px_0_0_0_theme(colors.blue.400)] ${
-                            key
-                              ? "bg-indigo-50/40 even:bg-indigo-50/60"
-                              : "even:bg-slate-50/70"
-                          } ${
-                            isGroupBoundary
-                              ? "border-t-2 border-t-indigo-200"
-                              : ""
-                          }`}
-                        >
-                          <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-800">
-                            {item.soDonHang}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-slate-700">
-                            {item.soPhieuGop ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold text-indigo-700">
-                                {item.soPhieuGop}
-                              </span>
-                            ) : (
-                              ""
-                            )}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-slate-700">
-                            {item.maNXD || ""}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-slate-700">
-                            {item.noiXuatDen || ""}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <ChuyenBadge value={item.chuyen} />
-                          </td>
-                          {/* lichDiHang là text (VD: "T7/CN"), không phải ngày tháng
-                              -> hiển thị trực tiếp, KHÔNG dùng formatDate() */}
-                          <td className="px-3 py-2 whitespace-nowrap text-slate-700">
-                            {item.lichDiHang || ""}
-                          </td>
-                          <td className="px-3 py-2">
-                            <NhanVienChips
-                              list={item.nvSoanChiTiet || item.nvSoan}
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <NhanVienChips
-                              list={item.nvKCChiTiet || item.nvKC}
-                            />
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <span className="inline-block rounded-lg bg-gradient-to-r from-green-100 to-emerald-50 px-2 py-1 font-bold text-green-700 shadow-sm">
-                              {item.kien ?? 0}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <span className="inline-block rounded-lg bg-gradient-to-r from-blue-100 to-sky-50 px-2 py-1 font-bold text-blue-700 shadow-sm">
-                              {item.dong ?? 0}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold whitespace-nowrap ${
-                                TRANG_THAI_STYLE[item.trangThai] ||
-                                TRANG_THAI_STYLE["Chưa soạn"]
-                              }`}
-                            >
-                              <span
-                                className={`h-1.5 w-1.5 rounded-full ${
-                                  TRANG_THAI_DOT[item.trangThai] ||
-                                  TRANG_THAI_DOT["Chưa soạn"]
-                                }`}
-                              />
-                              {item.trangThai}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-slate-500">
-                            {formatDateTime(item.tgImport)}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-slate-500">
-                            {formatDateTime(item.tgHoanThanh)}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-slate-500">
-                            {formatDateTime(item.tgNhanPhieu)}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    sortedItems.map((item, idx) => (
+                      <TableRow
+                        key={item._id}
+                        item={item}
+                        isSelected={selectedIds.has(item._id)}
+                        isFocused={idx === focusedRowIndex}
+                        isGroupBoundary={groupBoundaryFlags[idx]}
+                        onToggleSelect={toggleSelectRow}
+                        rowRef={rowRefCallbacks[idx]}
+                      />
+                    ))}
                 </tbody>
               </table>
             </div>

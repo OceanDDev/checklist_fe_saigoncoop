@@ -84,8 +84,30 @@ const HuyGiaoPhieu = forwardRef(({ onSuccess }, ref) => {
     setScannedList([]);
   };
 
-  const handleOpen = () => {
+  const handleOpen = (initialItems = []) => {
     resetAll();
+
+    if (Array.isArray(initialItems) && initialItems.length > 0) {
+      const seen = new Set();
+      const uniqueItems = initialItems.filter((it) => {
+        if (!it?._id || seen.has(it._id)) return false;
+        seen.add(it._id);
+        return true;
+      });
+
+      const validItems = uniqueItems.filter(
+        (it) => it.trangThai === "Đang soạn",
+      );
+      const skippedCount = uniqueItems.length - validItems.length;
+
+      setScannedList(validItems);
+      if (skippedCount > 0) {
+        setScanError(
+          `Đã bỏ qua ${skippedCount} phiếu không ở trạng thái "Đang soạn" trong số phiếu đã chọn.`,
+        );
+      }
+    }
+
     setOpen(true);
   };
 

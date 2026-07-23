@@ -98,10 +98,21 @@ const ScanGiaoPhieu = forwardRef(({ onSuccess }, ref) => {
     setNvError("");
   };
 
-  const handleOpen = () => {
-    resetAll();
-    setOpen(true);
-  };
+const handleOpen = (initialItems = []) => {
+  resetAll();
+
+  if (Array.isArray(initialItems) && initialItems.length > 0) {
+    const seen = new Set();
+    const uniqueItems = initialItems.filter((it) => {
+      if (!it?._id || seen.has(it._id)) return false;
+      seen.add(it._id);
+      return true;
+    });
+    setScannedList(uniqueItems);
+  }
+
+  setOpen(true);
+};
 
   const handleClose = () => {
     setOpen(false);
