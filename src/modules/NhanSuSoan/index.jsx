@@ -21,6 +21,7 @@ import {
   Table2,
   LayoutDashboard,
   Loader2,
+  FileSpreadsheet,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
@@ -36,6 +37,7 @@ import NhanSuSoanDashboard from "./dashboard";
 import NhanSuSoanEmployeeLookup from "./dashboard/nhansu";
 
 const TRANG_THAI_OPTIONS = ["Chưa soạn", "Đang soạn", "Hoàn thành"];
+const TRANG_THAI_BOOK_XE_OPTIONS = ["Chờ Book", "Chờ Xe", "Hoàn thành"];
 
 const TRANG_THAI_STYLE = {
   "Chưa soạn": "text-slate-600 bg-slate-100 border border-slate-200 shadow-sm",
@@ -48,6 +50,21 @@ const TRANG_THAI_STYLE = {
 const TRANG_THAI_DOT = {
   "Chưa soạn": "bg-slate-400",
   "Đang soạn": "bg-amber-500 animate-pulse",
+  "Hoàn thành": "bg-emerald-500",
+};
+
+const TRANG_THAI_BOOK_XE_STYLE = {
+  "Chờ Book":
+    "text-orange-700 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-300 shadow-sm",
+  "Chờ Xe":
+    "text-sky-700 bg-gradient-to-r from-sky-50 to-cyan-50 border border-sky-300 shadow-sm",
+  "Hoàn thành":
+    "text-emerald-700 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-300 shadow-sm",
+};
+
+const TRANG_THAI_BOOK_XE_DOT = {
+  "Chờ Book": "bg-orange-500 animate-pulse",
+  "Chờ Xe": "bg-sky-500 animate-pulse",
   "Hoàn thành": "bg-emerald-500",
 };
 
@@ -125,6 +142,7 @@ const DEFAULT_FILTERS = {
   soDonHang: "",
   soPhieuGop: "",
   trangThai: "",
+  trangThaiBookXe: "",
   maNXD: "",
   noiXuatDen: "",
   chuyen: "",
@@ -166,6 +184,19 @@ const formatDateTime = (d) => {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+};
+
+// Trả về text thuần (mã hiển thị) từ mảng nvSoan/nvKC, dùng cho export Excel
+const nhanVienListToText = (list) => {
+  if (!list || list.length === 0) return "";
+  return list
+    .map((nv) => {
+      if (nv && typeof nv === "object")
+        return nv.ma_hien_thi || nv.ma_nhan_vien || "";
+      return nv;
+    })
+    .filter(Boolean)
+    .join(", ");
 };
 
 // Mã nhân viên được làm nổi bật hơn — memo vì props chỉ phụ thuộc `list`.
@@ -401,7 +432,8 @@ const ViewTabs = memo(function ViewTabs({ view, onChange }) {
 });
 
 /** 1 dòng dữ liệu trong bảng — tách riêng + memo để khi chỉ có 1-2 dòng đổi
- *  trạng thái chọn/focus, các dòng còn lại không phải render lại. */
+ *  trạng thái chọn/focus, các dòng còn lại không phải render lại.
+ *  Khi được chọn (isSelected), dòng "nổi lên" nhẹ bằng translateY + shadow. */
 const TableRow = memo(function TableRow({
   item,
   isSelected,
@@ -413,9 +445,12 @@ const TableRow = memo(function TableRow({
   return (
     <tr
       ref={rowRef}
-      className={`border-b border-slate-100 transition-all duration-150 hover:bg-blue-50/70 hover:shadow-[inset_3px_0_0_0_theme(colors.blue.400)] ${
+      style={
+        isSelected ? { transform: "translateY(-2px) scale(1.002)" } : undefined
+      }
+      className={`relative border-b border-slate-100 transition-all duration-200 ease-out will-change-transform hover:bg-blue-50/70 hover:shadow-[inset_3px_0_0_0_theme(colors.blue.400)] ${
         isSelected
-          ? "bg-blue-50"
+          ? "z-10 bg-blue-50 shadow-[0_4px_14px_-2px_rgba(59,130,246,0.35)] ring-1 ring-blue-300"
           : item.soPhieuGop
             ? "bg-indigo-50/40 even:bg-indigo-50/60"
             : "even:bg-slate-50/70"
@@ -430,7 +465,7 @@ const TableRow = memo(function TableRow({
           type="checkbox"
           checked={isSelected}
           onChange={() => onToggleSelect(item._id)}
-          className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
+          className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600 transition-transform duration-150 checked:scale-110"
         />
       </td>
       <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-800">
@@ -487,6 +522,22 @@ const TableRow = memo(function TableRow({
           {item.trangThai}
         </span>
       </td>
+      <td className="px-3 py-2 whitespace-nowrap">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold whitespace-nowrap ${
+            TRANG_THAI_BOOK_XE_STYLE[item.trangThaiBookXe] ||
+            TRANG_THAI_BOOK_XE_STYLE["Chờ Book"]
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              TRANG_THAI_BOOK_XE_DOT[item.trangThaiBookXe] ||
+              TRANG_THAI_BOOK_XE_DOT["Chờ Book"]
+            }`}
+          />
+          {item.trangThaiBookXe || "Chờ Book"}
+        </span>
+      </td>
       <td className="px-3 py-2 whitespace-nowrap text-slate-500">
         {formatDateTime(item.tgImport)}
       </td>
@@ -515,6 +566,7 @@ const NhanSuSoanTable = forwardRef(
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(20);
     const [total, setTotal] = useState(0);
+    const [exporting, setExporting] = useState(false);
     const [filters, setFilters] = useState(() => ({
       ...DEFAULT_FILTERS,
       tuNgay: getDefaultTuNgay(),
@@ -573,6 +625,7 @@ const NhanSuSoanTable = forwardRef(
           filters.soDonHang ||
           filters.soPhieuGop ||
           filters.trangThai ||
+          filters.trangThaiBookXe ||
           filters.maNXD ||
           filters.noiXuatDen ||
           filters.chuyen ||
@@ -769,6 +822,124 @@ const NhanSuSoanTable = forwardRef(
       [total, limit],
     );
 
+    // ─── Xuất Excel bằng ExcelJS ───────────────────────────────────────────
+    // Nếu đang có dòng được chọn (checkbox) -> chỉ xuất các dòng đó.
+    // Ngược lại -> xuất toàn bộ dữ liệu đang hiển thị trên trang hiện tại.
+    const handleExportExcel = useCallback(async () => {
+      const rowsToExport =
+        selectedItems.length > 0 ? selectedItems : sortedItems;
+
+      if (rowsToExport.length === 0) {
+        alert("Không có dữ liệu để xuất Excel.");
+        return;
+      }
+
+      setExporting(true);
+      try {
+        const ExcelJS = (await import("exceljs")).default;
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = "SC Logistics";
+        workbook.created = new Date();
+
+        const sheet = workbook.addWorksheet("Phiếu Soạn", {
+          views: [{ state: "frozen", ySplit: 1 }],
+        });
+
+        sheet.columns = [
+          { header: "Số đơn hàng", key: "soDonHang", width: 16 },
+          { header: "Số phiếu gộp", key: "soPhieuGop", width: 14 },
+          { header: "Mã NXĐ", key: "maNXD", width: 12 },
+          { header: "Nơi xuất đến", key: "noiXuatDen", width: 26 },
+          { header: "Chuyến", key: "chuyen", width: 10 },
+          { header: "Lịch đi hàng", key: "lichDiHang", width: 14 },
+          { header: "NV soạn", key: "nvSoan", width: 24 },
+          { header: "NV KC", key: "nvKC", width: 24 },
+          { header: "Kiện", key: "kien", width: 8 },
+          { header: "Dòng", key: "dong", width: 8 },
+          { header: "Trạng thái", key: "trangThai", width: 14 },
+          { header: "Trạng thái Book Xe", key: "trangThaiBookXe", width: 18 },
+          { header: "TG import", key: "tgImport", width: 18 },
+          { header: "TG hoàn thành", key: "tgHoanThanh", width: 18 },
+          { header: "TG nhận phiếu", key: "tgNhanPhieu", width: 18 },
+        ];
+
+        const headerRow = sheet.getRow(1);
+        headerRow.font = { bold: true, color: { argb: "FF1E293B" } };
+        headerRow.alignment = { vertical: "middle", horizontal: "center" };
+        headerRow.height = 22;
+        headerRow.eachCell((cell) => {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFE2E8F0" },
+          };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFCBD5E1" } },
+            left: { style: "thin", color: { argb: "FFCBD5E1" } },
+            bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
+            right: { style: "thin", color: { argb: "FFCBD5E1" } },
+          };
+        });
+
+        rowsToExport.forEach((item) => {
+          sheet.addRow({
+            soDonHang: item.soDonHang || "",
+            soPhieuGop: item.soPhieuGop || "",
+            maNXD: item.maNXD || "",
+            noiXuatDen: item.noiXuatDen || "",
+            chuyen: item.chuyen || "",
+            lichDiHang: item.lichDiHang || "",
+            nvSoan: nhanVienListToText(item.nvSoanChiTiet || item.nvSoan),
+            nvKC: nhanVienListToText(item.nvKCChiTiet || item.nvKC),
+            kien: item.kien ?? 0,
+            dong: item.dong ?? 0,
+            trangThai: item.trangThai || "",
+            trangThaiBookXe: item.trangThaiBookXe || "Chờ Book",
+            tgImport: formatDateTime(item.tgImport),
+            tgHoanThanh: formatDateTime(item.tgHoanThanh),
+            tgNhanPhieu: formatDateTime(item.tgNhanPhieu),
+          });
+        });
+
+        // Viền + căn giữa cho toàn bộ dữ liệu (trừ header đã set riêng ở trên)
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+          if (rowNumber === 1) return;
+          row.eachCell({ includeEmpty: false }, (cell) => {
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFE2E8F0" } },
+              left: { style: "thin", color: { argb: "FFE2E8F0" } },
+              bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+              right: { style: "thin", color: { argb: "FFE2E8F0" } },
+            };
+            cell.alignment = { vertical: "middle" };
+          });
+        });
+
+        sheet.autoFilter = {
+          from: { row: 1, column: 1 },
+          to: { row: 1, column: sheet.columns.length },
+        };
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `PhieuSoan_${dayjs().format("YYYYMMDD_HHmmss")}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("Lỗi xuất Excel:", err);
+        alert("Xuất Excel thất bại. Vui lòng thử lại.");
+      } finally {
+        setExporting(false);
+      }
+    }, [selectedItems, sortedItems]);
+
     return (
       <div className="mx-auto max-w-[1900px] space-y-4 p-4 md:p-6 bg-gradient-to-b from-slate-50 to-white min-h-screen">
         {/* Header dùng chung cho cả 2 tab */}
@@ -808,6 +979,28 @@ const NhanSuSoanTable = forwardRef(
                   onSuccess={handleActionSuccess}
                 />
                 <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  disabled={exporting || loading}
+                  title={
+                    selectedIds.size > 0
+                      ? `Xuất Excel ${selectedIds.size} phiếu đã chọn`
+                      : "Xuất Excel toàn bộ dữ liệu đang hiển thị"
+                  }
+                  className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-emerald-700 hover:to-teal-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:hover:from-emerald-600 disabled:hover:to-teal-600"
+                >
+                  {exporting ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <FileSpreadsheet size={15} />
+                  )}
+                  {exporting
+                    ? "Đang xuất..."
+                    : selectedIds.size > 0
+                      ? `Xuất Excel (${selectedIds.size})`
+                      : "Xuất Excel"}
+                </button>
               </div>
             )}
 
@@ -874,7 +1067,7 @@ const NhanSuSoanTable = forwardRef(
 
             {/* Table */}
             <div className="overflow-auto rounded-2xl border border-slate-200 shadow-md ring-1 ring-slate-100">
-              <table className="min-w-full text-xs md:text-sm">
+              <table className="min-w-full text-xs md:text-sm border-separate border-spacing-0">
                 <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 backdrop-blur">
                   <tr className="border-b-2 border-slate-200">
                     <th className="w-8 px-3 py-2.5">
@@ -921,6 +1114,9 @@ const NhanSuSoanTable = forwardRef(
                     </th>
                     <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
                       Trạng thái
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Trạng thái Book Xe
                     </th>
                     <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
                       TG import
@@ -1041,6 +1237,22 @@ const NhanSuSoanTable = forwardRef(
                         ))}
                       </select>
                     </th>
+                    <th className="px-3 py-1.5">
+                      <select
+                        value={filters.trangThaiBookXe}
+                        onChange={(e) =>
+                          handleFilterChange("trangThaiBookXe", e.target.value)
+                        }
+                        className={filterInputCls}
+                      >
+                        <option value="">Tất cả</option>
+                        {TRANG_THAI_BOOK_XE_OPTIONS.map((tt) => (
+                          <option key={tt} value={tt}>
+                            {tt}
+                          </option>
+                        ))}
+                      </select>
+                    </th>
                     <th className="px-3 py-1.5" />
                     <th className="px-3 py-1.5">
                       <DateRangeFilter
@@ -1100,7 +1312,7 @@ const NhanSuSoanTable = forwardRef(
                         key={`skeleton-${i}`}
                         className="border-b border-slate-100"
                       >
-                        {Array.from({ length: 15 }).map((__, j) => (
+                        {Array.from({ length: 16 }).map((__, j) => (
                           <td key={`sk-${i}-${j}`} className="px-3 py-3">
                             <div className="h-3 w-24 max-w-full animate-pulse rounded bg-gradient-to-r from-slate-200 to-slate-100" />
                           </td>
@@ -1111,7 +1323,7 @@ const NhanSuSoanTable = forwardRef(
                   {!loading && error && (
                     <tr>
                       <td
-                        colSpan={15}
+                        colSpan={16}
                         className="px-3 py-8 text-center text-rose-600 font-medium"
                       >
                         {error}
@@ -1121,7 +1333,7 @@ const NhanSuSoanTable = forwardRef(
 
                   {!loading && !error && items.length === 0 && (
                     <tr>
-                      <td colSpan={15} className="px-3 py-6">
+                      <td colSpan={16} className="px-3 py-6">
                         <EmptyState />
                       </td>
                     </tr>

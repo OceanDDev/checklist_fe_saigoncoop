@@ -129,6 +129,23 @@ const updateManyNhanSuSoan = async (payload) => {
   }
 };
 
+/**
+ * PUT: cập nhật trạng thái Book Xe cho nhiều phiếu
+ * body: { ids: [...], trangThaiBookXe: "Chờ Book" | "Chờ Xe" | "Hoàn thành" }
+ */
+const updateTrangThaiBookXe = async (ids, trangThaiBookXe) => {
+  try {
+    const response = await ApiServer.put(
+      `${URL.phieusoan.nhansusoan}/update-trang-thai-book-xe`,
+      { ids, trangThaiBookXe },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi updateTrangThaiBookXe:", error);
+    throw error;
+  }
+};
+
 /** DELETE: xóa 1 phiếu nhân sự soạn theo ID */
 const deleteNhanSuSoan = async (id) => {
   try {
@@ -178,6 +195,7 @@ export const nhanSuSoanService = {
   importManyNhanSuSoan, // POST   /api/saigoncoop/nhansusoan/import
   updateNhanSuSoan, // PUT    /api/saigoncoop/nhansusoan/:id
   updateManyNhanSuSoan, // PUT    /api/saigoncoop/nhansusoan/update-many
+  updateTrangThaiBookXe, // PUT    /api/saigoncoop/nhansusoan/update-trang-thai-book-xe
   deleteNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/:id
   deleteManyNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/many
   deleteAllNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/delete-all
