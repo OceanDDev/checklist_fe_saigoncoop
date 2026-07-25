@@ -81,7 +81,6 @@ const URL = {
     phanbo: ENDPOINT_PREFIX + "/phanbo",
     phanbocs: ENDPOINT_PREFIX + "/phanbo-cs",
     nhansusoan: ENDPOINT_PREFIX + "/nhansusoan",
-
   },
   ttb: {
     ttb: ENDPOINT_PREFIX + "/ttb",
@@ -95,21 +94,25 @@ const URL = {
     chamcong: ENDPOINT_PREFIX + "/chamcong",
     nhanvien: ENDPOINT_PREFIX + "/nhanvien",
   },
-   nangsuat: {
+  nangsuat: {
     nangsuat: ENDPOINT_PREFIX + "/nangsuat",
   },
-   inventory: {
+  inventory: {
     inventory: ENDPOINT_PREFIX + "/tonkho",
   },
-  learning:{
-    khoahoc: ENDPOINT_PREFIX +"/khoa-hoc",
-    baihoc: ENDPOINT_PREFIX +"/bai-hoc",
-    baikiemtra: ENDPOINT_PREFIX +"/bai-kiem-tra",
-    luotlambai:ENDPOINT_PREFIX +"/luot-lam-bai",
+  learning: {
+    khoahoc: ENDPOINT_PREFIX + "/khoa-hoc",
+    baihoc: ENDPOINT_PREFIX + "/bai-hoc",
+    baikiemtra: ENDPOINT_PREFIX + "/bai-kiem-tra",
+    luotlambai: ENDPOINT_PREFIX + "/luot-lam-bai",
   },
-  quanlyhd:{
-    quanlyhd: ENDPOINT_PREFIX +"/quanlyhd",
-  }
+  quanlyhd: {
+    quanlyhd: ENDPOINT_PREFIX + "/quanlyhd",
+  },
+  trangthietbi: {
+    trangthietbi: ENDPOINT_PREFIX + "/trang-thiet-bi",
+    tonkhocuahang: ENDPOINT_PREFIX + "/ton-kho-cua-hang",
+  },
 };
 
 export { URL, ApiServer, DEF_HEADERS };

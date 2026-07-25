@@ -46,6 +46,7 @@ import QuanLyQR from "./modules/LearningSCL/Admin/Q&A/quanlyQR";
 import TrangLamBai from "./modules/LearningSCL/Admin/Q&A/tranglambai";
 import NhanSuSoanTable from "./modules/NhanSuSoan";
 import QuanLyHDTable from "./modules/QuanLyHoaDon";
+import TrangThietBiTable from "./modules/trangthietbi";
 
 function App() {
   return (
@@ -402,6 +403,18 @@ function App() {
             <PrivateRoute allowRoles={[55]}>
               <MainLayout>
                 <QuanLyHDTable />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+
+         <Route
+          path="/trangthietbi"
+          element={
+            <PrivateRoute allowRoles={[56]}>
+              <MainLayout>
+                <TrangThietBiTable />
               </MainLayout>
             </PrivateRoute>
           }
