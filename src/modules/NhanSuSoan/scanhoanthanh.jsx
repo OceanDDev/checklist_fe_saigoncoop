@@ -26,6 +26,32 @@ const TRANG_THAI_STYLE = {
   "Hoàn thành": "text-green-700 bg-green-50 border border-green-200",
 };
 
+/** Lấy danh sách mã NV soạn hiện có của 1 phiếu, dùng để so sánh giữa các phiếu */
+const getNvSoanCodes = (item) => {
+  const list =
+    (Array.isArray(item.nvSoan) && item.nvSoan.length > 0 && item.nvSoan) ||
+    (Array.isArray(item.nvSoanChiTiet) &&
+      item.nvSoanChiTiet.map((nv) => nv.ma_nhan_vien || nv)) ||
+    [];
+  return [...list].map(String).sort();
+};
+
+/** So sánh NV soạn giữa 2 phiếu — nếu 1 trong 2 chưa có NV soạn thì không tính
+ *  là xung đột (giống quy tắc trong GopPhieu). */
+const sameNvSoan = (a, b) => {
+  const listA = getNvSoanCodes(a);
+  const listB = getNvSoanCodes(b);
+  if (listA.length === 0 || listB.length === 0) return true;
+  if (listA.length !== listB.length) return false;
+  return listA.every((code, idx) => code === listB[idx]);
+};
+
+/** Phiếu có mã bắt đầu bằng "TO" được phép bỏ qua bước kiểm tra chéo
+ *  (cùng mã NXĐ / cùng NV soạn) — nhưng vẫn cần người dùng xác nhận (confirm),
+ *  giống quy tắc trong GopPhieu. */
+const isPhieuTO = (soDonHang) =>
+  (soDonHang || "").toString().trim().toUpperCase().startsWith("TO");
+
 const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
   const inputRef = useRef(null);
   const nvInputRef = useRef(null);
@@ -98,36 +124,71 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
     setNvError("");
   };
 
- const handleOpen = (initialItems = []) => {
-  resetAll();
+  const handleOpen = (initialItems = []) => {
+    resetAll();
 
-  if (Array.isArray(initialItems) && initialItems.length > 0) {
-    const seen = new Set();
-    const uniqueItems = initialItems.filter((it) => {
-      if (!it?._id || seen.has(it._id)) return false;
-      seen.add(it._id);
-      return true;
-    });
+    if (Array.isArray(initialItems) && initialItems.length > 0) {
+      const seen = new Set();
+      const uniqueItems = initialItems.filter((it) => {
+        if (!it?._id || seen.has(it._id)) return false;
+        seen.add(it._id);
+        return true;
+      });
 
-    const validItems = uniqueItems.filter((it) => it.trangThai !== "Chưa soạn");
-    const skippedCount = uniqueItems.length - validItems.length;
-
-    setScannedList(
-      validItems.map((matched) => ({
-        ...matched,
-        kien: matched.kien != null ? String(matched.kien) : "",
-        dong: matched.dong != null ? String(matched.dong) : "",
-      })),
-    );
-    if (skippedCount > 0) {
-      setScanError(
-        `Đã bỏ qua ${skippedCount} phiếu đang ở trạng thái "Chưa soạn" trong số phiếu đã chọn — cần giao soạn trước.`,
+      const validItems = uniqueItems.filter(
+        (it) => it.trangThai !== "Chưa soạn",
       );
-    }
-  }
+      const skippedCount = uniqueItems.length - validItems.length;
 
-  setOpen(true);
-};
+      // Kiểm tra chéo (cùng mã NXĐ, cùng NV soạn) giữa các phiếu chọn sẵn —
+      // giống quy tắc trong GopPhieu. Phiếu "TO" được phép bỏ qua nếu xác nhận.
+      const first = validItems[0];
+      const conflict = first
+        ? validItems
+            .slice(1)
+            .find(
+              (cur) =>
+                (cur.maNXD || "").toUpperCase() !==
+                  (first.maNXD || "").toUpperCase() || !sameNvSoan(cur, first),
+            )
+        : null;
+
+      let finalItems = validItems;
+      if (conflict) {
+        if (isPhieuTO(conflict.soDonHang)) {
+          const confirmed = window.confirm(
+            `Phiếu "${conflict.soDonHang}" khác mã NXĐ hoặc khác NV soạn so với các phiếu còn lại đã chọn. Vì là phiếu "TO" nên có thể bỏ qua kiểm tra chéo. Bạn có chắc chắn muốn tiếp tục không?`,
+          );
+          if (!confirmed) {
+            finalItems = [];
+            setScanError(
+              `Đã huỷ chọn do phiếu "${conflict.soDonHang}" khác NXĐ/NV soạn.`,
+            );
+          }
+        } else {
+          finalItems = [];
+          setScanError(
+            `Phiếu "${conflict.soDonHang}" khác mã NXĐ hoặc khác NV soạn so với các phiếu còn lại đã chọn — không thể xử lý chung.`,
+          );
+        }
+      }
+
+      setScannedList(
+        finalItems.map((matched) => ({
+          ...matched,
+          kien: matched.kien != null ? String(matched.kien) : "",
+          dong: matched.dong != null ? String(matched.dong) : "",
+        })),
+      );
+      if (skippedCount > 0 && !conflict) {
+        setScanError(
+          `Đã bỏ qua ${skippedCount} phiếu đang ở trạng thái "Chưa soạn" trong số phiếu đã chọn — cần giao soạn trước.`,
+        );
+      }
+    }
+
+    setOpen(true);
+  };
 
   const handleClose = () => {
     setOpen(false);
@@ -182,6 +243,48 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
         return;
       }
 
+      // Kiểm tra chéo (cùng mã NXĐ, cùng NV soạn) với các phiếu đã quét —
+      // giống quy tắc trong GopPhieu. Phiếu "TO" được phép bỏ qua nếu xác nhận.
+      if (scannedList.length > 0) {
+        const first = scannedList[0];
+        const nxdMismatch =
+          (matched.maNXD || "").toUpperCase() !==
+          (first.maNXD || "").toUpperCase();
+        const nvMismatch = !sameNvSoan(matched, first);
+
+        if (nxdMismatch || nvMismatch) {
+          if (isPhieuTO(code)) {
+            const lyDo = [
+              nxdMismatch &&
+                `khác mã NXĐ (${matched.maNXD || "—"} so với ${
+                  first.maNXD || "—"
+                })`,
+              nvMismatch && "khác nhân viên soạn",
+            ]
+              .filter(Boolean)
+              .join(" và ");
+            const confirmed = window.confirm(
+              `Phiếu "${code}" ${lyDo} so với các phiếu đã quét. Vì là phiếu "TO" nên có thể bỏ qua kiểm tra chéo. Bạn có chắc chắn muốn thêm phiếu này không?`,
+            );
+            if (!confirmed) {
+              setScanError(`Đã huỷ thêm phiếu "${code}" do khác NXĐ/NV soạn.`);
+              return;
+            }
+            // Đã xác nhận bỏ qua kiểm tra chéo -> tiếp tục thêm phiếu bên dưới
+          } else if (nxdMismatch) {
+            setScanError(
+              `Phiếu "${code}" khác mã NXĐ (${matched.maNXD || "—"}) so với các phiếu đã quét (${first.maNXD || "—"}) — không thể xử lý chung.`,
+            );
+            return;
+          } else {
+            setScanError(
+              `Phiếu "${code}" khác nhân viên soạn so với các phiếu đã quét — không thể xử lý chung.`,
+            );
+            return;
+          }
+        }
+      }
+
       setScannedList((prev) => [
         {
           ...matched,
@@ -220,6 +323,12 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
   const isScannedListValid =
     scannedList.length > 0 &&
     scannedList.every((it) => it.kien !== "" && it.dong !== "");
+
+  // Nếu TOÀN BỘ phiếu trong danh sách là phiếu "TO" thì được phép bỏ qua
+  // hẳn bước xác nhận nhân viên KC (không cần nhập mã NV KC), giống GopPhieu.
+  const groupIsTO =
+    scannedList.length > 0 &&
+    scannedList.every((it) => isPhieuTO(it.soDonHang));
 
   const goToConfirmStep = () => {
     if (scannedList.length === 0) {
@@ -271,19 +380,23 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
   };
 
   /** Xác nhận: cập nhật trạng thái → "Hoàn thành", ghi nhận kiện/dòng đã nhập
-   *  và gộp mã NV vào nvKC cho từng phiếu */
-  const handleConfirmHoanThanh = async () => {
-    if (!nhanVienInfo) return;
+   *  và gộp mã NV vào nvKC cho từng phiếu.
+   *  skipNV = true: dùng cho nhóm phiếu "TO" bỏ qua hẳn bước xác nhận NV KC —
+   *  không yêu cầu nhanVienInfo và không thêm mã NV KC nào vào phiếu. */
+  const handleConfirmHoanThanh = async (skipNV = false) => {
+    if (!skipNV && !nhanVienInfo) return;
 
     setSubmitting(true);
     try {
       const now = new Date().toISOString();
-      const maNV = nhanVienInfo.ma_nhan_vien;
+      const maNV = skipNV ? null : nhanVienInfo.ma_nhan_vien;
 
       await Promise.all(
         scannedList.map((item) => {
           const existingCodes = getExistingNvKCCodes(item);
-          const mergedNvKC = Array.from(new Set([...existingCodes, maNV]));
+          const mergedNvKC = maNV
+            ? Array.from(new Set([...existingCodes, maNV]))
+            : existingCodes;
 
           return nhanSuSoanService.updateNhanSuSoan(item._id, {
             trangThai: "Hoàn thành",
@@ -296,7 +409,9 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
       );
 
       alert(
-        `Đã hoàn thành ${scannedList.length} phiếu bởi ${nhanVienInfo.ten_nhan_vien || maNhanVien}.`,
+        skipNV
+          ? `Đã hoàn thành ${scannedList.length} phiếu (phiếu "TO" — bỏ qua xác nhận NV KC).`
+          : `Đã hoàn thành ${scannedList.length} phiếu bởi ${nhanVienInfo.ten_nhan_vien || maNhanVien}.`,
       );
       onSuccess?.();
       handleClose();
@@ -308,13 +423,32 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
     }
   };
 
+  /** Bỏ qua hẳn bước xác nhận NV KC cho nhóm phiếu "TO" — vẫn cần confirm
+   *  trước khi hoàn thành để tránh bấm/Enter nhầm. */
+  const handleSkipNvKcAndConfirm = () => {
+    if (!isScannedListValid || submitting) return;
+    const confirmed = window.confirm(
+      `Nhóm ${scannedList.length} phiếu này đều là phiếu "TO" nên có thể bỏ qua bước xác nhận nhân viên KC. Bạn có chắc chắn muốn hoàn thành mà không cần nhập mã NV KC không?`,
+    );
+    if (!confirmed) return;
+    handleConfirmHoanThanh(true);
+  };
+
   /** Enter trong ô mã NV KC: nếu chưa tra cứu (hoặc vừa đổi mã) → tra cứu.
    *  Nếu đã có kết quả tra cứu hợp lệ rồi → Enter tiếp theo xác nhận hoàn thành
-   *  luôn, giúp thao tác nhanh kiểu "Enter Enter" khi vận hành bằng máy quét/bàn phím. */
+   *  luôn, giúp thao tác nhanh kiểu "Enter Enter" khi vận hành bằng máy quét/bàn phím.
+   *  Nếu ô đang trống và nhóm toàn phiếu "TO" → Enter sẽ hiện cảnh báo bỏ qua
+   *  NV KC, Enter lần nữa trên hộp thoại là xác nhận — thao tác hoàn toàn bằng
+   *  bàn phím, không cần chuột. */
   const handleMaNhanVienKeyDown = (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
     if (lookingUpNV || submitting) return;
+
+    if (!maNhanVien.trim() && groupIsTO) {
+      handleSkipNvKcAndConfirm();
+      return;
+    }
 
     if (nhanVienInfo) {
       handleConfirmHoanThanh();

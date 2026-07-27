@@ -26,6 +26,22 @@ const TRANG_THAI_STYLE = {
   "Hoàn thành": "text-green-700 bg-green-50 border border-green-200",
 };
 
+/** Lấy danh sách mã NV soạn hiện có của 1 phiếu (từ nvSoan hoặc nvSoanChiTiet đã populate) */
+const getExistingNvSoanCodes = (item) => {
+  if (Array.isArray(item.nvSoan) && item.nvSoan.length > 0) {
+    return item.nvSoan;
+  }
+  if (Array.isArray(item.nvSoanChiTiet)) {
+    return item.nvSoanChiTiet.map((nv) => nv.ma_nhan_vien || nv);
+  }
+  return [];
+};
+
+/** Phiếu đã được giao cho nhân viên nào đó rồi (đã có NV soạn, hoặc trạng thái
+ *  không còn là "Chưa soạn") thì không được giao cho ai nữa. */
+const isDaGiao = (item) =>
+  getExistingNvSoanCodes(item).length > 0 || item.trangThai !== "Chưa soạn";
+
 const ScanGiaoPhieu = forwardRef(({ onSuccess }, ref) => {
   const inputRef = useRef(null);
   const nvInputRef = useRef(null);
@@ -98,21 +114,33 @@ const ScanGiaoPhieu = forwardRef(({ onSuccess }, ref) => {
     setNvError("");
   };
 
-const handleOpen = (initialItems = []) => {
-  resetAll();
+  const handleOpen = (initialItems = []) => {
+    resetAll();
 
-  if (Array.isArray(initialItems) && initialItems.length > 0) {
-    const seen = new Set();
-    const uniqueItems = initialItems.filter((it) => {
-      if (!it?._id || seen.has(it._id)) return false;
-      seen.add(it._id);
-      return true;
-    });
-    setScannedList(uniqueItems);
-  }
+    if (Array.isArray(initialItems) && initialItems.length > 0) {
+      const seen = new Set();
+      const uniqueItems = initialItems.filter((it) => {
+        if (!it?._id || seen.has(it._id)) return false;
+        seen.add(it._id);
+        return true;
+      });
 
-  setOpen(true);
-};
+      // Không cho chọn sẵn các phiếu đã được giao cho nhân viên khác rồi.
+      const daGiao = uniqueItems.find((it) => isDaGiao(it));
+      if (daGiao) {
+        const nvCodes = getExistingNvSoanCodes(daGiao);
+        setScanError(
+          `Phiếu "${daGiao.soDonHang}" đã được giao${
+            nvCodes.length > 0 ? ` cho NV ${nvCodes.join(", ")}` : ""
+          } (trạng thái "${daGiao.trangThai}") — không thể giao lại.`,
+        );
+      } else {
+        setScannedList(uniqueItems);
+      }
+    }
+
+    setOpen(true);
+  };
 
   const handleClose = () => {
     setOpen(false);
@@ -155,6 +183,17 @@ const handleOpen = (initialItems = []) => {
 
       if (!matched) {
         setScanError(`Không tìm thấy phiếu "${code}".`);
+        return;
+      }
+
+      // Phiếu đã được giao cho nhân viên nào đó rồi thì không được giao nữa.
+      if (isDaGiao(matched)) {
+        const nvCodes = getExistingNvSoanCodes(matched);
+        setScanError(
+          `Phiếu "${code}" đã được giao${
+            nvCodes.length > 0 ? ` cho NV ${nvCodes.join(", ")}` : ""
+          } (trạng thái "${matched.trangThai}") — không thể giao lại.`,
+        );
         return;
       }
 
@@ -219,17 +258,6 @@ const handleOpen = (initialItems = []) => {
     } else {
       handleLookupNhanVien();
     }
-  };
-
-  /** Lấy danh sách mã NV soạn hiện có của 1 phiếu (từ nvSoan hoặc nvSoanChiTiet đã populate) */
-  const getExistingNvSoanCodes = (item) => {
-    if (Array.isArray(item.nvSoan) && item.nvSoan.length > 0) {
-      return item.nvSoan;
-    }
-    if (Array.isArray(item.nvSoanChiTiet)) {
-      return item.nvSoanChiTiet.map((nv) => nv.ma_nhan_vien || nv);
-    }
-    return [];
   };
 
   /** Xác nhận giao: cập nhật trạng thái → "Đang soạn" và gộp mã NV vào nvSoan cho từng phiếu */

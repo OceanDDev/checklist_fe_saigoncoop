@@ -40,6 +40,14 @@ const getNvSoanCodes = (item) => {
   return [...list].map(String).sort();
 };
 
+/** Chỉ cho phép gộp các phiếu đang ở trạng thái "Đang soạn" */
+const isDangSoan = (item) => item?.trangThai === "Đang soạn";
+
+/** Phiếu có mã bắt đầu bằng "TO" được phép bỏ qua bước kiểm tra chéo
+ *  (cùng mã NXĐ / cùng NV soạn) — nhưng vẫn cần người dùng xác nhận (confirm). */
+const isPhieuTO = (soDonHang) =>
+  (soDonHang || "").toString().trim().toUpperCase().startsWith("TO");
+
 const sameNvSoan = (a, b) => {
   const listA = getNvSoanCodes(a);
   const listB = getNvSoanCodes(b);
@@ -250,6 +258,9 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
           return true;
         });
 
+        // Chỉ cho phép gộp các phiếu đang ở trạng thái "Đang soạn"
+        const notDangSoan = uniqueItems.find((it) => !isDangSoan(it));
+
         // Kiểm tra cùng mã NXĐ và cùng NV soạn giữa các phiếu chọn sẵn,
         // dùng đúng quy tắc như khi quét từng phiếu ở bước 1.
         const first = uniqueItems[0];
@@ -261,10 +272,27 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
                 (first.maNXD || "").toUpperCase() || !sameNvSoan(cur, first),
           );
 
-        if (conflict) {
+        if (notDangSoan) {
           setScanError(
-            `Phiếu "${conflict.soDonHang}" khác mã NXĐ hoặc khác NV soạn so với các phiếu còn lại đã chọn — không thể gộp chung.`,
+            `Phiếu "${notDangSoan.soDonHang}" đang ở trạng thái "${notDangSoan.trangThai}" — chỉ được gộp các phiếu đang ở trạng thái "Đang soạn".`,
           );
+        } else if (conflict) {
+          if (isPhieuTO(conflict.soDonHang)) {
+            const confirmed = window.confirm(
+              `Phiếu "${conflict.soDonHang}" khác mã NXĐ hoặc khác NV soạn so với các phiếu còn lại đã chọn. Vì là phiếu "TO" nên có thể bỏ qua kiểm tra chéo. Bạn có chắc chắn muốn gộp các phiếu này không?`,
+            );
+            if (confirmed) {
+              setScannedList(uniqueItems);
+            } else {
+              setScanError(
+                `Đã huỷ chọn do phiếu "${conflict.soDonHang}" khác NXĐ/NV soạn.`,
+              );
+            }
+          } else {
+            setScanError(
+              `Phiếu "${conflict.soDonHang}" khác mã NXĐ hoặc khác NV soạn so với các phiếu còn lại đã chọn — không thể gộp chung.`,
+            );
+          }
         } else {
           setScannedList(uniqueItems);
         }
@@ -350,24 +378,54 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
           return;
         }
 
+        // Chỉ cho phép gộp phiếu đang ở trạng thái "Đang soạn"
+        if (!isDangSoan(matched)) {
+          setScanError(
+            `Phiếu "${code}" đang ở trạng thái "${matched.trangThai}" — chỉ được gộp các phiếu đang ở trạng thái "Đang soạn".`,
+          );
+          return;
+        }
+
         if (scannedList.length > 0) {
           const first = scannedList[0];
 
-          if (
+          const nxdMismatch =
             (matched.maNXD || "").toUpperCase() !==
-            (first.maNXD || "").toUpperCase()
-          ) {
-            setScanError(
-              `Phiếu "${code}" khác mã NXĐ (${matched.maNXD || "—"}) so với các phiếu đã quét (${first.maNXD || "—"}) — không thể gộp.`,
-            );
-            return;
-          }
+            (first.maNXD || "").toUpperCase();
+          const nvMismatch = !sameNvSoan(matched, first);
 
-          if (!sameNvSoan(matched, first)) {
-            setScanError(
-              `Phiếu "${code}" khác nhân viên soạn so với các phiếu đã quét — không thể gộp.`,
-            );
-            return;
+          if (nxdMismatch || nvMismatch) {
+            if (isPhieuTO(code)) {
+              const lyDo = [
+                nxdMismatch &&
+                  `khác mã NXĐ (${matched.maNXD || "—"} so với ${
+                    first.maNXD || "—"
+                  })`,
+                nvMismatch && "khác nhân viên soạn",
+              ]
+                .filter(Boolean)
+                .join(" và ");
+              const confirmed = window.confirm(
+                `Phiếu "${code}" ${lyDo} so với các phiếu đã quét. Vì là phiếu "TO" nên có thể bỏ qua kiểm tra chéo. Bạn có chắc chắn muốn gộp phiếu này không?`,
+              );
+              if (!confirmed) {
+                setScanError(
+                  `Đã huỷ thêm phiếu "${code}" do khác NXĐ/NV soạn.`,
+                );
+                return;
+              }
+              // Đã xác nhận bỏ qua kiểm tra chéo -> tiếp tục thêm phiếu bên dưới
+            } else if (nxdMismatch) {
+              setScanError(
+                `Phiếu "${code}" khác mã NXĐ (${matched.maNXD || "—"}) so với các phiếu đã quét (${first.maNXD || "—"}) — không thể gộp.`,
+              );
+              return;
+            } else {
+              setScanError(
+                `Phiếu "${code}" khác nhân viên soạn so với các phiếu đã quét — không thể gộp.`,
+              );
+              return;
+            }
           }
         }
 
@@ -398,6 +456,15 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
     [soPhieuGop, kienGop, dongGop, daiDienId, scannedList],
   );
 
+  // Nếu TOÀN BỘ phiếu trong nhóm là phiếu "TO" thì được phép bỏ qua
+  // hẳn bước xác nhận nhân viên KC (không cần nhập mã NV KC).
+  const groupIsTO = useMemo(
+    () =>
+      scannedList.length > 0 &&
+      scannedList.every((it) => isPhieuTO(it.soDonHang)),
+    [scannedList],
+  );
+
   const goToNvKcStep = useCallback(() => {
     if (!isKienDongValid) return;
     setMaNhanVien("");
@@ -405,6 +472,17 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
     setNvError("");
     setStep(3);
   }, [isKienDongValid]);
+
+  /** Enter ở bước Kiện/Dòng (số phiếu gộp, kiện, dòng) -> tiếp tục ngay
+   *  sang bước 3, không cần bấm nút "Tiếp tục". */
+  const handleKienDongKeyDown = useCallback(
+    (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      goToNvKcStep();
+    },
+    [goToNvKcStep],
+  );
 
   /** Tra cứu nhân viên theo mã, dùng nhanVienService có sẵn (giống ScanHoanThanh) */
   const handleLookupNhanVien = useCallback(async () => {
@@ -434,63 +512,84 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
 
   /** Xác nhận gộp: phiếu đại diện nhận Kiện/Dòng vừa nhập, các phiếu còn lại = 0/0,
    *  gộp mã NV KC vào từng phiếu, đồng bộ NV soạn cho cả nhóm,
-   *  dùng chung 1 mốc tgHoanThanh, và chuyển thành "Hoàn thành". */
-  const handleConfirmGop = useCallback(async () => {
-    if (!isKienDongValid || !nhanVienInfo) return;
+   *  dùng chung 1 mốc tgHoanThanh, và chuyển thành "Hoàn thành".
+   *  skipNV = true: dùng cho nhóm phiếu "TO" bỏ qua hẳn bước xác nhận NV KC —
+   *  không yêu cầu nhanVienInfo và không thêm mã NV KC nào vào phiếu. */
+  const handleConfirmGop = useCallback(
+    async (skipNV = false) => {
+      if (!isKienDongValid) return;
+      if (!skipNV && !nhanVienInfo) return;
 
-    setSubmitting(true);
-    try {
-      const now = new Date().toISOString(); // mốc tgHoanThanh CHUNG cho cả nhóm
-      const maNV = nhanVienInfo.ma_nhan_vien;
+      setSubmitting(true);
+      try {
+        const now = new Date().toISOString(); // mốc tgHoanThanh CHUNG cho cả nhóm
+        const maNV = skipNV ? null : nhanVienInfo.ma_nhan_vien;
 
-      // NV soạn chuẩn cho cả nhóm — nếu có phiếu nào đã có sẵn NV soạn thì
-      // dùng danh sách đó áp cho toàn bộ phiếu trong nhóm gộp.
-      const nvSoanGop = resolveNvSoanForGroup(scannedList);
+        // NV soạn chuẩn cho cả nhóm — nếu có phiếu nào đã có sẵn NV soạn thì
+        // dùng danh sách đó áp cho toàn bộ phiếu trong nhóm gộp.
+        const nvSoanGop = resolveNvSoanForGroup(scannedList);
 
-      await Promise.all(
-        scannedList.map((item) => {
-          const isDaiDien = item._id === daiDienId;
-          const existingCodes = getExistingNvKCCodes(item);
-          const mergedNvKC = Array.from(new Set([...existingCodes, maNV]));
+        await Promise.all(
+          scannedList.map((item) => {
+            const isDaiDien = item._id === daiDienId;
+            const existingCodes = getExistingNvKCCodes(item);
+            const mergedNvKC = maNV
+              ? Array.from(new Set([...existingCodes, maNV]))
+              : existingCodes;
 
-          const payload = {
-            soPhieuGop: soPhieuGop.trim(),
-            kien: isDaiDien ? Number(kienGop) : 0,
-            dong: isDaiDien ? Number(dongGop) : 0,
-            trangThai: "Hoàn thành",
-            tgHoanThanh: now,
-            nvKC: mergedNvKC,
-            // Đồng bộ NV soạn cho cả nhóm nếu xác định được; nếu cả nhóm
-            // đều chưa có NV soạn thì giữ nguyên giá trị hiện tại của phiếu.
-            ...(nvSoanGop.length > 0 ? { nvSoan: nvSoanGop } : {}),
-          };
-          return nhanSuSoanService.updateNhanSuSoan(item._id, payload);
-        }),
-      );
+            const payload = {
+              soPhieuGop: soPhieuGop.trim(),
+              kien: isDaiDien ? Number(kienGop) : 0,
+              dong: isDaiDien ? Number(dongGop) : 0,
+              trangThai: "Hoàn thành",
+              tgHoanThanh: now,
+              nvKC: mergedNvKC,
+              // Đồng bộ NV soạn cho cả nhóm nếu xác định được; nếu cả nhóm
+              // đều chưa có NV soạn thì giữ nguyên giá trị hiện tại của phiếu.
+              ...(nvSoanGop.length > 0 ? { nvSoan: nvSoanGop } : {}),
+            };
+            return nhanSuSoanService.updateNhanSuSoan(item._id, payload);
+          }),
+        );
 
-      alert(
-        `Đã gộp ${scannedList.length} phiếu thành số phiếu gộp "${soPhieuGop.trim()}" bởi ${nhanVienInfo.ten_nhan_vien || maNhanVien}.`,
-      );
-      onSuccess?.();
-      handleClose();
-    } catch (err) {
-      console.error("Lỗi gộp phiếu:", err);
-      alert("Gộp phiếu thất bại. Vui lòng thử lại.");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [
-    isKienDongValid,
-    nhanVienInfo,
-    scannedList,
-    daiDienId,
-    soPhieuGop,
-    kienGop,
-    dongGop,
-    maNhanVien,
-    onSuccess,
-    handleClose,
-  ]);
+        alert(
+          skipNV
+            ? `Đã gộp ${scannedList.length} phiếu thành số phiếu gộp "${soPhieuGop.trim()}" (phiếu "TO" — bỏ qua xác nhận NV KC).`
+            : `Đã gộp ${scannedList.length} phiếu thành số phiếu gộp "${soPhieuGop.trim()}" bởi ${nhanVienInfo.ten_nhan_vien || maNhanVien}.`,
+        );
+        onSuccess?.();
+        handleClose();
+      } catch (err) {
+        console.error("Lỗi gộp phiếu:", err);
+        alert("Gộp phiếu thất bại. Vui lòng thử lại.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      isKienDongValid,
+      nhanVienInfo,
+      scannedList,
+      daiDienId,
+      soPhieuGop,
+      kienGop,
+      dongGop,
+      maNhanVien,
+      onSuccess,
+      handleClose,
+    ],
+  );
+
+  /** Bỏ qua hẳn bước xác nhận NV KC cho nhóm phiếu "TO" — vẫn cần confirm
+   *  trước khi gộp để tránh bấm nhầm. */
+  const handleSkipNvKcAndConfirm = useCallback(() => {
+    if (!isKienDongValid || submitting) return;
+    const confirmed = window.confirm(
+      `Nhóm ${scannedList.length} phiếu này đều là phiếu "TO" nên có thể bỏ qua bước xác nhận nhân viên KC. Bạn có chắc chắn muốn gộp mà không cần nhập mã NV KC không?`,
+    );
+    if (!confirmed) return;
+    handleConfirmGop(true);
+  }, [isKienDongValid, submitting, scannedList, handleConfirmGop]);
 
   /** Enter trong ô mã NV KC: nếu chưa tra cứu (hoặc vừa đổi mã) → tra cứu.
    *  Nếu đã có kết quả tra cứu hợp lệ rồi → Enter tiếp theo xác nhận gộp luôn,
@@ -501,6 +600,14 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
       e.preventDefault();
       if (lookingUpNV || submitting) return;
 
+      // Ô mã NV KC đang trống + nhóm toàn phiếu "TO" -> Enter sẽ hiện cảnh
+      // báo xác nhận bỏ qua NV KC (Enter lần nữa trên hộp thoại là xác nhận),
+      // để thao tác hoàn toàn bằng bàn phím, không cần chuột.
+      if (!maNhanVien.trim() && groupIsTO) {
+        handleSkipNvKcAndConfirm();
+        return;
+      }
+
       if (nhanVienInfo) {
         handleConfirmGop();
       } else {
@@ -510,7 +617,10 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
     [
       lookingUpNV,
       submitting,
+      maNhanVien,
+      groupIsTO,
       nhanVienInfo,
+      handleSkipNvKcAndConfirm,
       handleConfirmGop,
       handleLookupNhanVien,
     ],
@@ -601,8 +711,9 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
               <div className="max-h-80 space-y-1.5 overflow-y-auto">
                 {scannedList.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-400">
-                    Chưa có phiếu nào được quét. Cần ít nhất 2 phiếu cùng mã NXĐ
-                    và cùng NV soạn để gộp.
+                    Chưa có phiếu nào được quét. Cần ít nhất 2 phiếu cùng trạng
+                    thái &quot;Đang soạn&quot;, cùng mã NXĐ và cùng NV soạn để
+                    gộp.
                   </p>
                 ) : (
                   scannedList.map((item) => (
@@ -659,6 +770,7 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
                   autoFocus
                   value={soPhieuGop}
                   onChange={(e) => setSoPhieuGop(e.target.value)}
+                  onKeyDown={handleKienDongKeyDown}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
                 <p className="text-[11px] text-slate-400">
@@ -677,6 +789,7 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
                     inputMode="numeric"
                     value={kienGop}
                     onChange={handleKienChange}
+                    onKeyDown={handleKienDongKeyDown}
                     placeholder="0"
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                   />
@@ -690,6 +803,7 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
                     inputMode="numeric"
                     value={dongGop}
                     onChange={handleDongChange}
+                    onKeyDown={handleKienDongKeyDown}
                     placeholder="0"
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                   />
@@ -753,6 +867,14 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
                 Chuẩn bị gộp và hoàn thành{" "}
                 <b className="text-slate-800">{scannedList.length}</b> phiếu.
                 Nhập mã nhân viên KC để xác nhận.
+                {groupIsTO && (
+                  <>
+                    {" "}
+                    Nhóm phiếu này đều là phiếu &quot;TO&quot; nên bạn cũng có
+                    thể bấm <b>&quot;Bỏ qua NV KC&quot;</b> bên dưới để gộp ngay
+                    mà không cần nhập mã.
+                  </>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -767,7 +889,11 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
                     onChange={handleMaNhanVienChange}
                     onKeyDown={handleMaNhanVienKeyDown}
                     disabled={lookingUpNV || submitting}
-                    placeholder="VD: NV0123 — Enter để tra cứu, Enter lần nữa để xác nhận"
+                    placeholder={
+                      groupIsTO
+                        ? "VD: NV0123 — hoặc để trống, nhấn Enter để bỏ qua NV KC (cảnh báo xác nhận), Enter lần nữa để hoàn tất"
+                        : "VD: NV0123 — Enter để tra cứu, Enter lần nữa để xác nhận"
+                    }
                     className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
                   />
                   <button
@@ -824,18 +950,30 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
                 <ArrowLeft size={16} />
                 Quay lại
               </button>
-              <button
-                onClick={handleConfirmGop}
-                disabled={!nhanVienInfo || submitting}
-                className="flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitting ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <CheckCircle2 size={16} />
+              <div className="flex gap-2">
+                {groupIsTO && (
+                  <button
+                    onClick={handleSkipNvKcAndConfirm}
+                    disabled={submitting}
+                    title='Nhóm phiếu "TO" có thể gộp mà không cần xác nhận NV KC'
+                    className="flex items-center gap-2 rounded-lg border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Bỏ qua NV KC
+                  </button>
                 )}
-                {submitting ? "Đang gộp..." : "Xác nhận gộp"}
-              </button>
+                <button
+                  onClick={() => handleConfirmGop()}
+                  disabled={!nhanVienInfo || submitting}
+                  className="flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={16} />
+                  )}
+                  {submitting ? "Đang gộp..." : "Xác nhận gộp"}
+                </button>
+              </div>
             </div>
           </>
         )}
