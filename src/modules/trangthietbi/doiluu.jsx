@@ -68,6 +68,25 @@ export default function DoiLuuTab({ loaiList, onImported }) {
     [total, limit],
   );
 
+  // Tổng số lượng từng cột số liệu — tính trên các dòng đang hiển thị (trang hiện tại, đã áp bộ lọc)
+  const columnTotals = useMemo(() => {
+    const sums = {
+      ttb_giao: 0,
+      ttb_sieu_thi_nhan: 0,
+      ttb_sieu_thi_tra: 0,
+      ttb_nhan: 0,
+      ttb_luu_tai_st: 0,
+    };
+    rows.forEach((row) => {
+      sums.ttb_giao += Number(row.ttb_giao) || 0;
+      sums.ttb_sieu_thi_nhan += Number(row.ttb_sieu_thi_nhan) || 0;
+      sums.ttb_sieu_thi_tra += Number(row.ttb_sieu_thi_tra) || 0;
+      sums.ttb_nhan += Number(row.ttb_nhan) || 0;
+      sums.ttb_luu_tai_st += Number(row.ttb_luu_tai_st) || 0;
+    });
+    return sums;
+  }, [rows]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -460,6 +479,31 @@ export default function DoiLuuTab({ loaiList, onImported }) {
                 ))
               )}
             </tbody>
+            {!loading && rows.length > 0 && (
+              <tfoot>
+                <tr className="bg-slate-50 border-t-2 border-slate-200 font-semibold text-slate-700">
+                  <td className="px-3 py-2.5" colSpan={9}>
+                    Tổng (trang hiện tại — {rows.length} dòng)
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {columnTotals.ttb_giao}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {columnTotals.ttb_sieu_thi_nhan}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {columnTotals.ttb_sieu_thi_tra}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {columnTotals.ttb_nhan}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {columnTotals.ttb_luu_tai_st}
+                  </td>
+                  <td className="px-3 py-2.5" />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
 
