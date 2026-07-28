@@ -72,7 +72,8 @@ const Header = () => {
       51: "LEARNING",
       52: "QUẢN LÝ PHIẾU SOẠN ",
       55: "SO KHỚP HÓA ĐƠN",
-      56: "QUẢN LÝ TTB"
+      56: "QUẢN LÝ TTB",
+      57: "QUẢN LÝ PHIẾU SOẠN ",
 
     };
     return roles[role] || "CHECKLIST";

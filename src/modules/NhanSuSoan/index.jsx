@@ -22,6 +22,7 @@ import {
   LayoutDashboard,
   Loader2,
   FileSpreadsheet,
+  Trash2,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
@@ -197,6 +198,23 @@ const nhanVienListToText = (list) => {
     })
     .filter(Boolean)
     .join(", ");
+};
+
+/** Đọc thông tin người dùng hiện tại từ localStorage.
+ *  Dữ liệu lưu dạng object phẳng: { _id, name, username, role }.
+ *  Chỉ role === 57 mới được thấy/dùng nút Xoá. */
+const getCurrentUserRole = () => {
+  try {
+    const raw =
+      localStorage.getItem("user") ||
+      localStorage.getItem("userInfo") ||
+      localStorage.getItem("auth");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.role ?? null;
+  } catch {
+    return null;
+  }
 };
 
 // Mã nhân viên được làm nổi bật hơn — memo vì props chỉ phụ thuộc `list`.
@@ -567,11 +585,15 @@ const NhanSuSoanTable = forwardRef(
     const [limit, setLimit] = useState(20);
     const [total, setTotal] = useState(0);
     const [exporting, setExporting] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const [filters, setFilters] = useState(() => ({
       ...DEFAULT_FILTERS,
       tuNgay: getDefaultTuNgay(),
       denNgay: getDefaultDenNgay(),
     }));
+
+    // Chỉ role 57 mới được thấy/dùng nút Xoá.
+    const canDelete = useMemo(() => getCurrentUserRole() === 57, []);
 
     // Bản nháp của các ô lọc dạng gõ chữ — cập nhật UI ngay lập tức,
     // nhưng chỉ đẩy vào `filters` (và gọi API) sau khi ngừng gõ ~350ms.
@@ -641,6 +663,10 @@ const NhanSuSoanTable = forwardRef(
     );
 
     // Gom các phiếu đã gộp (cùng soPhieuGop) đứng cạnh nhau và đẩy lên đầu bảng.
+    // Trong các nhóm đã gộp, nhóm nào vừa được thao tác Gộp Phiếu gần đây
+    // nhất sẽ được ưu tiên đứng lên đầu tiên — xác định bằng tgHoanThanh lớn
+    // nhất trong nhóm, vì hành động Gộp Phiếu luôn set tgHoanThanh = thời
+    // điểm gộp cho toàn bộ phiếu trong nhóm đó.
     const sortedItems = useMemo(() => {
       if (!items.length) return items;
 
@@ -661,7 +687,19 @@ const NhanSuSoanTable = forwardRef(
         groupMap.get(key).push(item);
       });
 
-      const grouped = groupOrder.flatMap((key) => groupMap.get(key));
+      const groupLatestTime = (key) => {
+        const groupItems = groupMap.get(key) || [];
+        return groupItems.reduce((latest, it) => {
+          const t = it.tgHoanThanh ? new Date(it.tgHoanThanh).getTime() : NaN;
+          return Number.isFinite(t) && t > latest ? t : latest;
+        }, 0);
+      };
+
+      const sortedGroupOrder = [...groupOrder].sort(
+        (a, b) => groupLatestTime(b) - groupLatestTime(a),
+      );
+
+      const grouped = sortedGroupOrder.flatMap((key) => groupMap.get(key));
       return [...grouped, ...ungrouped];
     }, [items]);
 
@@ -745,8 +783,8 @@ const NhanSuSoanTable = forwardRef(
       }
     }, [page, limit, filters]);
 
-    // Sau khi bất kỳ thao tác nào (gộp / giao / huỷ giao / hoàn thành) thành
-    // công: tải lại bảng và bỏ tích các phiếu đang chọn.
+    // Sau khi bất kỳ thao tác nào (gộp / giao / huỷ giao / hoàn thành / xoá)
+    // thành công: tải lại bảng và bỏ tích các phiếu đang chọn.
     const handleActionSuccess = useCallback(() => {
       fetchNhanSuSoan();
       setSelectedIds(new Set());
@@ -940,6 +978,33 @@ const NhanSuSoanTable = forwardRef(
       }
     }, [selectedItems, sortedItems]);
 
+    // ─── Xoá phiếu — chỉ role 57 ────────────────────────────────────────────
+    // Xoá các phiếu đang được tick chọn (bulk), giống cách các thao tác
+    // Gộp/Giao/Huỷ giao/Hoàn thành đang dùng selectedItems.
+    const handleDeleteSelected = useCallback(async () => {
+      if (!canDelete || selectedItems.length === 0) return;
+
+      const confirmed = window.confirm(
+        `Bạn có chắc chắn muốn xoá ${selectedItems.length} phiếu đã chọn? Hành động này không thể hoàn tác.`,
+      );
+      if (!confirmed) return;
+
+      setDeleting(true);
+      try {
+        await Promise.all(
+          selectedItems.map((item) =>
+            nhanSuSoanService.deleteNhanSuSoan(item._id),
+          ),
+        );
+        handleActionSuccess();
+      } catch (err) {
+        console.error("Lỗi xoá phiếu:", err);
+        alert("Xoá phiếu thất bại. Vui lòng thử lại.");
+      } finally {
+        setDeleting(false);
+      }
+    }, [canDelete, selectedItems, handleActionSuccess]);
+
     return (
       <div className="mx-auto max-w-[1900px] space-y-4 p-4 md:p-6 bg-gradient-to-b from-slate-50 to-white min-h-screen">
         {/* Header dùng chung cho cả 2 tab */}
@@ -959,48 +1024,84 @@ const NhanSuSoanTable = forwardRef(
             <ViewTabs view={view} onChange={setView} />
 
             {view === "table" && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-3">
                 {selectedIds.size > 0 && (
                   <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
                     Đã chọn {selectedIds.size} phiếu
                   </span>
                 )}
-                <GopPhieu ref={gopPhieuRef} onSuccess={handleActionSuccess} />
-                <ScanGiaoPhieu
-                  ref={scanGiaoPhieuRef}
-                  onSuccess={handleActionSuccess}
-                />
-                <HuyGiaoPhieu
-                  ref={huyGiaoPhieuRef}
-                  onSuccess={handleActionSuccess}
-                />
-                <ScanHoanThanh
-                  ref={scanHoanThanhRef}
-                  onSuccess={handleActionSuccess}
-                />
-                <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
-                <button
-                  type="button"
-                  onClick={handleExportExcel}
-                  disabled={exporting || loading}
-                  title={
-                    selectedIds.size > 0
-                      ? `Xuất Excel ${selectedIds.size} phiếu đã chọn`
-                      : "Xuất Excel toàn bộ dữ liệu đang hiển thị"
-                  }
-                  className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-emerald-700 hover:to-teal-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:hover:from-emerald-600 disabled:hover:to-teal-600"
-                >
-                  {exporting ? (
-                    <Loader2 size={15} className="animate-spin" />
-                  ) : (
-                    <FileSpreadsheet size={15} />
+
+                {/* Nhóm 1: thao tác xử lý trên phiếu (theo đúng luồng: gộp -> giao -> huỷ giao -> hoàn thành) */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <GopPhieu ref={gopPhieuRef} onSuccess={handleActionSuccess} />
+                  <ScanGiaoPhieu
+                    ref={scanGiaoPhieuRef}
+                    onSuccess={handleActionSuccess}
+                  />
+                  <HuyGiaoPhieu
+                    ref={huyGiaoPhieuRef}
+                    onSuccess={handleActionSuccess}
+                  />
+                  <ScanHoanThanh
+                    ref={scanHoanThanhRef}
+                    onSuccess={handleActionSuccess}
+                  />
+                </div>
+
+                {/* Đường chia nhóm */}
+                <div className="hidden h-6 w-px bg-slate-200 sm:block" />
+
+                {/* Nhóm 2: dữ liệu (nhập / xuất / xoá) */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    disabled={exporting || loading}
+                    title={
+                      selectedIds.size > 0
+                        ? `Xuất Excel ${selectedIds.size} phiếu đã chọn`
+                        : "Xuất Excel toàn bộ dữ liệu đang hiển thị"
+                    }
+                    className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-emerald-700 hover:to-teal-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:hover:from-emerald-600 disabled:hover:to-teal-600"
+                  >
+                    {exporting ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : (
+                      <FileSpreadsheet size={15} />
+                    )}
+                    {exporting
+                      ? "Đang xuất..."
+                      : selectedIds.size > 0
+                        ? `Xuất Excel (${selectedIds.size})`
+                        : "Xuất Excel"}
+                  </button>
+
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelected}
+                      disabled={deleting || selectedIds.size === 0}
+                      title={
+                        selectedIds.size > 0
+                          ? `Xoá ${selectedIds.size} phiếu đã chọn`
+                          : "Chọn ít nhất 1 phiếu để xoá"
+                      }
+                      className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-rose-700 hover:to-red-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:hover:from-rose-600 disabled:hover:to-red-600"
+                    >
+                      {deleting ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={15} />
+                      )}
+                      {deleting
+                        ? "Đang xoá..."
+                        : selectedIds.size > 0
+                          ? `Xoá (${selectedIds.size})`
+                          : "Xoá"}
+                    </button>
                   )}
-                  {exporting
-                    ? "Đang xuất..."
-                    : selectedIds.size > 0
-                      ? `Xuất Excel (${selectedIds.size})`
-                      : "Xuất Excel"}
-                </button>
+                </div>
               </div>
             )}
 

@@ -377,7 +377,7 @@ function App() {
 <Route
           path="/nhansusoan"
           element={
-            <PrivateRoute allowRoles={[52]}>
+            <PrivateRoute allowRoles={[56,57]}>
               <MainLayout>
                 <NhanSuSoanTable />
               </MainLayout>

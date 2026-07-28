@@ -79,18 +79,40 @@ const getExistingNvKCCodes = (item) => {
   return [];
 };
 
-/** Sinh mã số phiếu gộp tự động: GOP-<maNXD>-<ddMMyy-HHmmss> */
-const generateSoPhieuGop = (maNXD) => {
+const generateSoPhieuGop = async (maNXD) => {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
   const dateStr = `${pad(now.getDate())}${pad(now.getMonth() + 1)}${String(
     now.getFullYear(),
   ).slice(-2)}`;
-  const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(
-    now.getSeconds(),
-  )}`;
   const nxd = (maNXD || "").toString().trim().toUpperCase();
-  return `GOP-${nxd ? `${nxd}-` : ""}${dateStr}-${timeStr}`;
+  const prefix = `${nxd}-${dateStr}-`;
+
+  try {
+    // Lấy các phiếu của cùng mã NXĐ để dò các mã phiếu gộp đã sinh trong ngày
+    const res = await nhanSuSoanService.getAllNhanSuSoan({
+      maNXD: nxd,
+      limit: 500,
+    });
+    const list = res.data || res.items || [];
+
+    let maxStt = 0;
+    for (const item of list) {
+      const sp = (item.soPhieuGop || "").toString().toUpperCase();
+      if (!sp.startsWith(prefix)) continue;
+      const match = sp.slice(prefix.length).match(/^(\d+)/);
+      if (match) {
+        const stt = parseInt(match[1], 10);
+        if (stt > maxStt) maxStt = stt;
+      }
+    }
+
+    return `${prefix}${maxStt + 1}`;
+  } catch (err) {
+    console.error("Lỗi sinh mã phiếu gộp:", err);
+    // Fallback: vẫn theo đúng định dạng, bắt đầu từ 1
+    return `${prefix}1`;
+  }
 };
 
 /** Dòng hiển thị 1 phiếu đã quét — tách riêng + memo để tránh re-render
@@ -193,7 +215,7 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
   const [nhanVienInfo, setNhanVienInfo] = useState(null);
   const [nvError, setNvError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
+  const [generatingSoPhieuGop, setGeneratingSoPhieuGop] = useState(false);
   useEffect(() => {
     if (open && step === 1 && !scanning) {
       const raf = requestAnimationFrame(() => {
@@ -309,14 +331,12 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
 
   useImperativeHandle(ref, () => ({ open: handleOpen }), [handleOpen]);
 
-  const goToKienDongStep = useCallback(() => {
+  const goToKienDongStep = useCallback(async () => {
     if (scannedList.length < 2) {
       setScanError("Vui lòng quét ít nhất 2 phiếu để gộp.");
       return;
     }
 
-    // Bắt buộc: trong nhóm phải có ít nhất 1 phiếu đã có NV soạn,
-    // không cho gộp nếu toàn bộ đều "chưa có NV soạn".
     if (resolveNvSoanForGroup(scannedList).length === 0) {
       setScanError(
         "Cần ít nhất 1 phiếu trong danh sách đã có nhân viên soạn thì mới được gộp.",
@@ -324,11 +344,19 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
       return;
     }
 
-    setSoPhieuGop(generateSoPhieuGop(scannedList[0]?.maNXD));
-    setDaiDienId(scannedList[0]._id); // mặc định phiếu vừa quét gần nhất làm đại diện
+    setDaiDienId(scannedList[0]._id);
     setKienGop("");
     setDongGop("");
     setStep(2);
+
+    setSoPhieuGop("");
+    setGeneratingSoPhieuGop(true);
+    try {
+      const ma = await generateSoPhieuGop(scannedList[0]?.maNXD);
+      setSoPhieuGop(ma);
+    } finally {
+      setGeneratingSoPhieuGop(false);
+    }
   }, [scannedList]);
 
   const handleScanSubmit = useCallback(
@@ -768,10 +796,11 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
                 <input
                   type="text"
                   autoFocus
-                  value={soPhieuGop}
+                  value={generatingSoPhieuGop ? "Đang tạo mã..." : soPhieuGop}
                   onChange={(e) => setSoPhieuGop(e.target.value)}
                   onKeyDown={handleKienDongKeyDown}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  disabled={generatingSoPhieuGop}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
                 />
                 <p className="text-[11px] text-slate-400">
                   Mã được sinh tự động, bạn có thể chỉnh lại nếu cần.
