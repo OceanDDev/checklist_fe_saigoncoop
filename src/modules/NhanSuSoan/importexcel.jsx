@@ -37,6 +37,7 @@ const TEMPLATE_COLUMNS = [
   { key: "soDonHang", header: "Số Đơn Hàng", width: 18 },
   { key: "documentNo", header: "Document No", width: 18 },
   { key: "maNXD", header: "Mã NXĐ", width: 14 },
+  { key: "chuyen", header: "CHUYEN", width: 14 },
 ];
 
 const SHEET_NAME = "NhanSuSoan";
@@ -172,6 +173,7 @@ const ImportNhanSuSoan = ({ onImported }) => {
         soDonHang: "TO17493199",
         documentNo: "TO17493199",
         maNXD: "2034",
+        chuyen: "", // để trống -> hệ thống tự lấy theo Mã NXĐ; điền vào -> ưu tiên giá trị này (tự viết HOA)
       });
       TEMPLATE_COLUMNS.forEach((_, idx) => {
         const cell = sampleRow.getCell(idx + 1);

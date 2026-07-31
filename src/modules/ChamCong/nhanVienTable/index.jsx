@@ -8,22 +8,32 @@ const ROLE_FULL = 28;
 
 // ✅ Single source of truth — phải khớp với schema backend
 const BO_PHAN_CHUC_VU = {
-  "Ngọc Phú": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất", "Tăng Ca Soạn"],
+  "Nhà Cung Cấp": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất", "Tăng Ca Soạn"],
   "Xuất hàng": [
-    "Xử lý đơn hàng TV",
-    "Soạn hàng CT",
-    "Soạn hàng TV",
-    "Xuất hàng TV",
-    "Xuất hàng CT",
-    "Điều vận TV",
-    "Điều vận CT",
+    "Xử lý đơn hàng",
+    "Soạn hàng",
+    "Xuất hàng",
+    "Điều vận",
     "Sinh Viên",
     "Tăng Ca Soạn",
   ],
-  "Nhập hàng": ["Nhập hàng TV", "Nhập hàng CT", "Sinh Viên", "Tăng Ca Soạn"],
+  "Nhập hàng": [
+    "Nhập hàng",
+    "Kho đông",
+    "Định vị",
+    "Xe nâng",
+    "Sinh Viên",
+    "Tăng Ca Soạn",
+  ],
 
-  "Hỗ trợ Kho": ["Kiểm chéo", "Điều phối Xuất", "Sinh Viên", "Tăng Ca Soạn"],
-  "Kế toán": ["Kế toán TV", "Kế Toán CT", "Sinh Viên", "Tăng Ca Soạn"],
+  "Hỗ trợ Kho": [
+    "Kiểm chéo",
+    "CSKH",
+    "Điều phối Xuất",
+    "Sinh Viên",
+    "Tăng Ca Soạn",
+  ],
+  "Kế toán": ["Kế toán", "Tăng Ca Soạn"],
 };
 const ALL_BO_PHAN = Object.keys(BO_PHAN_CHUC_VU);
 

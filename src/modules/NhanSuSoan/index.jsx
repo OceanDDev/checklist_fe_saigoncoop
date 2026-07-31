@@ -20,10 +20,15 @@ import {
   PackageSearch,
   Table2,
   LayoutDashboard,
+  Users,
   Loader2,
   FileSpreadsheet,
   Trash2,
+  Pencil,
+  PartyPopper,
+  Shuffle,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
@@ -99,7 +104,30 @@ const CHUYEN_STYLE = {
     icon: Moon,
     iconColor: "text-indigo-500",
   },
+  "KHAI TRƯƠNG": {
+    badge:
+      "text-purple-700 bg-gradient-to-r from-purple-50 to-fuchsia-50 border border-purple-300 shadow-sm",
+    dot: "bg-purple-500",
+    icon: PartyPopper,
+    iconColor: "text-purple-500",
+  },
+  "PHÂN BỔ": {
+    badge:
+      "text-cyan-700 bg-gradient-to-r from-cyan-50 to-teal-50 border border-cyan-300 shadow-sm",
+    dot: "bg-cyan-500",
+    icon: Shuffle,
+    iconColor: "text-cyan-500",
+  },
 };
+
+const CHUYEN_OPTIONS = [
+  "SÁNG",
+  "TRƯA",
+  "CHIỀU",
+  "TỐI",
+  "KHAI TRƯƠNG",
+  "PHÂN BỔ",
+];
 
 const CHUYEN_FALLBACK_STYLE = {
   badge: "text-gray-600 bg-gray-100 border border-gray-200",
@@ -138,7 +166,6 @@ const ChuyenBadge = memo(function ChuyenBadge({ value }) {
     </span>
   );
 });
-
 const DEFAULT_FILTERS = {
   soDonHang: "",
   soPhieuGop: "",
@@ -157,6 +184,7 @@ const DEFAULT_FILTERS = {
   tuNgayNP: "",
   denNgayNP: "",
 };
+const CHAIN_SODONHANG_PREFIX = { CF: "^TO", CS: "^SO" };
 
 // Các trường lọc dạng gõ chữ — sẽ debounce trước khi thật sự lọc/gọi API,
 // tránh gọi lại bảng mỗi lần gõ 1 ký tự.
@@ -170,6 +198,27 @@ const TEXT_FILTER_KEYS = [
   "nvSoan",
   "nvKC",
 ];
+
+// Các filter (ngoài trangThai / trangThaiBookXe) khi có giá trị sẽ khiến bảng
+// tải hết toàn bộ kết quả khớp (không phân trang theo trang/limit thật).
+const OTHER_FILTER_KEYS = [
+  "soDonHang",
+  "soPhieuGop",
+  "maNXD",
+  "noiXuatDen",
+  "chuyen",
+  "lichDiHang",
+  "nvSoan",
+  "nvKC",
+  "tuNgayHT",
+  "denNgayHT",
+  "tuNgayNP",
+  "denNgayNP",
+];
+
+// Giới hạn "lấy hết" khi có filter khác — nếu backend có max limit riêng,
+// chỉnh số này cho khớp để tránh bị cắt bớt dữ liệu.
+const FETCH_ALL_LIMIT = 100000;
 
 const getDefaultTuNgay = () => dayjs().subtract(6, "day").format("YYYY-MM-DD");
 const getDefaultDenNgay = () => dayjs().format("YYYY-MM-DD");
@@ -275,7 +324,10 @@ const EmptyState = memo(function EmptyState({
 const filterInputCls =
   "w-full h-7 px-2 text-xs rounded-md border border-slate-300 bg-white/70 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-shadow";
 
-/** Nút lọc theo khoảng ngày (dùng chung cho TG import / TG hoàn thành / TG nhận phiếu / dashboard). */
+/** Nút lọc theo khoảng ngày (dùng chung cho TG import / TG hoàn thành / TG nhận phiếu / dashboard).
+ *  Popup được đẩy ra document.body qua createPortal + position: fixed để
+ *  KHÔNG BAO GIỜ bị z-index/overflow của các thẻ StatCard, bảng, hay
+ *  container cha che/chèn lên — bất kể bộ lọc này đang nằm ở đâu trong DOM. */
 const DateRangeFilter = memo(function DateRangeFilter({
   label,
   startValue,
@@ -292,7 +344,9 @@ const DateRangeFilter = memo(function DateRangeFilter({
     },
   ]);
   const [show, setShow] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
   const wrapRef = useRef(null);
+  const popupRef = useRef(null);
 
   useEffect(() => {
     setRange([
@@ -306,13 +360,39 @@ const DateRangeFilter = memo(function DateRangeFilter({
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setShow(false);
-      }
+      const clickedInput = wrapRef.current?.contains(e.target);
+      const clickedPopup = popupRef.current?.contains(e.target);
+      if (!clickedInput && !clickedPopup) setShow(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Đóng popup khi cuộn trang / đổi kích thước cửa sổ — tránh popup
+  // "trôi" sai vị trí vì nó không còn nằm trong luồng absolute nữa.
+  useEffect(() => {
+    if (!show) return;
+    const close = () => setShow(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [show]);
+
+  const openPopup = () => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (rect) {
+      const popupWidth = 320;
+      let left = rect.right - popupWidth;
+      if (left < 8) left = 8;
+      const maxLeft = window.innerWidth - popupWidth - 8;
+      if (left > maxLeft) left = maxLeft;
+      setPos({ top: rect.bottom + 6, left });
+    }
+    setShow((v) => !v);
+  };
 
   const handleRangeChange = (item) => {
     const { startDate, endDate } = item.selection;
@@ -331,13 +411,29 @@ const DateRangeFilter = memo(function DateRangeFilter({
 
   const hasValue = range[0].startDate && range[0].endDate;
 
+  const popup = show && (
+    <div
+      ref={popupRef}
+      style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999 }}
+      className="overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-slate-200"
+    >
+      <DateRange
+        ranges={range}
+        onChange={handleRangeChange}
+        showDateDisplay={false}
+        moveRangeOnFirstSelection={false}
+        maxDate={new Date()}
+      />
+    </div>
+  );
+
   if (compact) {
     return (
       <div className="relative" ref={wrapRef}>
         <input
           type="text"
           readOnly
-          onClick={() => setShow((v) => !v)}
+          onClick={openPopup}
           value={
             hasValue
               ? `${dayjs(range[0].startDate).format("DD/MM/YY")} - ${dayjs(range[0].endDate).format("DD/MM/YY")}`
@@ -360,17 +456,9 @@ const DateRangeFilter = memo(function DateRangeFilter({
             <X size={12} />
           </button>
         )}
-
-        {show && (
-          <div className="absolute z-50 mt-1 overflow-hidden rounded-xl shadow-xl ring-1 ring-slate-200">
-            <DateRange
-              ranges={range}
-              onChange={handleRangeChange}
-              moveRangeOnFirstSelection={false}
-              maxDate={new Date()}
-            />
-          </div>
-        )}
+        {show &&
+          typeof document !== "undefined" &&
+          createPortal(popup, document.body)}
       </div>
     );
   }
@@ -380,7 +468,7 @@ const DateRangeFilter = memo(function DateRangeFilter({
       <input
         type="text"
         readOnly
-        onClick={() => setShow((v) => !v)}
+        onClick={openPopup}
         value={
           hasValue
             ? `${dayjs(range[0].startDate).format("DD/MM/YYYY")} - ${dayjs(range[0].endDate).format("DD/MM/YYYY")}`
@@ -393,7 +481,6 @@ const DateRangeFilter = memo(function DateRangeFilter({
         size={16}
         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-blue-500"
       />
-
       {hasValue && (
         <button
           type="button"
@@ -404,26 +491,19 @@ const DateRangeFilter = memo(function DateRangeFilter({
           <X size={12} />
         </button>
       )}
-
-      {show && (
-        <div className="absolute right-0 z-50 mt-2 overflow-hidden rounded-xl shadow-xl ring-1 ring-slate-200">
-          <DateRange
-            ranges={range}
-            onChange={handleRangeChange}
-            moveRangeOnFirstSelection={false}
-            maxDate={new Date()}
-          />
-        </div>
-      )}
+      {show &&
+        typeof document !== "undefined" &&
+        createPortal(popup, document.body)}
     </div>
   );
 });
 
-/** Tab chuyển đổi giữa Bảng dữ liệu và Dashboard */
+/** Tab chuyển đổi giữa Bảng dữ liệu / Dashboard / Năng suất nhân viên */
 const ViewTabs = memo(function ViewTabs({ view, onChange }) {
   const tabs = [
     { key: "table", label: "Bảng dữ liệu", icon: Table2 },
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { key: "nhansu", label: "Năng suất NV", icon: Users },
   ];
   return (
     <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200">
@@ -451,14 +531,19 @@ const ViewTabs = memo(function ViewTabs({ view, onChange }) {
 
 /** 1 dòng dữ liệu trong bảng — tách riêng + memo để khi chỉ có 1-2 dòng đổi
  *  trạng thái chọn/focus, các dòng còn lại không phải render lại.
- *  Khi được chọn (isSelected), dòng "nổi lên" nhẹ bằng translateY + shadow. */
+ *  Khi được chọn (isSelected), dòng "nổi lên" nhẹ bằng translateY + shadow.
+ *  `index` là vị trí dòng trong sortedItems — cần thiết để hỗ trợ chọn
+ *  nhanh nhiều dòng bằng Shift + click (xem toggleSelectRow ở component cha). */
 const TableRow = memo(function TableRow({
   item,
+  index,
   isSelected,
   isFocused,
   isGroupBoundary,
   onToggleSelect,
   rowRef,
+  shiftPressedRef, // 👈 thêm
+  onEditChuyen, // 👈 thêm
 }) {
   return (
     <tr
@@ -482,7 +567,13 @@ const TableRow = memo(function TableRow({
         <input
           type="checkbox"
           checked={isSelected}
-          onChange={() => onToggleSelect(item._id)}
+          onMouseDown={(e) => {
+            shiftPressedRef.current = e.shiftKey; // ghi nhận Shift NGAY trước khi toggle
+          }}
+          onChange={() =>
+            onToggleSelect(item._id, index, shiftPressedRef.current)
+          }
+          title="Giữ Shift + click để chọn nhanh nhiều dòng liên tiếp"
           className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600 transition-transform duration-150 checked:scale-110"
         />
       </td>
@@ -505,7 +596,19 @@ const TableRow = memo(function TableRow({
         {item.noiXuatDen || ""}
       </td>
       <td className="px-3 py-2 whitespace-nowrap">
-        <ChuyenBadge value={item.chuyen} />
+        <button
+          type="button"
+          onClick={() => onEditChuyen(item)}
+          className="group relative inline-flex items-center"
+          title="Bấm để sửa Chuyến"
+        >
+          <ChuyenBadge value={item.chuyen} />
+          <Pencil
+            size={10}
+            strokeWidth={2.5}
+            className="absolute -right-1 -top-1 rounded-full bg-white p-[1px] text-slate-400 opacity-0 shadow ring-1 ring-slate-200 transition-opacity group-hover:opacity-100"
+          />
+        </button>
       </td>
       <td className="px-3 py-2 whitespace-nowrap text-slate-700">
         {item.lichDiHang || ""}
@@ -577,7 +680,7 @@ const NhanSuSoanTable = forwardRef(
     },
     ref,
   ) => {
-    const [view, setView] = useState("table"); // "table" | "dashboard"
+    const [view, setView] = useState("table"); // "table" | "dashboard" | "nhansu"
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -586,6 +689,8 @@ const NhanSuSoanTable = forwardRef(
     const [total, setTotal] = useState(0);
     const [exporting, setExporting] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [editingChuyenItem, setEditingChuyenItem] = useState(null);
+    const [savingChuyen, setSavingChuyen] = useState(false);
     const [filters, setFilters] = useState(() => ({
       ...DEFAULT_FILTERS,
       tuNgay: getDefaultTuNgay(),
@@ -632,33 +737,36 @@ const NhanSuSoanTable = forwardRef(
     });
 
     // Danh sách phiếu đang được tick chọn + dòng đang focus bằng bàn phím
-    const [selectedIds, setSelectedIds] = useState(() => new Set());
+    const [selectedMap, setSelectedMap] = useState(() => new Map()); // id -> item đầy đủ
+
+    const selectedIds = useMemo(
+      () => new Set(selectedMap.keys()),
+      [selectedMap],
+    );
+    const selectedItems = useMemo(
+      () => Array.from(selectedMap.values()),
+      [selectedMap],
+    );
+
     const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
     const rowRefs = useRef([]);
+
+    // Hỗ trợ Shift + click: nhớ vị trí dòng vừa được tick gần nhất, và có
+    // đang giữ phím Shift hay không. Dùng ref thay vì state để tránh
+    // re-render toàn bảng mỗi lần nhấn/nhả Shift.
+    const lastCheckedIndexRef = useRef(null);
+    const shiftPressedRef = useRef(false); // ghi lại shiftKey ngay trước khi checkbox đổi trạng thái
 
     const gopPhieuRef = useRef(null);
     const scanGiaoPhieuRef = useRef(null);
     const huyGiaoPhieuRef = useRef(null);
     const scanHoanThanhRef = useRef(null);
 
-    const hasActiveFilter = useMemo(
-      () =>
-        !!(
-          filters.soDonHang ||
-          filters.soPhieuGop ||
-          filters.trangThai ||
-          filters.trangThaiBookXe ||
-          filters.maNXD ||
-          filters.noiXuatDen ||
-          filters.chuyen ||
-          filters.lichDiHang ||
-          filters.nvSoan ||
-          filters.nvKC ||
-          filters.tuNgayHT ||
-          filters.denNgayHT ||
-          filters.tuNgayNP ||
-          filters.denNgayNP
-        ),
+    // Các filter (ngoài trạng thái) đang có giá trị -> tải hết dữ liệu khớp
+    // thay vì phân trang thật, vì các trường này thường cần xem toàn bộ kết
+    // quả khớp cùng lúc (ví dụ tìm theo mã NXĐ, NV soạn...).
+    const hasOtherActiveFilter = useMemo(
+      () => OTHER_FILTER_KEYS.some((k) => !!filters[k]),
       [filters],
     );
 
@@ -729,29 +837,50 @@ const NhanSuSoanTable = forwardRef(
       [sortedItems.length],
     );
 
-    const selectedItems = useMemo(
-      () => sortedItems.filter((it) => selectedIds.has(it._id)),
-      [sortedItems, selectedIds],
-    );
+    const toggleSelectRow = useCallback(
+      (id, index, shiftKey) => {
+        const prevCheckedIndex = lastCheckedIndexRef.current;
 
-    const toggleSelectRow = useCallback((id) => {
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
+        setSelectedMap((prev) => {
+          const next = new Map(prev);
+          const canRangeSelect =
+            shiftKey && prevCheckedIndex !== null && typeof index === "number";
+
+          if (canRangeSelect) {
+            const start = Math.min(prevCheckedIndex, index);
+            const end = Math.max(prevCheckedIndex, index);
+            for (let i = start; i <= end; i++) {
+              const it = sortedItems[i];
+              if (it) next.set(it._id, it);
+            }
+          } else if (next.has(id)) {
+            next.delete(id);
+          } else {
+            const it =
+              sortedItems[index] ?? sortedItems.find((x) => x._id === id);
+            if (it) next.set(id, it);
+          }
+          return next;
+        });
+
+        if (typeof index === "number") {
+          lastCheckedIndexRef.current = index;
+          setFocusedRowIndex(index);
+        }
+      },
+      [sortedItems],
+    );
+    const toggleSelectAll = useCallback(() => {
+      setSelectedMap((prev) => {
+        if (prev.size === sortedItems.length && sortedItems.length > 0) {
+          return new Map();
+        }
+        const next = new Map();
+        sortedItems.forEach((it) => next.set(it._id, it));
         return next;
       });
-    }, []);
-
-    const toggleSelectAll = useCallback(() => {
-      setSelectedIds((prev) => {
-        if (prev.size === sortedItems.length && sortedItems.length > 0) {
-          return new Set();
-        }
-        return new Set(sortedItems.map((it) => it._id));
-      });
+      lastCheckedIndexRef.current = null;
     }, [sortedItems]);
-
     useEffect(() => {
       setFocusedRowIndex((prev) => {
         if (sortedItems.length === 0) return -1;
@@ -768,8 +897,8 @@ const NhanSuSoanTable = forwardRef(
       setError("");
       try {
         const res = await nhanSuSoanService.getAllNhanSuSoan({
-          page,
-          limit,
+          page: hasOtherActiveFilter ? 1 : page,
+          limit: hasOtherActiveFilter ? FETCH_ALL_LIMIT : limit,
           ...filters,
         });
         const data = res.data || res.items || [];
@@ -781,14 +910,80 @@ const NhanSuSoanTable = forwardRef(
       } finally {
         setLoading(false);
       }
-    }, [page, limit, filters]);
+    }, [page, limit, filters, hasOtherActiveFilter]);
 
     // Sau khi bất kỳ thao tác nào (gộp / giao / huỷ giao / hoàn thành / xoá)
     // thành công: tải lại bảng và bỏ tích các phiếu đang chọn.
     const handleActionSuccess = useCallback(() => {
       fetchNhanSuSoan();
-      setSelectedIds(new Set());
+      setSelectedMap(new Map()); // ✅
+      lastCheckedIndexRef.current = null;
     }, [fetchNhanSuSoan]);
+    // ✅ MỚI: nhận payload từ Dashboard khi click 1 lát pie ("theo chuyến" /
+    // "theo trạng thái") -> áp filter tương ứng lên bảng dữ liệu rồi chuyển
+    // view sang "table". Bỏ qua debounce của ô lọc text (soDonHang/chuyen)
+    // bằng cách set thẳng cả filters lẫn textFilterDrafts + appliedTextFiltersRef
+    // để useEffect debounce không ghi đè lại giá trị vừa set.
+    const handleDashboardNavigate = useCallback(
+      ({ type, value, chain, tuNgay: navTuNgay, denNgay: navDenNgay }) => {
+        const soDonHangPrefix = chain
+          ? CHAIN_SODONHANG_PREFIX[chain] || ""
+          : "";
+        const chuyenValue = type === "chuyen" ? value : "";
+
+        setFilters((prev) => ({
+          ...prev,
+          soDonHang: soDonHangPrefix,
+          chuyen: chuyenValue,
+          trangThai: type === "trangThai" ? value : "",
+          tuNgay: navTuNgay || prev.tuNgay,
+          denNgay: navDenNgay || prev.denNgay,
+        }));
+
+        setTextFilterDrafts((prev) => ({
+          ...prev,
+          soDonHang: soDonHangPrefix,
+          chuyen: chuyenValue,
+        }));
+        appliedTextFiltersRef.current = {
+          ...appliedTextFiltersRef.current,
+          soDonHang: soDonHangPrefix,
+          chuyen: chuyenValue,
+        };
+
+        setPage(1);
+        setView("table");
+      },
+      [],
+    );
+    const handleOpenEditChuyen = useCallback((item) => {
+      setEditingChuyenItem(item);
+    }, []);
+
+    const handleCloseEditChuyen = useCallback(() => {
+      if (savingChuyen) return; // không cho đóng khi đang lưu dở
+      setEditingChuyenItem(null);
+    }, [savingChuyen]);
+
+    const handleSaveChuyen = useCallback(
+      async (newValue) => {
+        if (!editingChuyenItem) return;
+        setSavingChuyen(true);
+        try {
+          await nhanSuSoanService.updateNhanSuSoan(editingChuyenItem._id, {
+            chuyen: newValue,
+          });
+          setEditingChuyenItem(null);
+          fetchNhanSuSoan();
+        } catch (err) {
+          console.error("Lỗi cập nhật Chuyến:", err);
+          alert("Cập nhật Chuyến thất bại. Vui lòng thử lại.");
+        } finally {
+          setSavingChuyen(false);
+        }
+      },
+      [editingChuyenItem, fetchNhanSuSoan],
+    );
 
     useEffect(() => {
       const handleGlobalKeyDown = (e) => {
@@ -817,7 +1012,11 @@ const NhanSuSoanTable = forwardRef(
           if (e.key === " " || e.key === "Spacebar") {
             e.preventDefault();
             if (focusedRowIndex >= 0 && focusedRowIndex < sortedItems.length) {
-              toggleSelectRow(sortedItems[focusedRowIndex]._id);
+              toggleSelectRow(
+                sortedItems[focusedRowIndex]._id,
+                focusedRowIndex,
+                e.shiftKey,
+              );
             }
             return;
           }
@@ -860,20 +1059,27 @@ const NhanSuSoanTable = forwardRef(
       [total, limit],
     );
 
-    // ─── Xuất Excel bằng ExcelJS ───────────────────────────────────────────
-    // Nếu đang có dòng được chọn (checkbox) -> chỉ xuất các dòng đó.
-    // Ngược lại -> xuất toàn bộ dữ liệu đang hiển thị trên trang hiện tại.
     const handleExportExcel = useCallback(async () => {
-      const rowsToExport =
-        selectedItems.length > 0 ? selectedItems : sortedItems;
-
-      if (rowsToExport.length === 0) {
-        alert("Không có dữ liệu để xuất Excel.");
-        return;
-      }
-
       setExporting(true);
       try {
+        let rowsToExport = selectedItems;
+
+        // Không tick dòng nào -> xuất TOÀN BỘ dữ liệu khớp filter hiện tại
+        // (bao gồm cả tuNgay/denNgay), không chỉ trang đang hiển thị trên UI.
+        if (rowsToExport.length === 0) {
+          const res = await nhanSuSoanService.getAllNhanSuSoan({
+            page: 1,
+            limit: FETCH_ALL_LIMIT,
+            ...filters,
+          });
+          rowsToExport = res.data || res.items || [];
+        }
+
+        if (rowsToExport.length === 0) {
+          alert("Không có dữ liệu để xuất Excel.");
+          return;
+        }
+
         const ExcelJS = (await import("exceljs")).default;
         const workbook = new ExcelJS.Workbook();
         workbook.creator = "SC Logistics";
@@ -976,7 +1182,7 @@ const NhanSuSoanTable = forwardRef(
       } finally {
         setExporting(false);
       }
-    }, [selectedItems, sortedItems]);
+    }, [selectedItems, filters]);
 
     // ─── Xoá phiếu — chỉ role 57 ────────────────────────────────────────────
     // Xoá các phiếu đang được tick chọn (bulk), giống cách các thao tác
@@ -1007,7 +1213,7 @@ const NhanSuSoanTable = forwardRef(
 
     return (
       <div className="mx-auto max-w-[1900px] space-y-4 p-4 md:p-6 bg-gradient-to-b from-slate-50 to-white min-h-screen">
-        {/* Header dùng chung cho cả 2 tab */}
+        {/* Header dùng chung cho cả 3 tab */}
         <div className="flex flex-col gap-3 rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-200 backdrop-blur md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <h1 className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
@@ -1016,7 +1222,9 @@ const NhanSuSoanTable = forwardRef(
             <p className="text-sm text-slate-500">
               {view === "table"
                 ? description
-                : "Tổng quan đơn hàng theo chuỗi, chuyến, trạng thái và tiến độ xử lý"}
+                : view === "dashboard"
+                  ? "Tổng quan đơn hàng theo chuỗi, chuyến, trạng thái và tiến độ xử lý"
+                  : "Năng suất soạn hàng / kiểm chéo theo bộ phận, chức vụ và từng nhân viên"}
             </p>
           </div>
 
@@ -1128,7 +1336,6 @@ const NhanSuSoanTable = forwardRef(
                     setDashDenNgay(getDefaultDenNgay());
                   }}
                 />
-                <NhanSuSoanEmployeeLookup />
               </div>
             )}
           </div>
@@ -1140,8 +1347,13 @@ const NhanSuSoanTable = forwardRef(
             tuNgay={dashTuNgay}
             denNgay={dashDenNgay}
             onMeta={setDashMeta}
+            onNavigate={handleDashboardNavigate}
           />
         )}
+
+        {/* Tab Năng suất nhân viên — tách hẳn khỏi Dashboard để không còn
+            bị chèn/đè lên toolbar hay các thẻ số liệu của Dashboard nữa. */}
+        {view === "nhansu" && <NhanSuSoanEmployeeLookup />}
 
         {/* Tab Bảng dữ liệu */}
         {view === "table" && (
@@ -1164,6 +1376,12 @@ const NhanSuSoanTable = forwardRef(
                   setPage(1);
                 }}
               />
+              {selectedIds.size > 0 && (
+                <span className="text-xs text-slate-400">
+                  Mẹo: giữ <b className="text-slate-600">Shift</b> rồi tick 1
+                  dòng khác để chọn nhanh cả khoảng.
+                </span>
+              )}
             </div>
 
             {/* Table */}
@@ -1447,97 +1665,169 @@ const NhanSuSoanTable = forwardRef(
                       <TableRow
                         key={item._id}
                         item={item}
+                        index={idx}
                         isSelected={selectedIds.has(item._id)}
                         isFocused={idx === focusedRowIndex}
                         isGroupBoundary={groupBoundaryFlags[idx]}
                         onToggleSelect={toggleSelectRow}
                         rowRef={rowRefCallbacks[idx]}
+                        shiftPressedRef={shiftPressedRef} // 👈 thêm dòng này
+                        onEditChuyen={handleOpenEditChuyen} // 👈 thêm
                       />
                     ))}
                 </tbody>
               </table>
             </div>
 
-            {/* Pagination */}
-            {!hasActiveFilter ? (
-              <div className="flex flex-col gap-3 rounded-xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-200 md:flex-row md:items-center md:justify-between">
-                <div className="text-sm text-slate-600">
-                  Đang hiển thị <b className="text-blue-700">{items.length}</b>{" "}
-                  / <b className="text-slate-800">{total}</b> bản ghi
-                </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={limit}
-                    onChange={(e) => {
-                      setPage(1);
-                      setLimit(Number(e.target.value));
-                    }}
-                    className="h-10 rounded-xl border border-teal-300 bg-teal-50 px-3 font-medium text-teal-700 shadow-sm transition-shadow hover:bg-teal-100 hover:shadow-md"
+            {/* Pagination — luôn hiển thị 1 khối duy nhất. Khi có filter khác
+                (ngoài trạng thái) thì fetchNhanSuSoan đã tải hết dữ liệu nên
+                maxPage tự nhiên còn 1 trang, không cần nhánh JSX riêng. */}
+            <div className="flex flex-col gap-3 rounded-xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-200 md:flex-row md:items-center md:justify-between">
+              <div className="text-sm text-slate-600">
+                {hasOtherActiveFilter && (
+                  <span className="mr-2 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
+                    Đang lọc
+                  </span>
+                )}
+                Đang hiển thị <b className="text-blue-700">{items.length}</b> /{" "}
+                <b className="text-slate-800">{total}</b> bản ghi
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={limit}
+                  onChange={(e) => {
+                    setPage(1);
+                    setLimit(Number(e.target.value));
+                  }}
+                  disabled={hasOtherActiveFilter}
+                  title={
+                    hasOtherActiveFilter
+                      ? "Đang lọc — hiển thị toàn bộ kết quả khớp"
+                      : undefined
+                  }
+                  className="h-10 rounded-xl border border-teal-300 bg-teal-50 px-3 font-medium text-teal-700 shadow-sm transition-shadow hover:bg-teal-100 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {[10, 20, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n}/trang
+                    </option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPage(1)}
+                    disabled={page === 1 || hasOtherActiveFilter}
+                    className="h-10 px-2 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-600 ring-1 ring-indigo-200 shadow-sm transition-all hover:from-indigo-100 hover:to-purple-100 hover:shadow-md disabled:opacity-40 disabled:hover:from-indigo-50 disabled:hover:to-purple-50"
                   >
-                    {[10, 20, 50, 100].map((n) => (
-                      <option key={n} value={n}>
-                        {n}/trang
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setPage(1)}
-                      disabled={page === 1}
-                      className="h-10 px-2 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-600 ring-1 ring-indigo-200 shadow-sm transition-all hover:from-indigo-100 hover:to-purple-100 hover:shadow-md disabled:opacity-40 disabled:hover:from-indigo-50 disabled:hover:to-purple-50"
-                    >
-                      ⏮
-                    </button>
-                    <button
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                      className="h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
-                    >
-                      Trước
-                    </button>
-                    <span className="px-2 text-sm text-slate-600">Trang</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={maxPage}
-                      value={page}
-                      onChange={(e) => {
-                        const v = Number(e.target.value || 1);
-                        setPage(Math.min(Math.max(1, v), maxPage));
-                      }}
-                      className="h-10 w-16 rounded-xl border border-blue-300 bg-blue-50/50 px-2 text-center font-bold text-blue-700 shadow-sm focus:ring-2 focus:ring-blue-300 outline-none"
-                    />
-                    <span className="px-1 text-sm text-slate-600">
-                      / {maxPage}
-                    </span>
-                    <button
-                      onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
-                      disabled={page >= maxPage}
-                      className="h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
-                    >
-                      Sau
-                    </button>
-                    <button
-                      onClick={() => setPage(maxPage)}
-                      disabled={page >= maxPage}
-                      className="h-10 px-2 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-600 ring-1 ring-indigo-200 shadow-sm transition-all hover:from-indigo-100 hover:to-purple-100 hover:shadow-md disabled:opacity-40 disabled:hover:from-indigo-50 disabled:hover:to-purple-50"
-                    >
-                      ⏭
-                    </button>
-                  </div>
+                    ⏮
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1 || hasOtherActiveFilter}
+                    className="h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
+                  >
+                    Trước
+                  </button>
+                  <span className="px-2 text-sm text-slate-600">Trang</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={maxPage}
+                    value={page}
+                    disabled={hasOtherActiveFilter}
+                    onChange={(e) => {
+                      const v = Number(e.target.value || 1);
+                      setPage(Math.min(Math.max(1, v), maxPage));
+                    }}
+                    className="h-10 w-16 rounded-xl border border-blue-300 bg-blue-50/50 px-2 text-center font-bold text-blue-700 shadow-sm focus:ring-2 focus:ring-blue-300 outline-none disabled:opacity-50"
+                  />
+                  <span className="px-1 text-sm text-slate-600">
+                    / {maxPage}
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
+                    disabled={page >= maxPage || hasOtherActiveFilter}
+                    className="h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
+                  >
+                    Sau
+                  </button>
+                  <button
+                    onClick={() => setPage(maxPage)}
+                    disabled={page >= maxPage || hasOtherActiveFilter}
+                    className="h-10 px-2 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-600 ring-1 ring-indigo-200 shadow-sm transition-all hover:from-indigo-100 hover:to-purple-100 hover:shadow-md disabled:opacity-40 disabled:hover:from-indigo-50 disabled:hover:to-purple-50"
+                  >
+                    ⏭
+                  </button>
                 </div>
               </div>
-            ) : (
-              <div className="flex items-center justify-center gap-3 text-sm py-4 px-6 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 rounded-xl border border-blue-200 shadow-sm">
-                <span className="font-medium text-slate-700">
-                  Đang lọc: Hiển thị{" "}
-                  <b className="text-blue-600">{items.length}</b> /{" "}
-                  <b className="text-slate-800">{total}</b> kết quả
-                </span>
-              </div>
-            )}
+            </div>
           </>
         )}
+
+        {editingChuyenItem &&
+          createPortal(
+            <div
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 p-4"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) handleCloseEditChuyen();
+              }}
+            >
+              <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-base font-bold text-slate-800">
+                    Sửa Chuyến — {editingChuyenItem.soDonHang}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleCloseEditChuyen}
+                    disabled={savingChuyen}
+                    className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
+                    title="Đóng"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {CHUYEN_OPTIONS.map((opt) => {
+                    const style = getChuyenStyle(opt);
+                    const Icon = style.icon;
+                    const active = editingChuyenItem.chuyen === opt;
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        disabled={savingChuyen}
+                        onClick={() => handleSaveChuyen(opt)}
+                        className={`flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                          active
+                            ? `${style.badge} ring-2 ring-offset-1 ring-blue-400`
+                            : `${style.badge} opacity-70 hover:opacity-100`
+                        }`}
+                      >
+                        {Icon && (
+                          <Icon
+                            size={14}
+                            className={style.iconColor}
+                            strokeWidth={2.5}
+                          />
+                        )}
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {savingChuyen && (
+                  <div className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-500">
+                    <Loader2 size={16} className="animate-spin" />
+                    Đang lưu...
+                  </div>
+                )}
+              </div>
+            </div>,
+            document.body,
+          )}
       </div>
     );
   },

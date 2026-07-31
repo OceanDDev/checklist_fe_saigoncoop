@@ -47,6 +47,7 @@ import TrangLamBai from "./modules/LearningSCL/Admin/Q&A/tranglambai";
 import NhanSuSoanTable from "./modules/NhanSuSoan";
 import QuanLyHDTable from "./modules/QuanLyHoaDon";
 import TrangThietBiTable from "./modules/trangthietbi";
+import HomeBookXe from "./modules/bookxe";
 
 function App() {
   return (
@@ -374,10 +375,10 @@ function App() {
         <Route path="/qr-scan" element={<QrScanner />} />
 
         {/* PHIEU SOAN */}
-<Route
+        <Route
           path="/nhansusoan"
           element={
-            <PrivateRoute allowRoles={[56,57]}>
+            <PrivateRoute allowRoles={[52,57]}>
               <MainLayout>
                 <NhanSuSoanTable />
               </MainLayout>
@@ -396,8 +397,7 @@ function App() {
           }
         />
 
-
-         <Route
+        <Route
           path="/quanlyhd"
           element={
             <PrivateRoute allowRoles={[55]}>
@@ -408,8 +408,7 @@ function App() {
           }
         />
 
-
-         <Route
+        <Route
           path="/trangthietbi"
           element={
             <PrivateRoute allowRoles={[56]}>
@@ -482,6 +481,19 @@ function App() {
             </PrivateRoute>
           }
         />
+        {/* BOOKXE */}
+
+        <Route
+          path="/bookxe"
+          element={
+            <PrivateRoute allowRoles={[70]}>
+              <MainLayout>
+                <HomeBookXe />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
         <Route path="/lam-bai" element={<TrangLamBai />} />
 
         <Route path="/thank-you" element={<ThankYouScreen />} />

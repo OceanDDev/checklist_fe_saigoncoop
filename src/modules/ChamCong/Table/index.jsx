@@ -1264,7 +1264,7 @@ export default function ChamCongTable({ role }) {
   ].sort();
 
   const filtered = data.filter((r) => {
-    if (role === 30 && r.bo_phan?.toLowerCase() !== "ngọc phú") return false;
+    if (role === 30 && r.bo_phan?.toLowerCase() !== "nhà cung cấp") return false;
     if (filterViPham && !r.vi_pham_cham_ho) return false;
     if (filterBoPhan && r.bo_phan !== filterBoPhan) return false;
     if (filterChucVu && r.chuc_vu !== filterChucVu) return false;

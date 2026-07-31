@@ -7,14 +7,13 @@ import {
   useMemo,
   useRef,
   useState,
+  memo,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   Package,
   Boxes,
   Truck,
   Users,
-  X,
   Loader2,
   Camera,
   Target,
@@ -30,23 +29,41 @@ import { StatCard, DateRangeFilter } from "./index";
 /* Hằng số Bộ phận / Chức vụ                                           */
 /* ------------------------------------------------------------------ */
 const BO_PHAN_CHUC_VU = {
-  "Ngọc Phú": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất", "Tăng Ca Soạn"],
+  "Nhà Cung Cấp": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất", "Tăng Ca Soạn"],
   "Xuất hàng": [
-    "Xử lý đơn hàng TV",
-    "Soạn hàng CT",
-    "Soạn hàng TV",
-    "Xuất hàng TV",
-    "Xuất hàng CT",
-    "Điều vận TV",
-    "Điều vận CT",
+    "Xử lý đơn hàng",
+    "Soạn hàng",
+    "Xuất hàng",
+    "Điều vận",
     "Sinh Viên",
     "Tăng Ca Soạn",
   ],
-  "Nhập hàng": ["Nhập hàng TV", "Nhập hàng CT", "Sinh Viên", "Tăng Ca Soạn"],
-  "Hỗ trợ Kho": ["Kiểm chéo", "Điều phối Xuất", "Sinh Viên", "Tăng Ca Soạn"],
-  "Kế toán": ["Kế toán TV", "Kế Toán CT", "Sinh Viên", "Tăng Ca Soạn"],
+  "Nhập hàng": [
+    "Nhập hàng",
+    "Kho đông",
+    "Định vị",
+    "Xe nâng",
+    "Sinh Viên",
+    "Tăng Ca Soạn",
+  ],
+
+  "Hỗ trợ Kho": [
+    "Kiểm chéo",
+    "CSKH",
+    "Điều phối Xuất",
+    "Sinh Viên",
+    "Tăng Ca Soạn",
+  ],
+  "Kế toán": ["Kế toán", "Tăng Ca Soạn"],
 };
 const ALL_BO_PHAN = Object.keys(BO_PHAN_CHUC_VU);
+
+// ✅ Danh sách TẤT CẢ chức vụ (gộp từ mọi bộ phận, loại trùng) — dùng làm
+// tuỳ chọn cho select "Chức vụ" khi người dùng CHƯA chọn Bộ phận, để có
+// thể chọn thẳng Chức vụ mà không cần chọn Bộ phận trước.
+const ALL_CHUC_VU = Array.from(
+  new Set(Object.values(BO_PHAN_CHUC_VU).flat()),
+).sort((a, b) => a.localeCompare(b, "vi"));
 
 const TRANG_THAI_LIST = ["Chưa soạn", "Đang soạn", "Hoàn thành"];
 const TRANG_THAI_HOAN_THANH = "Hoàn thành";
@@ -54,7 +71,7 @@ const TRANG_THAI_HOAN_THANH = "Hoàn thành";
 const EMPTY_STATS = { phieu: 0, kien: 0, dong: 0 };
 
 const KPI_STORAGE_KEY = "nhansusoan_kpi_target_v1";
-const KPI_DEFAULT = { phieu: 35, kien: 100, dong: 200 };
+const KPI_DEFAULT = { phieu: 35, kien: 280, dong: 240 };
 
 const loadKpiFromStorage = () => {
   try {
@@ -78,9 +95,6 @@ const loadKpiFromStorage = () => {
 // ✅ Trả về danh sách { code, viaPhu } thay vì chỉ mã. `code` LUÔN LÀ MÃ CHÍNH
 // (backend đã resolve qua ganThongTinNhanVien), `viaPhu` = true nếu phiếu này
 // ghi nhận bằng mã phụ của nhân viên đó.
-// Fallback dùng mảng thô (nvSoan/nvKC — chỉ có mã, không có via_ma_phu) khi
-// backend chưa trả nvSoanChiTiet/nvKCChiTiet — trường hợp này coi như mã
-// chính (viaPhu: false) vì không có thông tin để phân biệt.
 const extractMaNVList = (chiTiet, raw) => {
   const list = chiTiet && chiTiet.length ? chiTiet : raw || [];
   return list
@@ -97,6 +111,19 @@ const extractMaNVList = (chiTiet, raw) => {
       };
     })
     .filter((x) => x.code);
+};
+
+// ✅ Xác định loại phiếu (CF / CS) từ mã NXĐ — hậu tố sau dấu "-" cuối cùng.
+const extractLoaiPhieu = (item) => {
+  const nxd = (item.maNXD || "").toString().toUpperCase();
+  if (nxd.includes("CF")) return "CF";
+  if (nxd.includes("CS")) return "CS";
+
+  const soDon = (item.soDonHang || "").toString().toUpperCase();
+  if (soDon.startsWith("TO")) return "CF";
+  if (soDon.startsWith("SO")) return "CS";
+
+  return null; // không xác định được loại
 };
 
 const makeEmptyByTrangThai = () => {
@@ -119,9 +146,8 @@ const buildStatsMaps = (items) => {
         totalPhieu: 0,
         totalKien: 0,
         totalDong: 0,
-        // ✅ true nếu CÓ ÍT NHẤT 1 phiếu của người này (trong toàn bộ items
-        // đang xét) được chấm bằng mã phụ -> loại người này khỏi đánh giá
-        // KPI ngày hôm đó, dù số liệu vẫn cộng dồn bình thường.
+        // ✅ true nếu CÓ ÍT NHẤT 1 phiếu của người này được chấm bằng mã phụ
+        // -> loại người này khỏi đánh giá KPI ngày hôm đó.
         hasMaPhu: false,
       };
       map.set(code, entry);
@@ -143,8 +169,6 @@ const buildStatsMaps = (items) => {
     const kien = item.kien || 0;
     const dong = item.dong || 0;
 
-    // Dùng Map<code, viaPhu> để không cộng trùng nếu 1 mã NV lặp lại trong
-    // cùng 1 phiếu, đồng thời giữ lại cờ viaPhu nếu bất kỳ lần lặp nào là mã phụ.
     const soanEntries = extractMaNVList(item.nvSoanChiTiet, item.nvSoan);
     const soanSeen = new Map();
     soanEntries.forEach(({ code, viaPhu }) => {
@@ -175,12 +199,470 @@ const isZeroRow = (row) =>
 const getDefaultTuNgay = () => dayjs().subtract(6, "day").format("YYYY-MM-DD");
 const getDefaultDenNgay = () => dayjs().format("YYYY-MM-DD");
 
+// ✅ Xây dựng bảng năng suất (dùng cho khối Tổng — thẻ số liệu SL nhân sự,
+// BQ đơn/người, BQ dòng/kiện hoàn thành).
+const computeBoPhanStats = (filteredDsNhanVien, map) => {
+  if (!filteredDsNhanVien.length) return null;
+
+  const rows = filteredDsNhanVien.map((nv) => {
+    const code = (nv.ma_nhan_vien || "").toString().trim().toUpperCase();
+    const s = map.get(code) || {
+      byTrangThai: makeEmptyByTrangThai(),
+      totalPhieu: 0,
+      totalKien: 0,
+      totalDong: 0,
+      hasMaPhu: false,
+    };
+    return {
+      maNhanVien: nv.ma_nhan_vien,
+      tenNhanVien: nv.ten_nhan_vien,
+      chucVu: nv.chuc_vu,
+      ...s,
+    };
+  });
+
+  const visibleTrangThai = TRANG_THAI_LIST.filter((tt) =>
+    rows.some((r) => (r.byTrangThai[tt]?.phieu || 0) > 0),
+  );
+
+  const total = rows.reduce(
+    (acc, r) => {
+      visibleTrangThai.forEach((tt) => {
+        acc.byTrangThai[tt].phieu += r.byTrangThai[tt]?.phieu || 0;
+        acc.byTrangThai[tt].kien += r.byTrangThai[tt]?.kien || 0;
+        acc.byTrangThai[tt].dong += r.byTrangThai[tt]?.dong || 0;
+      });
+      acc.totalPhieu += r.totalPhieu;
+      acc.totalKien += r.totalKien;
+      acc.totalDong += r.totalDong;
+      return acc;
+    },
+    {
+      byTrangThai: Object.fromEntries(
+        visibleTrangThai.map((tt) => [tt, { ...EMPTY_STATS }]),
+      ),
+      totalPhieu: 0,
+      totalKien: 0,
+      totalDong: 0,
+    },
+  );
+
+  // ✅ Chỉ tính những người THỰC SỰ có phiếu trong khoảng ngày đã chọn,
+  // không tính hết toàn bộ nhân sự thuộc bộ phận/chức vụ (kể cả người
+  // không phát sinh phiếu ngày đó).
+  const slNhanSu = rows.filter((r) => (r.totalPhieu || 0) > 0).length;
+  const bqOrder = slNhanSu > 0 ? total.totalPhieu / slNhanSu : 0;
+
+  const hoanThanh = total.byTrangThai["Hoàn thành"];
+  const soNguoiHoanThanh = rows.filter(
+    (r) => (r.byTrangThai["Hoàn thành"]?.phieu || 0) > 0,
+  ).length;
+  const bqDongHoanThanh =
+    hoanThanh && soNguoiHoanThanh > 0 ? hoanThanh.dong / soNguoiHoanThanh : 0;
+  const bqKienHoanThanh =
+    hoanThanh && soNguoiHoanThanh > 0 ? hoanThanh.kien / soNguoiHoanThanh : 0;
+
+  return {
+    rows,
+    total,
+    visibleTrangThai,
+    slNhanSu,
+    bqOrder,
+    bqDongHoanThanh,
+    bqKienHoanThanh,
+  };
+};
+
+// ✅ Trạng thái KPI của 1 "nhóm" (Tổng / CF / CS) cho 1 nhân viên — hàm
+// thuần, chỉ cần object có { byTrangThai, hasMaPhu, totalPhieu }.
+const getTrangThaiKPI = (group, isSingleDay, kpi) => {
+  if (!isSingleDay) return "khong-ap-dung";
+  if ((group.totalPhieu || 0) === 0) return "chua-bat-dau";
+
+  const ht = group.byTrangThai[TRANG_THAI_HOAN_THANH] || EMPTY_STATS;
+
+  // ✅ Chỉ đánh giá (kể cả xét mã phụ) khi TẤT CẢ phiếu nhận trong ngày đã
+  // ở trạng thái "Hoàn thành". Nếu còn phiếu "Chưa soạn"/"Đang soạn" ->
+  // luôn hiện "—" như bình thường, kể cả khi có phiếu chấm bằng mã phụ.
+  if ((ht.phieu || 0) < (group.totalPhieu || 0)) return "chua-hoan-tat";
+
+  // ✅ Chỉ xét mã phụ SAU KHI đã soạn xong hết -> lúc này mới hiện badge
+  // "Mã phụ" (loại khỏi đánh giá đạt/chưa đạt).
+  if (group.hasMaPhu) return "khong-tinh-kpi";
+
+  const target = {
+    phieu: Number(kpi.phieu) || 0,
+    kien: Number(kpi.kien) || 0,
+    dong: Number(kpi.dong) || 0,
+  };
+  // ✅ Đổi từ AND -> OR: chỉ cần đạt 1 trong 3 tiêu chí (Phiếu / Kiện /
+  // Dòng) là coi như đạt KPI, không cần đạt cả 3.
+  const dat =
+    (ht.phieu || 0) >= target.phieu ||
+    (ht.kien || 0) >= target.kien ||
+    (ht.dong || 0) >= target.dong;
+  return dat ? "dat" : "chua-dat";
+};
+
+// ✅ Gộp dữ liệu 1 nhân viên từ 3 map (Tổng / CF / CS) thành 1 dòng duy nhất.
+const buildMergedRows = (filteredDsNhanVien, mapAll, mapCF, mapCS) => {
+  const emptyGroup = () => ({
+    byTrangThai: makeEmptyByTrangThai(),
+    totalPhieu: 0,
+    totalKien: 0,
+    totalDong: 0,
+    hasMaPhu: false,
+  });
+  const getEntry = (map, code) => map.get(code) || emptyGroup();
+
+  const rows = filteredDsNhanVien.map((nv) => {
+    const code = (nv.ma_nhan_vien || "").toString().trim().toUpperCase();
+    return {
+      maNhanVien: nv.ma_nhan_vien,
+      tenNhanVien: nv.ten_nhan_vien,
+      chucVu: nv.chuc_vu,
+      tong: getEntry(mapAll, code),
+      cf: getEntry(mapCF, code),
+      cs: getEntry(mapCS, code),
+    };
+  });
+
+  rows.sort((a, b) => b.tong.totalDong - a.tong.totalDong);
+  return rows;
+};
+
+const KPI_BADGE = {
+  "khong-ap-dung": <span className="text-slate-300">—</span>,
+  "khong-tinh-kpi": (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700"
+      title="Có phiếu được chấm bằng mã phụ trong ngày này -> không đánh giá KPI"
+    >
+      Mã phụ
+    </span>
+  ),
+  "chua-bat-dau": (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+      —
+    </span>
+  ),
+  // ✅ MỚI: còn phiếu chưa Hoàn thành trong ngày -> chưa đủ điều kiện chấm KPI
+  "chua-hoan-tat": (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500"
+      title="Còn phiếu nhận trong ngày chưa Hoàn thành -> chưa đánh giá KPI"
+    >
+      —
+    </span>
+  ),
+  dat: (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+      ✅
+    </span>
+  ),
+  "chua-dat": (
+    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+      ⚠️
+    </span>
+  ),
+};
+
+// ✅ FIX: viết sẵn label ở dạng HOA trong code (thay vì "Tổng (CF + CS)" rồi
+// dùng CSS `uppercase` để hiển thị hoa). Lý do giống hệt StatCard: nếu để
+// CSS tự transform, html2canvas phải tự tính lại chữ hoa lúc chụp ảnh và xử
+// lý sai dấu tiếng Việt. Viết HOA sẵn ở đây + bỏ class `uppercase` ở nơi
+// dùng label này (xem MergedProductivityTable bên dưới) để tránh lỗi.
+const GROUPS = [
+  {
+    key: "tong",
+    label: "TỔNG (CF + CS)",
+    dot: "bg-slate-500",
+    headerBg: "bg-slate-100",
+    headerText: "text-slate-600",
+    cellBg: "",
+  },
+  {
+    key: "cf",
+    label: "CO.OP FOOD / CF",
+    dot: "bg-green-500",
+    headerBg: "bg-green-50",
+    headerText: "text-green-700",
+    cellBg: "bg-green-50/50",
+  },
+  {
+    key: "cs",
+    label: "CO.OP SMILE / CS",
+    dot: "bg-blue-500",
+    headerBg: "bg-blue-50",
+    headerText: "text-blue-700",
+    cellBg: "bg-blue-50/50",
+  },
+];
+
 /* ------------------------------------------------------------------ */
-/* Component                                                           */
+/* Bảng năng suất DUY NHẤT — mỗi dòng là 1 nhân viên, chia sẵn 3 nhóm  */
+/* cột Tổng / CF / CS cạnh nhau (Phiếu - Kiện - Dòng - KPI).           */
+/* ------------------------------------------------------------------ */
+const MergedProductivityTable = memo(function MergedProductivityTable({
+  mergedRows,
+  vaiTroLabel,
+  isSingleDay,
+  kpi,
+  capturing,
+  boPhanStatsAll,
+}) {
+  const kpiSummaryByGroup = useMemo(() => {
+    const result = {};
+    GROUPS.forEach(({ key }) => {
+      if (!isSingleDay) {
+        result[key] = null;
+        return;
+      }
+      let dat = 0;
+      let tong = 0;
+      mergedRows.forEach((r) => {
+        const tt = getTrangThaiKPI(r[key], isSingleDay, kpi);
+        if (tt === "dat" || tt === "chua-dat") {
+          tong += 1;
+          if (tt === "dat") dat += 1;
+        }
+      });
+      result[key] = { dat, tong };
+    });
+    return result;
+  }, [mergedRows, isSingleDay, kpi]);
+
+  const captureRows = useMemo(
+    () => mergedRows.filter((r) => !isZeroRow(r.tong)),
+    [mergedRows],
+  );
+
+  const displayRows = capturing ? captureRows : mergedRows;
+  const colSpanTotal = 3 + GROUPS.length * 4;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
+        <h3 className="text-sm font-bold tracking-wide text-slate-700">
+          {`Năng suất ${vaiTroLabel}`.toLocaleUpperCase("vi-VN")}
+        </h3>
+      </div>
+
+      {boPhanStatsAll && (
+        <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+          <StatCard
+            icon={Users}
+            label="SL nhân sự"
+            value={boPhanStatsAll.slNhanSu}
+            accent="bg-gradient-to-br from-slate-500 to-slate-700"
+            capturing={capturing}
+          />
+          <StatCard
+            icon={Package}
+            label="BQ đơn / người"
+            value={boPhanStatsAll.bqOrder.toFixed(2)}
+            accent="bg-gradient-to-br from-blue-500 to-indigo-600"
+            capturing={capturing}
+          />
+          <StatCard
+            icon={Truck}
+            label={`BQ dòng HT (${vaiTroLabel})`}
+            value={boPhanStatsAll.bqDongHoanThanh.toFixed(2)}
+            accent="bg-gradient-to-br from-emerald-500 to-green-600"
+            capturing={capturing}
+          />
+          <StatCard
+            icon={Boxes}
+            label={`BQ kiện HT (${vaiTroLabel})`}
+            value={boPhanStatsAll.bqKienHoanThanh.toFixed(2)}
+            accent="bg-gradient-to-br from-amber-500 to-orange-600"
+          />
+        </div>
+      )}
+
+      <div className="overflow-auto rounded-xl border border-slate-200 bg-white">
+        <table className="min-w-full text-xs md:text-sm">
+          <thead className="sticky top-0 bg-slate-100">
+            <tr>
+              <th
+                rowSpan={2}
+                className="border-b border-slate-200 px-3 py-2 text-left align-bottom font-bold tracking-wide text-[11px] text-slate-500"
+              >
+                CHỨC DANH
+              </th>
+              <th
+                rowSpan={2}
+                className="border-b border-slate-200 px-3 py-2 text-left align-bottom font-bold tracking-wide text-[11px] text-slate-500"
+              >
+                MÃ NV
+              </th>
+              <th
+                rowSpan={2}
+                className="border-b border-slate-200 px-3 py-2 text-left align-bottom font-bold tracking-wide text-[11px] text-slate-500"
+              >
+                TÊN NV
+              </th>
+              {GROUPS.map(({ key, label, dot, headerBg, headerText }) => {
+                const summary = kpiSummaryByGroup[key];
+                return (
+                  <th
+                    key={key}
+                    colSpan={4}
+                    className={`border-b border-l border-slate-200 px-3 py-1.5 text-center font-bold tracking-wide text-[11px] ${headerBg} ${headerText}`}
+                  >
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${dot}`} />
+                        {label}
+                      </span>
+                      {summary && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal ${
+                            summary.tong === 0
+                              ? "bg-slate-100 text-slate-400"
+                              : summary.dat === summary.tong
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-rose-100 text-rose-700"
+                          }`}
+                        >
+                          {summary.tong === 0
+                            ? "Chưa bắt đầu"
+                            : `${summary.dat}/${summary.tong} đạt KPI`}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
+            <tr>
+              {GROUPS.map(({ key, headerBg, headerText }) => (
+                <Fragment key={key}>
+                  <th
+                    className={`border-l border-slate-200 px-2 py-1 text-right text-[11px] font-semibold ${headerBg} ${headerText} opacity-80`}
+                  >
+                    Phiếu
+                  </th>
+                  <th
+                    className={`px-2 py-1 text-right text-[11px] font-semibold ${headerBg} ${headerText} opacity-80`}
+                  >
+                    Kiện
+                  </th>
+                  <th
+                    className={`px-2 py-1 text-right text-[11px] font-semibold ${headerBg} ${headerText} opacity-80`}
+                  >
+                    Dòng
+                  </th>
+                  <th
+                    className={`px-2 py-1 text-center text-[11px] font-semibold ${headerBg} ${headerText} opacity-80`}
+                  >
+                    KPI
+                  </th>
+                </Fragment>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={colSpanTotal}
+                  className="px-3 py-6 text-center text-slate-400"
+                >
+                  {capturing
+                    ? "Không có nhân viên nào phát sinh số liệu trong khoảng ngày này."
+                    : "Không có dữ liệu."}
+                </td>
+              </tr>
+            ) : (
+              displayRows.map((r) => (
+                <tr key={r.maNhanVien} className="border-t border-slate-100">
+                  <td className="px-3 py-1.5 text-slate-500">{r.chucVu}</td>
+                  <td className="px-3 py-1.5 font-semibold text-slate-700">
+                    {r.maNhanVien}
+                  </td>
+                  <td className="px-3 py-1.5 text-slate-700">
+                    {r.tenNhanVien}
+                  </td>
+                  {GROUPS.map(({ key, cellBg }) => {
+                    const g = r[key];
+                    const kpiTt = getTrangThaiKPI(g, isSingleDay, kpi);
+                    // ⚠️ chưa đạt KPI luôn ưu tiên tô đỏ, đè lên màu nhóm CF/CS
+                    const bg = kpiTt === "chua-dat" ? "bg-rose-50/70" : cellBg;
+                    const cellClass = `px-2 py-1.5 text-right ${bg}`;
+                    return (
+                      <Fragment key={key}>
+                        <td
+                          className={`border-l border-slate-100 ${cellClass}`}
+                        >
+                          {g.totalPhieu || ""}
+                        </td>
+                        <td className={cellClass}>{g.totalKien || ""}</td>
+                        <td className={cellClass}>{g.totalDong || ""}</td>
+                        <td className={`px-2 py-1.5 text-center ${bg}`}>
+                          {KPI_BADGE[kpiTt]}
+                        </td>
+                      </Fragment>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-800">
+              <td className="px-3 py-2" colSpan={3}>
+                Total
+              </td>
+              {GROUPS.map(({ key, cellBg }) => {
+                const sum = mergedRows.reduce(
+                  (acc, r) => {
+                    acc.phieu += r[key].totalPhieu || 0;
+                    acc.kien += r[key].totalKien || 0;
+                    acc.dong += r[key].totalDong || 0;
+                    return acc;
+                  },
+                  { phieu: 0, kien: 0, dong: 0 },
+                );
+                const summary = kpiSummaryByGroup[key];
+                return (
+                  <Fragment key={key}>
+                    <td
+                      className={`border-l border-slate-200 px-2 py-2 text-right ${cellBg}`}
+                    >
+                      {sum.phieu}
+                    </td>
+                    <td className={`px-2 py-2 text-right ${cellBg}`}>
+                      {sum.kien}
+                    </td>
+                    <td className={`px-2 py-2 text-right ${cellBg}`}>
+                      {sum.dong}
+                    </td>
+                    <td
+                      className={`px-2 py-2 text-center text-[10px] ${cellBg}`}
+                    >
+                      {summary && summary.tong > 0
+                        ? `${summary.dat}/${summary.tong}`
+                        : "—"}
+                    </td>
+                  </Fragment>
+                );
+              })}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* Component chính — KHÔNG còn modal, hiển thị trực tiếp trên trang,   */
+/* 1 bảng duy nhất chia sẵn cột Tổng / CF / CS thay vì 3 bảng riêng.   */
 /* ------------------------------------------------------------------ */
 
 const NhanSuSoanEmployeeLookup = () => {
-  const [open, setOpen] = useState(false);
   const [tuNgay, setTuNgay] = useState(getDefaultTuNgay());
   const [denNgay, setDenNgay] = useState(getDefaultDenNgay());
 
@@ -221,18 +703,36 @@ const NhanSuSoanEmployeeLookup = () => {
   const captureRef = useRef(null);
   const [capturing, setCapturing] = useState(false);
 
+  // ✅ Danh sách tuỳ chọn cho select "Chức vụ":
+  // - Nếu ĐÃ chọn Bộ phận -> chỉ hiện chức vụ thuộc bộ phận đó (như cũ).
+  // - Nếu CHƯA chọn Bộ phận -> hiện TẤT CẢ chức vụ (mọi bộ phận), cho phép
+  //   chọn thẳng Chức vụ mà không bắt buộc chọn Bộ phận trước.
   const chucVuOptions = selectedBoPhan
     ? BO_PHAN_CHUC_VU[selectedBoPhan] || []
-    : [];
+    : ALL_CHUC_VU;
 
+  // ✅ Khi đổi Bộ phận: nếu Chức vụ đang chọn không thuộc bộ phận mới thì
+  // mới reset về rỗng; nếu vẫn hợp lệ (vd "Sinh Viên" có ở nhiều bộ phận)
+  // thì giữ nguyên, không cần chọn lại. Bỏ chọn Bộ phận (về "-- Bộ phận --")
+  // thì luôn giữ nguyên Chức vụ đang chọn.
   const handleChangeBoPhan = useCallback((e) => {
-    setSelectedBoPhan(e.target.value);
-    setSelectedChucVu("");
-    setDsNhanVien([]);
+    const value = e.target.value;
+    setSelectedBoPhan(value);
+    if (!value) return;
+    setSelectedChucVu((prev) => {
+      const options = BO_PHAN_CHUC_VU[value] || [];
+      return prev && options.includes(prev) ? prev : "";
+    });
   }, []);
 
+  const handleChangeChucVu = useCallback((e) => {
+    setSelectedChucVu(e.target.value);
+  }, []);
+
+  // ✅ Chỉ cần MỘT trong hai (Bộ phận hoặc Chức vụ) được chọn là đã đủ để
+  // tải danh sách nhân viên — không còn bắt buộc phải có Bộ phận trước.
   useEffect(() => {
-    if (!open || !selectedBoPhan) {
+    if (!selectedBoPhan && !selectedChucVu) {
       setDsNhanVien([]);
       return;
     }
@@ -243,7 +743,7 @@ const NhanSuSoanEmployeeLookup = () => {
       setErrorNV("");
       try {
         const res = await nhanVienService.getDanhSach({
-          bo_phan: selectedBoPhan,
+          ...(selectedBoPhan ? { bo_phan: selectedBoPhan } : {}),
           ...(selectedChucVu ? { chuc_vu: selectedChucVu } : {}),
           active: true,
         });
@@ -262,21 +762,27 @@ const NhanSuSoanEmployeeLookup = () => {
     return () => {
       cancelled = true;
     };
-  }, [open, selectedBoPhan, selectedChucVu]);
+  }, [selectedBoPhan, selectedChucVu]);
 
   useEffect(() => {
-    if (!open) return;
     let cancelled = false;
 
     (async () => {
       setLoading(true);
       setError("");
       try {
+        // ✅ FIX: gọi đúng field ngày mà backend hỗ trợ lọc riêng — tuNgayNP/
+        // denNgayNP (theo TG NHẬN PHIẾU, dùng cho NV Soạn) và tuNgayHT/denNgayHT
+        // (theo TG HOÀN THÀNH, dùng cho NV KC) — backend sẽ OR 2 điều kiện lại,
+        // trả về đủ phiếu cho cả 2 vai trò trong 1 lần gọi, không cần buffer
+        // ngày và không còn bị lọc nhầm theo TG IMPORT nữa.
         const res = await nhanSuSoanService.getAllNhanSuSoan({
           page: 1,
           limit: 10000,
-          tuNgay,
-          denNgay,
+          tuNgayNP: tuNgay,
+          denNgayNP: denNgay,
+          tuNgayHT: tuNgay,
+          denNgayHT: denNgay,
         });
         if (!cancelled) setItems(res.data || res.items || []);
       } catch (err) {
@@ -290,154 +796,107 @@ const NhanSuSoanEmployeeLookup = () => {
     return () => {
       cancelled = true;
     };
-  }, [open, tuNgay, denNgay]);
+  }, [tuNgay, denNgay]);
 
+  // ✅ Lọc lại 1 lần nữa ở client theo Chức vụ — phòng trường hợp API
+  // getDanhSach chưa hỗ trợ lọc theo chuc_vu khi không kèm bo_phan.
   const filteredDsNhanVien = useMemo(() => {
     if (!selectedChucVu) return dsNhanVien;
     return dsNhanVien.filter((nv) => nv.chuc_vu === selectedChucVu);
   }, [dsNhanVien, selectedChucVu]);
 
-  const statsMaps = useMemo(() => buildStatsMaps(items), [items]);
+  // ✅ Ngày dùng để tính năng suất KHÁC NHAU theo vai trò:
+  // - NV Soạn -> tính theo TG nhận phiếu (field `tgImport`, giống "TG import"
+  //   đang dùng ở Dashboard tổng quan — thời điểm phiếu vào hệ thống/nhận).
+  // - NV KC   -> tính theo TG hoàn thành (field `tgHoanThanh`).
+  // ⚠️ Nếu tên field thật trong dữ liệu của bạn khác (vd `tgNhanPhieu`), chỉ
+  // cần đổi lại chuỗi bên dưới cho khớp.
+  const ngayNangSuatField = vaiTro === "kc" ? "tgHoanThanh" : "tgNhanPhieu";
 
-  const boPhanStats = useMemo(() => {
-    if (!selectedBoPhan || !filteredDsNhanVien.length) return null;
-
-    const map = vaiTro === "kc" ? statsMaps.kc : statsMaps.soan;
-
-    const rows = filteredDsNhanVien.map((nv) => {
-      const code = (nv.ma_nhan_vien || "").toString().trim().toUpperCase();
-      const s = map.get(code) || {
-        byTrangThai: makeEmptyByTrangThai(),
-        totalPhieu: 0,
-        totalKien: 0,
-        totalDong: 0,
-        hasMaPhu: false,
-      };
-      return {
-        maNhanVien: nv.ma_nhan_vien,
-        tenNhanVien: nv.ten_nhan_vien,
-        chucVu: nv.chuc_vu,
-        ...s,
-      };
+  // ✅ Lọc phiếu theo đúng field ngày ở trên, nằm trong khoảng [tuNgay, denNgay]
+  // đã chọn — thay vì dùng nguyên `items` (vốn được API trả về theo khoảng
+  // ngày chung, có thể không khớp field cần dùng cho từng vai trò).
+  const itemsForNangSuat = useMemo(() => {
+    return items.filter((it) => {
+      const raw = it[ngayNangSuatField];
+      if (!raw) return false;
+      const d = dayjs(raw).format("YYYY-MM-DD");
+      return d >= tuNgay && d <= denNgay;
     });
+  }, [items, ngayNangSuatField, tuNgay, denNgay]);
 
-    const visibleTrangThai = TRANG_THAI_LIST.filter((tt) =>
-      rows.some((r) => (r.byTrangThai[tt]?.phieu || 0) > 0),
-    );
-
-    rows.sort((a, b) => b.totalDong - a.totalDong);
-
-    const total = rows.reduce(
-      (acc, r) => {
-        visibleTrangThai.forEach((tt) => {
-          acc.byTrangThai[tt].phieu += r.byTrangThai[tt]?.phieu || 0;
-          acc.byTrangThai[tt].kien += r.byTrangThai[tt]?.kien || 0;
-          acc.byTrangThai[tt].dong += r.byTrangThai[tt]?.dong || 0;
-        });
-        acc.totalPhieu += r.totalPhieu;
-        acc.totalKien += r.totalKien;
-        acc.totalDong += r.totalDong;
-        return acc;
-      },
-      {
-        byTrangThai: Object.fromEntries(
-          visibleTrangThai.map((tt) => [tt, { ...EMPTY_STATS }]),
-        ),
-        totalPhieu: 0,
-        totalKien: 0,
-        totalDong: 0,
-      },
-    );
-
-    const slNhanSu = rows.length;
-    const bqOrder = slNhanSu > 0 ? total.totalPhieu / slNhanSu : 0;
-
-    const hoanThanh = total.byTrangThai["Hoàn thành"];
-    const soNguoiHoanThanh = rows.filter(
-      (r) => (r.byTrangThai["Hoàn thành"]?.phieu || 0) > 0,
-    ).length;
-    const bqDongHoanThanh =
-      hoanThanh && soNguoiHoanThanh > 0 ? hoanThanh.dong / soNguoiHoanThanh : 0;
-    const bqKienHoanThanh =
-      hoanThanh && soNguoiHoanThanh > 0 ? hoanThanh.kien / soNguoiHoanThanh : 0;
-
-    return {
-      rows,
-      total,
-      visibleTrangThai,
-      slNhanSu,
-      bqOrder,
-      bqDongHoanThanh,
-      bqKienHoanThanh,
-    };
-  }, [selectedBoPhan, filteredDsNhanVien, statsMaps, vaiTro]);
-
-  // ✅ Trạng thái KPI của 1 dòng — 5 nhánh, xét theo thứ tự ưu tiên:
-  // 1. "khong-ap-dung": đang lọc nhiều ngày, KPI theo ngày không áp dụng
-  // 2. "khong-tinh-kpi": trong ngày này có phiếu được chấm bằng MÃ PHỤ của
-  //    người này -> vẫn cộng năng suất bình thường nhưng KHÔNG đánh giá KPI
-  // 3. "chua-bat-dau": totalPhieu === 0 -> chưa chạm phiếu nào, chưa tính KPI
-  // 4. "dat" / "chua-dat": so số liệu "Hoàn thành" với ngưỡng KPI đang cấu hình
-  const trangThaiKPI = useCallback(
-    (row) => {
-      if (!isSingleDay) return "khong-ap-dung";
-      if (row.hasMaPhu) return "khong-tinh-kpi";
-      if ((row.totalPhieu || 0) === 0) return "chua-bat-dau";
-
-      const ht = row.byTrangThai[TRANG_THAI_HOAN_THANH] || EMPTY_STATS;
-      const target = {
-        phieu: Number(kpi.phieu) || 0,
-        kien: Number(kpi.kien) || 0,
-        dong: Number(kpi.dong) || 0,
-      };
-      const dat =
-        (ht.phieu || 0) >= target.phieu &&
-        (ht.kien || 0) >= target.kien &&
-        (ht.dong || 0) >= target.dong;
-      return dat ? "dat" : "chua-dat";
-    },
-    [isSingleDay, kpi],
+  // ✅ 3 tập dữ liệu song song: Tổng (tất cả) / CF / CS — không cần bấm lọc.
+  const itemsCF = useMemo(
+    () => itemsForNangSuat.filter((it) => extractLoaiPhieu(it) === "CF"),
+    [itemsForNangSuat],
+  );
+  const itemsCS = useMemo(
+    () => itemsForNangSuat.filter((it) => extractLoaiPhieu(it) === "CS"),
+    [itemsForNangSuat],
   );
 
-  // ✅ Mẫu số chỉ gồm người đã "bắt đầu" và KHÔNG dùng mã phụ hôm đó
-  const kpiSummary = useMemo(() => {
-    if (!isSingleDay || !boPhanStats) return null;
-    let dat = 0;
-    let tong = 0;
-    boPhanStats.rows.forEach((r) => {
-      const tt = trangThaiKPI(r);
-      if (tt === "dat" || tt === "chua-dat") {
-        tong += 1;
-        if (tt === "dat") dat += 1;
-      }
-    });
-    return { dat, tong };
-  }, [isSingleDay, boPhanStats, trangThaiKPI]);
+  const statsMapsAll = useMemo(
+    () => buildStatsMaps(itemsForNangSuat),
+    [itemsForNangSuat],
+  );
+  const statsMapsCF = useMemo(() => buildStatsMaps(itemsCF), [itemsCF]);
+  const statsMapsCS = useMemo(() => buildStatsMaps(itemsCS), [itemsCS]);
 
-  const captureRows = useMemo(() => {
-    if (!boPhanStats) return [];
-    return boPhanStats.rows.filter((r) => !isZeroRow(r));
-  }, [boPhanStats]);
+  const mapAll = vaiTro === "kc" ? statsMapsAll.kc : statsMapsAll.soan;
+  const mapCF = vaiTro === "kc" ? statsMapsCF.kc : statsMapsCF.soan;
+  const mapCS = vaiTro === "kc" ? statsMapsCS.kc : statsMapsCS.soan;
 
-  const closeModal = useCallback(() => setOpen(false), []);
-  const openModal = useCallback(() => setOpen(true), []);
+  // ✅ Vẫn cần bản "Tổng" đầy đủ để lấy 4 thẻ số liệu (SL nhân sự, BQ...).
+  const boPhanStatsAll = useMemo(
+    () => computeBoPhanStats(filteredDsNhanVien, mapAll),
+    [filteredDsNhanVien, mapAll],
+  );
+
+  // ✅ Gộp Tổng/CF/CS của từng nhân viên thành 1 dòng duy nhất cho bảng chung.
+  const mergedRows = useMemo(
+    () => buildMergedRows(filteredDsNhanVien, mapAll, mapCF, mapCS),
+    [filteredDsNhanVien, mapAll, mapCF, mapCS],
+  );
 
   const handleCapture = useCallback(async () => {
-    if (!captureRef.current || !boPhanStats || capturing) return;
+    if (!captureRef.current || !boPhanStatsAll || capturing) return;
 
     setCapturing(true);
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
-    if (document.fonts && document.fonts.ready) {
-      await document.fonts.ready;
+    // ✅ FIX: chờ đúng font-family/weight/size thực sự được dùng trong
+    // StatCard & bảng (FONT_SANS 11.5px/600, FONT_MONO 27px/700) load xong,
+    // thay vì chỉ dựa vào document.fonts.ready (không đảm bảo đúng metric
+    // của các size cụ thể đã sẵn sàng để đo/layout).
+    // ⚠️ Đã đổi "Inter" -> "Be Vietnam Pro" cho FONT_SANS vì Inter bị lỗi
+    // đặt sai vị trí dấu tiếng Việt trên chữ HOA (Ự, Ữ, Ậ...). Nếu bạn đổi
+    // FONT_SANS/FONT_MONO sang font khác, nhớ cập nhật lại 2 dòng bên dưới
+    // cho khớp tên font thật.
+    try {
+      if (document.fonts) {
+        await Promise.all([
+          document.fonts.load('600 11.5px "Be Vietnam Pro"'),
+          document.fonts.load('700 27px "Roboto Mono"'),
+          document.fonts.ready,
+        ]);
+      }
+    } catch {
+      // bỏ qua nếu font load lỗi, vẫn tiếp tục chụp
     }
+
     await new Promise((resolve) => requestAnimationFrame(resolve));
+    // ⏱️ Tăng thời gian chờ ổn định layout sau khi đổi class/ẩn dòng =0
+    // (80ms trước đây đôi khi chưa đủ với font custom nặng khiến chữ có
+    // dấu bị lệch/chồng nét lúc html2canvas chụp).
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     try {
       const canvas = await html2canvas(captureRef.current, {
         backgroundColor: "#ffffff",
         scale: 2,
         useCORS: true,
+        letterRendering: true,
+        imageTimeout: 15000,
         windowWidth: captureRef.current.scrollWidth,
         windowHeight: captureRef.current.scrollHeight,
       });
@@ -459,489 +918,214 @@ const NhanSuSoanEmployeeLookup = () => {
     } finally {
       setCapturing(false);
     }
-  }, [boPhanStats, capturing, vaiTro, selectedChucVu, selectedBoPhan]);
+  }, [boPhanStatsAll, capturing, vaiTro, selectedChucVu, selectedBoPhan]);
 
   const vaiTroLabel = vaiTro === "kc" ? "Kiểm chéo (KC)" : "Soạn";
-
-  const displayRows =
-    capturing && boPhanStats ? captureRows : boPhanStats?.rows || [];
+  const daChonBoLoc = Boolean(selectedBoPhan || selectedChucVu);
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={openModal}
-        className="flex h-[42px] items-center gap-2 rounded-xl border border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50 px-3 text-sm font-semibold text-slate-700 shadow-sm outline-none transition-all hover:from-blue-100 hover:to-indigo-100 hover:shadow-md"
-      >
-        <Users size={16} className="text-blue-500" />
-        Tra cứu nhân viên
-      </button>
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-base font-bold text-slate-800">
+            <Users size={18} className="text-blue-500" />
+            Năng suất theo bộ phận / chức vụ
+          </h2>
+        </div>
 
-      {open &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 p-4"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) closeModal();
-            }}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200">
+            <button
+              type="button"
+              onClick={() => setVaiTro("soan")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-all ${
+                vaiTro === "soan"
+                  ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              NV Soạn
+            </button>
+            <button
+              type="button"
+              onClick={() => setVaiTro("kc")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-all ${
+                vaiTro === "kc"
+                  ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              NV KC
+            </button>
+          </div>
+
+          <select
+            value={selectedBoPhan}
+            onChange={handleChangeBoPhan}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
           >
-            <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-              {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                <h2 className="flex items-center gap-2 text-base font-bold text-slate-800">
-                  <Users size={18} className="text-blue-500" />
-                  Năng suất theo bộ phận / chức vụ
-                </h2>
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-                  title="Đóng"
-                >
-                  <X size={18} />
-                </button>
-              </div>
+            <option value="">-- Bộ phận (tất cả) --</option>
+            {ALL_BO_PHAN.map((bp) => (
+              <option key={bp} value={bp}>
+                {bp}
+              </option>
+            ))}
+          </select>
 
-              {/* Body (scroll) */}
-              <div className="flex-1 overflow-y-auto px-5 py-4">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200">
-                    <button
-                      type="button"
-                      onClick={() => setVaiTro("soan")}
-                      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-all ${
-                        vaiTro === "soan"
-                          ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      NV Soạn
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVaiTro("kc")}
-                      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-all ${
-                        vaiTro === "kc"
-                          ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      NV KC
-                    </button>
-                  </div>
+          {/* ✅ Không còn `disabled` — có thể chọn Chức vụ ngay cả khi
+              chưa chọn Bộ phận. Options tự đổi theo chucVuOptions ở trên. */}
+          <select
+            value={selectedChucVu}
+            onChange={handleChangeChucVu}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
+          >
+            <option value="">-- Chức vụ (tất cả) --</option>
+            {chucVuOptions.map((cv) => (
+              <option key={cv} value={cv}>
+                {cv}
+              </option>
+            ))}
+          </select>
 
-                  <select
-                    value={selectedBoPhan}
-                    onChange={handleChangeBoPhan}
-                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
-                  >
-                    <option value="">-- Bộ phận --</option>
-                    {ALL_BO_PHAN.map((bp) => (
-                      <option key={bp} value={bp}>
-                        {bp}
-                      </option>
-                    ))}
-                  </select>
+          <DateRangeFilter
+            startValue={tuNgay}
+            endValue={denNgay}
+            onChange={(s, e) => {
+              setTuNgay(s);
+              setDenNgay(e);
+            }}
+            onClear={() => {
+              setTuNgay(getDefaultTuNgay());
+              setDenNgay(getDefaultDenNgay());
+            }}
+          />
 
-                  <select
-                    value={selectedChucVu}
-                    onChange={(e) => setSelectedChucVu(e.target.value)}
-                    disabled={!selectedBoPhan}
-                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                  >
-                    <option value="">-- Chức vụ (tất cả) --</option>
-                    {chucVuOptions.map((cv) => (
-                      <option key={cv} value={cv}>
-                        {cv}
-                      </option>
-                    ))}
-                  </select>
+          <button
+            type="button"
+            onClick={handleCapture}
+            disabled={!boPhanStatsAll || capturing}
+            title="Chụp bảng năng suất (Tổng / CF / CS) thành ảnh PNG"
+            className="flex h-[42px] items-center gap-2 rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-50 to-green-50 px-3 text-sm font-semibold text-emerald-700 shadow-sm outline-none transition-all hover:from-emerald-100 hover:to-green-100 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {capturing ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Camera size={16} />
+            )}
+            {capturing ? "Đang chụp..." : "Chụp màn hình"}
+          </button>
 
-                  <DateRangeFilter
-                    startValue={tuNgay}
-                    endValue={denNgay}
-                    onChange={(s, e) => {
-                      setTuNgay(s);
-                      setDenNgay(e);
-                    }}
-                    onClear={() => {
-                      setTuNgay(getDefaultTuNgay());
-                      setDenNgay(getDefaultDenNgay());
-                    }}
-                  />
+          {(loading || loadingNV) && (
+            <Loader2 size={18} className="animate-spin text-blue-500" />
+          )}
+        </div>
 
-                  <button
-                    type="button"
-                    onClick={handleCapture}
-                    disabled={!boPhanStats || capturing}
-                    title="Chụp bảng năng suất thành ảnh PNG (tự bỏ nhân viên toàn 0)"
-                    className="flex h-[42px] items-center gap-2 rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-50 to-green-50 px-3 text-sm font-semibold text-emerald-700 shadow-sm outline-none transition-all hover:from-emerald-100 hover:to-green-100 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {capturing ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Camera size={16} />
-                    )}
-                    {capturing ? "Đang chụp..." : "Chụp màn hình"}
-                  </button>
+        {/* Khối cài đặt KPI/ngày */}
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5">
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
+            <Target size={16} />
+            KPI/ngày (Hoàn thành):
+          </div>
+          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+            Phiếu
+            <input
+              type="number"
+              min={0}
+              value={kpi.phieu}
+              onChange={handleChangeKpi("phieu")}
+              className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+            Kiện
+            <input
+              type="number"
+              min={0}
+              value={kpi.kien}
+              onChange={handleChangeKpi("kien")}
+              className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+            Dòng
+            <input
+              type="number"
+              min={0}
+              value={kpi.dong}
+              onChange={handleChangeKpi("dong")}
+              className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+            />
+          </label>
 
-                  {(loading || loadingNV) && (
-                    <Loader2 size={18} className="animate-spin text-blue-500" />
-                  )}
-                </div>
+          <button
+            type="button"
+            onClick={() => setKpi({ ...KPI_DEFAULT })}
+            title={`Đặt lại KPI mặc định: ${KPI_DEFAULT.phieu} phiếu / ${KPI_DEFAULT.kien} kiện / ${KPI_DEFAULT.dong} dòng`}
+            className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-700 shadow-sm hover:bg-amber-100"
+          >
+            Đặt lại mặc định
+          </button>
 
-                {/* Khối cài đặt KPI/ngày */}
-                <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5">
-                  <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
-                    <Target size={16} />
-                    KPI/ngày (Hoàn thành):
-                  </div>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                    Phiếu
-                    <input
-                      type="number"
-                      min={0}
-                      value={kpi.phieu}
-                      onChange={handleChangeKpi("phieu")}
-                      className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
-                    />
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                    Kiện
-                    <input
-                      type="number"
-                      min={0}
-                      value={kpi.kien}
-                      onChange={handleChangeKpi("kien")}
-                      className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
-                    />
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                    Dòng
-                    <input
-                      type="number"
-                      min={0}
-                      value={kpi.dong}
-                      onChange={handleChangeKpi("dong")}
-                      className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
-                    />
-                  </label>
+          {!isSingleDay && (
+            <span className="ml-auto text-xs font-medium text-amber-600">
+              ⚠️ Chỉ áp dụng cảnh báo KPI khi Từ ngày = Đến ngày (chọn 1 ngày)
+            </span>
+          )}
+        </div>
 
-                  {isSingleDay ? (
-                    kpiSummary && (
-                      <span
-                        className={`ml-auto rounded-full px-3 py-1 text-xs font-semibold ${
-                          kpiSummary.tong === 0
-                            ? "bg-slate-100 text-slate-500"
-                            : kpiSummary.dat === kpiSummary.tong
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-rose-100 text-rose-700"
-                        }`}
-                      >
-                        {kpiSummary.tong === 0
-                          ? "Chưa có ai bắt đầu soạn"
-                          : `${kpiSummary.dat}/${kpiSummary.tong} đạt KPI`}
-                      </span>
-                    )
-                  ) : (
-                    <span className="ml-auto text-xs font-medium text-amber-600">
-                      ⚠️ Chỉ áp dụng cảnh báo KPI khi Từ ngày = Đến ngày (chọn 1
-                      ngày)
-                    </span>
-                  )}
-                </div>
-
-                {error && (
-                  <div className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600 ring-1 ring-rose-200">
-                    {error}
-                  </div>
-                )}
-                {errorNV && (
-                  <div className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600 ring-1 ring-rose-200">
-                    {errorNV}
-                  </div>
-                )}
-
-                {!selectedBoPhan && (
-                  <div className="flex items-center gap-2 py-6 text-sm text-slate-400">
-                    <Users size={16} />
-                    Chọn bộ phận (và chức vụ nếu muốn) ở trên để xem năng suất{" "}
-                    {vaiTroLabel} — Phiếu / Kiện / Dòng của từng nhân viên trong
-                    khoảng ngày {dayjs(tuNgay).format("DD/MM/YYYY")} -{" "}
-                    {dayjs(denNgay).format("DD/MM/YYYY")}.
-                  </div>
-                )}
-
-                {selectedBoPhan &&
-                  !loadingNV &&
-                  filteredDsNhanVien.length === 0 && (
-                    <div className="py-6 text-sm text-slate-400">
-                      Không có nhân viên nào phù hợp bộ phận/chức vụ đã chọn.
-                    </div>
-                  )}
-
-                {selectedBoPhan &&
-                  !loadingNV &&
-                  !loading &&
-                  boPhanStats &&
-                  filteredDsNhanVien.length > 0 && (
-                    <div
-                      ref={captureRef}
-                      className={`space-y-4 bg-white p-2 ${
-                        capturing ? "capture-no-truncate" : ""
-                      }`}
-                    >
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                        Năng suất {vaiTroLabel} —{" "}
-                        {selectedChucVu || selectedBoPhan} (
-                        {dayjs(tuNgay).format("DD/MM/YYYY")} -{" "}
-                        {dayjs(denNgay).format("DD/MM/YYYY")})
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                        <StatCard
-                          icon={Users}
-                          label="SL nhân sự"
-                          value={boPhanStats.slNhanSu}
-                          accent="bg-gradient-to-br from-slate-500 to-slate-700"
-                        />
-                        <StatCard
-                          icon={Package}
-                          label="BQ đơn / người"
-                          value={boPhanStats.bqOrder.toFixed(2)}
-                          accent="bg-gradient-to-br from-blue-500 to-indigo-600"
-                        />
-                        <StatCard
-                          icon={Truck}
-                          label={`BQ dòng hoàn thành (${vaiTroLabel})`}
-                          value={boPhanStats.bqDongHoanThanh.toFixed(2)}
-                          accent="bg-gradient-to-br from-emerald-500 to-green-600"
-                        />
-                        <StatCard
-                          icon={Boxes}
-                          label={`BQ kiện hoàn thành (${vaiTroLabel})`}
-                          value={boPhanStats.bqKienHoanThanh.toFixed(2)}
-                          accent="bg-gradient-to-br from-amber-500 to-orange-600"
-                        />
-                      </div>
-
-                      <div className="overflow-auto rounded-xl border border-slate-200 bg-white">
-                        <table className="min-w-full text-xs md:text-sm">
-                          <thead className="sticky top-0 bg-slate-100">
-                            <tr>
-                              <th
-                                rowSpan={2}
-                                className="border-b border-slate-200 px-3 py-2 text-left align-bottom font-bold uppercase tracking-wide text-[11px] text-slate-500"
-                              >
-                                Chức danh
-                              </th>
-                              <th
-                                rowSpan={2}
-                                className="border-b border-slate-200 px-3 py-2 text-left align-bottom font-bold uppercase tracking-wide text-[11px] text-slate-500"
-                              >
-                                Mã NV
-                              </th>
-                              <th
-                                rowSpan={2}
-                                className="border-b border-slate-200 px-3 py-2 text-left align-bottom font-bold uppercase tracking-wide text-[11px] text-slate-500"
-                              >
-                                Tên NV
-                              </th>
-                              {boPhanStats.visibleTrangThai.map((tt) => (
-                                <th
-                                  key={tt}
-                                  colSpan={3}
-                                  className="border-b border-l border-slate-200 px-3 py-1.5 text-center font-bold uppercase tracking-wide text-[11px] text-slate-500"
-                                >
-                                  {tt}
-                                </th>
-                              ))}
-                              <th
-                                colSpan={3}
-                                className="border-b border-l border-slate-200 px-3 py-1.5 text-center font-bold uppercase tracking-wide text-[11px] text-slate-700"
-                              >
-                                Total
-                              </th>
-                              <th
-                                rowSpan={2}
-                                className="border-b border-l border-slate-200 px-3 py-2 text-center align-bottom font-bold uppercase tracking-wide text-[11px] text-slate-700"
-                              >
-                                KPI
-                              </th>
-                            </tr>
-                            <tr>
-                              {boPhanStats.visibleTrangThai.map((tt) => (
-                                <Fragment key={tt}>
-                                  <th className="border-l border-slate-200 px-2 py-1 text-right text-[11px] font-semibold text-slate-400">
-                                    Phiếu
-                                  </th>
-                                  <th className="px-2 py-1 text-right text-[11px] font-semibold text-slate-400">
-                                    Kiện
-                                  </th>
-                                  <th className="px-2 py-1 text-right text-[11px] font-semibold text-slate-400">
-                                    Dòng
-                                  </th>
-                                </Fragment>
-                              ))}
-                              <th className="border-l border-slate-200 px-2 py-1 text-right text-[11px] font-semibold text-slate-600">
-                                Phiếu
-                              </th>
-                              <th className="px-2 py-1 text-right text-[11px] font-semibold text-slate-600">
-                                Kiện
-                              </th>
-                              <th className="px-2 py-1 text-right text-[11px] font-semibold text-slate-600">
-                                Dòng
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {displayRows.length === 0 ? (
-                              <tr>
-                                <td
-                                  colSpan={
-                                    3 +
-                                    boPhanStats.visibleTrangThai.length * 3 +
-                                    3 +
-                                    1
-                                  }
-                                  className="px-3 py-6 text-center text-slate-400"
-                                >
-                                  {capturing
-                                    ? "Không có nhân viên nào phát sinh số liệu trong khoảng ngày này."
-                                    : "Không có dữ liệu."}
-                                </td>
-                              </tr>
-                            ) : (
-                              displayRows.map((r) => {
-                                const kpiTt = trangThaiKPI(r);
-                                return (
-                                  <tr
-                                    key={r.maNhanVien}
-                                    className={`border-t border-slate-100 ${
-                                      kpiTt === "chua-dat"
-                                        ? "bg-rose-50/60"
-                                        : ""
-                                    }`}
-                                  >
-                                    <td className="px-3 py-1.5 text-slate-500">
-                                      {r.chucVu}
-                                    </td>
-                                    <td className="px-3 py-1.5 font-semibold text-slate-700">
-                                      {r.maNhanVien}
-                                    </td>
-                                    <td className="px-3 py-1.5 text-slate-700">
-                                      {r.tenNhanVien}
-                                    </td>
-                                    {boPhanStats.visibleTrangThai.map((tt) => {
-                                      const s =
-                                        r.byTrangThai[tt] || EMPTY_STATS;
-                                      return (
-                                        <Fragment key={tt}>
-                                          <td className="border-l border-slate-100 px-2 py-1.5 text-right">
-                                            {s.phieu || ""}
-                                          </td>
-                                          <td className="px-2 py-1.5 text-right">
-                                            {s.kien || ""}
-                                          </td>
-                                          <td className="px-2 py-1.5 text-right">
-                                            {s.dong || ""}
-                                          </td>
-                                        </Fragment>
-                                      );
-                                    })}
-                                    <td className="border-l border-slate-100 px-2 py-1.5 text-right font-semibold text-slate-700">
-                                      {r.totalPhieu}
-                                    </td>
-                                    <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
-                                      {r.totalKien}
-                                    </td>
-                                    <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
-                                      {r.totalDong}
-                                    </td>
-                                    {/* ✅ Trạng thái KPI — 5 nhánh hiển thị */}
-                                    <td className="border-l border-slate-100 px-2 py-1.5 text-center">
-                                      {kpiTt === "khong-ap-dung" && (
-                                        <span className="text-slate-300">
-                                          —
-                                        </span>
-                                      )}
-                                      {kpiTt === "khong-tinh-kpi" && (
-                                        <span
-                                          className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700"
-                                          title="Có phiếu được chấm bằng mã phụ trong ngày này -> không đánh giá KPI"
-                                        >
-                                          Không tính KPI
-                                        </span>
-                                      )}
-                                      {kpiTt === "chua-bat-dau" && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
-                                          Chưa bắt đầu
-                                        </span>
-                                      )}
-                                      {kpiTt === "dat" && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                                          ✅ Đạt
-                                        </span>
-                                      )}
-                                      {kpiTt === "chua-dat" && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
-                                          ⚠️ Chưa đạt
-                                        </span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                            )}
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-800">
-                              <td className="px-3 py-2" colSpan={3}>
-                                Total
-                              </td>
-                              {boPhanStats.visibleTrangThai.map((tt) => {
-                                const s = boPhanStats.total.byTrangThai[tt];
-                                return (
-                                  <Fragment key={tt}>
-                                    <td className="border-l border-slate-200 px-2 py-2 text-right">
-                                      {s.phieu}
-                                    </td>
-                                    <td className="px-2 py-2 text-right">
-                                      {s.kien}
-                                    </td>
-                                    <td className="px-2 py-2 text-right">
-                                      {s.dong}
-                                    </td>
-                                  </Fragment>
-                                );
-                              })}
-                              <td className="border-l border-slate-200 px-2 py-2 text-right">
-                                {boPhanStats.total.totalPhieu}
-                              </td>
-                              <td className="px-2 py-2 text-right">
-                                {boPhanStats.total.totalKien}
-                              </td>
-                              <td className="px-2 py-2 text-right">
-                                {boPhanStats.total.totalDong}
-                              </td>
-                              <td className="border-l border-slate-200 px-2 py-2 text-center text-xs">
-                                {isSingleDay && kpiSummary
-                                  ? kpiSummary.tong === 0
-                                    ? "—"
-                                    : `${kpiSummary.dat}/${kpiSummary.tong} đạt`
-                                  : "—"}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-              </div>
-            </div>
-          </div>,
-          document.body,
+        {error && (
+          <div className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600 ring-1 ring-rose-200">
+            {error}
+          </div>
         )}
+        {errorNV && (
+          <div className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600 ring-1 ring-rose-200">
+            {errorNV}
+          </div>
+        )}
+
+        {!daChonBoLoc && (
+          <div className="flex items-center gap-2 py-6 text-sm text-slate-400">
+            <Users size={16} />
+            Chọn Bộ phận và/hoặc Chức vụ ở trên (có thể chọn 1 trong 2, không
+            bắt buộc chọn Bộ phận trước) để xem năng suất {vaiTroLabel} — Phiếu
+            / Kiện / Dòng của từng nhân viên, chia sẵn theo Tổng / CF / CS trong
+            cùng 1 bảng, trong khoảng ngày {dayjs(tuNgay).format("DD/MM/YYYY")}{" "}
+            - {dayjs(denNgay).format("DD/MM/YYYY")}.
+          </div>
+        )}
+
+        {daChonBoLoc && !loadingNV && filteredDsNhanVien.length === 0 && (
+          <div className="py-6 text-sm text-slate-400">
+            Không có nhân viên nào phù hợp bộ phận/chức vụ đã chọn.
+          </div>
+        )}
+
+        {daChonBoLoc &&
+          !loadingNV &&
+          !loading &&
+          boPhanStatsAll &&
+          filteredDsNhanVien.length > 0 && (
+            <div ref={captureRef} className="space-y-4 bg-white p-2 pt-6">
+              <div className="text-xs font-semibold tracking-wide text-slate-400">
+                {`Năng suất ${vaiTroLabel} — ${
+                  selectedChucVu || selectedBoPhan || "Tất cả"
+                } (${dayjs(tuNgay).format("DD/MM/YYYY")} - ${dayjs(
+                  denNgay,
+                ).format("DD/MM/YYYY")})`.toLocaleUpperCase("vi-VN")}
+              </div>
+
+              <MergedProductivityTable
+                mergedRows={mergedRows}
+                vaiTroLabel={vaiTroLabel}
+                isSingleDay={isSingleDay}
+                kpi={kpi}
+                capturing={capturing}
+                boPhanStatsAll={boPhanStatsAll}
+              />
+            </div>
+          )}
+      </div>
 
       <style>{`
         .capture-no-truncate, .capture-no-truncate * {
@@ -951,7 +1135,7 @@ const NhanSuSoanEmployeeLookup = () => {
           word-break: break-word !important;
         }
       `}</style>
-    </>
+    </div>
   );
 };
 

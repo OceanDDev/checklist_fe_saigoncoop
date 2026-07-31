@@ -37,12 +37,8 @@ import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 /* ------------------------------------------------------------------ */
 /* Visual identity — clean, international SaaS dashboard              */
 /* ------------------------------------------------------------------ */
-// One neutral, highly-legible sans (Inter) carries every label and
-// heading — the "international" register used by most modern product
-// dashboards. Numeric read-outs get a companion mono face with tabular
-// figures, so figures stay easy to scan/compare without feeling like an
-// industrial signage board.
-const FONT_SANS = '"Inter", -apple-system, "Segoe UI", Roboto, sans-serif';
+const FONT_SANS =
+  '"Be Vietnam Pro", -apple-system, "Segoe UI", Roboto, sans-serif';
 const FONT_MONO =
   '"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace';
 
@@ -59,14 +55,41 @@ const useDashboardFonts = () => {
   }, []);
 };
 
-// Single shared formatter instance — avoids reallocating an
-// Intl.NumberFormat on every render of every stat card.
 const nf = new Intl.NumberFormat("vi-VN");
 const formatNumber = (n) => nf.format(n);
 
 /* ------------------------------------------------------------------ */
-/* Re-exported for NhanSuSoanEmployeeLookup (nhansu.jsx), which relies */
-/* on this specific portal-based date filter for its own lookup modal. */
+/* CSS nổi bật cho react-date-range                                    */
+/* ------------------------------------------------------------------ */
+const DateRangeHighlightStyle = () => (
+  <style>{`
+    .date-range-highlight .rdrInRange {
+      background-color: #e0e7ff !important;
+    }
+    .date-range-highlight .rdrStartEdge,
+    .date-range-highlight .rdrEndEdge {
+      background-color: #4f46e5 !important;
+    }
+    .date-range-highlight .rdrDayInPreview,
+    .date-range-highlight .rdrDayStartPreview,
+    .date-range-highlight .rdrDayEndPreview {
+      border-color: #4f46e5 !important;
+    }
+    .date-range-highlight .rdrDayNumber span {
+      font-weight: 600;
+    }
+    .date-range-highlight .rdrStartEdge ~ .rdrDayNumber span,
+    .date-range-highlight .rdrEndEdge ~ .rdrDayNumber span {
+      color: #ffffff !important;
+    }
+    .date-range-highlight .rdrDayToday .rdrDayNumber span:after {
+      background: #4f46e5 !important;
+    }
+  `}</style>
+);
+
+/* ------------------------------------------------------------------ */
+/* DateRangeFilter — popup căn giữa màn hình (modal)                   */
 /* ------------------------------------------------------------------ */
 export const DateRangeFilter = memo(function DateRangeFilter({
   startValue,
@@ -75,9 +98,6 @@ export const DateRangeFilter = memo(function DateRangeFilter({
   onClear,
 }) {
   const [show, setShow] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-  const inputWrapRef = useRef(null);
-  const popupRef = useRef(null);
   const range = [
     {
       startDate: startValue ? new Date(startValue) : new Date(),
@@ -86,46 +106,31 @@ export const DateRangeFilter = memo(function DateRangeFilter({
     },
   ];
 
-  const openPopup = () => {
-    const rect = inputWrapRef.current?.getBoundingClientRect();
-    if (rect) {
-      const popupWidth = 320;
-      let left = rect.right - popupWidth;
-      if (left < 8) left = 8;
-      setPos({ top: rect.bottom + 6, left });
-    }
-    setShow((v) => !v);
-  };
+  const hasValue = startValue && endValue;
 
   useEffect(() => {
-    const onClickOutside = (e) => {
-      const clickedInput = inputWrapRef.current?.contains(e.target);
-      const clickedPopup = popupRef.current?.contains(e.target);
-      if (!clickedInput && !clickedPopup) setShow(false);
-    };
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
+    if (show) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [show]);
 
   useEffect(() => {
     if (!show) return;
-    const close = () => setShow(false);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    return () => {
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
+    const onKey = (e) => e.key === "Escape" && setShow(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [show]);
 
-  const hasValue = startValue && endValue;
-
   return (
-    <div className="relative" ref={inputWrapRef}>
+    <div className="relative">
       <input
         type="text"
         readOnly
-        onClick={openPopup}
+        onClick={() => setShow(true)}
         value={
           hasValue
             ? `${dayjs(startValue).format("DD/MM/YYYY")} - ${dayjs(endValue).format("DD/MM/YYYY")}`
@@ -149,31 +154,101 @@ export const DateRangeFilter = memo(function DateRangeFilter({
           <X size={12} />
         </button>
       )}
+
       {show &&
         createPortal(
-          <div
-            ref={popupRef}
-            style={{
-              position: "fixed",
-              top: pos.top,
-              left: pos.left,
-              zIndex: 9999,
-            }}
-            className="overflow-hidden rounded-xl shadow-2xl ring-1 ring-slate-200"
-          >
-            <DateRange
-              ranges={range}
-              onChange={(item) => {
-                const { startDate, endDate } = item.selection;
-                onChange(
-                  startDate ? dayjs(startDate).format("YYYY-MM-DD") : "",
-                  endDate ? dayjs(endDate).format("YYYY-MM-DD") : "",
-                );
-              }}
-              moveRangeOnFirstSelection={false}
-              maxDate={new Date()}
+          <>
+            <DateRangeHighlightStyle />
+            <div
+              onClick={() => setShow(false)}
+              className="fixed inset-0 z-[9998] bg-slate-900/45 backdrop-blur-[2px]"
             />
-          </div>,
+            <div className="fixed left-1/2 top-1/2 z-[9999] w-[min(92vw,360px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
+              <div className="border-b border-slate-100 bg-gradient-to-br from-indigo-50 to-white px-5 py-4">
+                <div
+                  className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-indigo-500"
+                  style={{ fontFamily: FONT_SANS }}
+                >
+                  Khoảng ngày đã chọn
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 rounded-lg bg-white px-3 py-2 text-center ring-1 ring-slate-200">
+                    <div
+                      className="text-[10px] font-medium text-slate-400"
+                      style={{ fontFamily: FONT_SANS }}
+                    >
+                      Từ ngày
+                    </div>
+                    <div
+                      className="text-sm font-bold text-slate-800"
+                      style={{ fontFamily: FONT_MONO }}
+                    >
+                      {startValue
+                        ? dayjs(startValue).format("DD/MM/YYYY")
+                        : "--/--/----"}
+                    </div>
+                  </div>
+                  <div className="text-slate-300">→</div>
+                  <div className="flex-1 rounded-lg bg-white px-3 py-2 text-center ring-1 ring-slate-200">
+                    <div
+                      className="text-[10px] font-medium text-slate-400"
+                      style={{ fontFamily: FONT_SANS }}
+                    >
+                      Đến ngày
+                    </div>
+                    <div
+                      className="text-sm font-bold text-slate-800"
+                      style={{ fontFamily: FONT_MONO }}
+                    >
+                      {endValue
+                        ? dayjs(endValue).format("DD/MM/YYYY")
+                        : "--/--/----"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="date-range-highlight">
+                <DateRange
+                  ranges={range}
+                  showDateDisplay={false}
+                  onChange={(item) => {
+                    const { startDate, endDate } = item.selection;
+                    onChange(
+                      startDate ? dayjs(startDate).format("YYYY-MM-DD") : "",
+                      endDate ? dayjs(endDate).format("YYYY-MM-DD") : "",
+                    );
+                  }}
+                  moveRangeOnFirstSelection={false}
+                  maxDate={new Date()}
+                  rangeColors={["#4F46E5"]}
+                  color="#4F46E5"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-5 py-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClear?.();
+                    setShow(false);
+                  }}
+                  className="text-[12.5px] font-medium text-slate-400 hover:text-red-500"
+                  style={{ fontFamily: FONT_SANS }}
+                >
+                  Xoá lọc
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShow(false)}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm hover:bg-indigo-700"
+                  style={{ fontFamily: FONT_SANS }}
+                >
+                  Xong
+                </button>
+              </div>
+            </div>
+          </>,
           document.body,
         )}
     </div>
@@ -184,13 +259,16 @@ export const DateRangeFilter = memo(function DateRangeFilter({
 /* Cấu hình & hằng số                                                  */
 /* ------------------------------------------------------------------ */
 
-// Số đơn hàng bắt đầu bằng "SO" -> chuỗi CS, bắt đầu bằng "TO" -> chuỗi CF
 const classifyChain = (soDonHang) => {
   const code = (soDonHang || "").toString().trim().toUpperCase();
   if (code.startsWith("SO")) return "CS";
   if (code.startsWith("TO")) return "CF";
   return "Khác";
 };
+
+// ✅ Prefix regex tương ứng để lọc lại đúng chuỗi trên bảng dữ liệu khi
+// nhảy trang từ biểu đồ qua (dùng cho ô lọc "Số đơn hàng", vốn đang lọc
+// bằng regex ở backend -> "^TO"/"^SO" khớp đúng logic classifyChain).
 
 const CHAIN_COLORS = { CF: "#16A34A", CS: "#0EA5E9", Khác: "#94a3b8" };
 const CHAIN_LABEL = {
@@ -199,33 +277,19 @@ const CHAIN_LABEL = {
   Khác: "Khác",
 };
 
-/* ------------------------------------------------------------------ */
-/* Logo 2 chuỗi CF / CS — thay 2 đường dẫn bên dưới bằng logo thật.    */
-/*                                                                      */
-/* Cách 1 (đơn giản nhất, không cần build/import):                     */
-/*   Bỏ 2 file logo vào thư mục public, ví dụ: public/logos/cf.png và   */
-/*   public/logos/cs.png, rồi giữ nguyên 2 dòng string bên dưới, chỉ    */
-/*   đổi lại tên/đường dẫn cho khớp.                                    */
-/*                                                                      */
-/* Cách 2 (nếu muốn import qua bundler để tối ưu/cache):                */
-/*   import cfLogo from "@/assets/logos/cf-logo.png";                   */
-/*   import csLogo from "@/assets/logos/cs-logo.png";                   */
-/*   rồi thay giá trị CF/CS bên dưới bằng biến cfLogo/csLogo thay vì    */
-/*   chuỗi string.                                                      */
 const CHAIN_LOGOS = {
   CF: "/img/coopfood.png",
   CS: "/img/coopsmile.png",
 };
 
-// Màu theo chuyến phản ánh sắc độ ánh sáng trong ngày — sáng vàng ấm,
-// trưa cam rực, chiều xanh dương dịu, tối chàm sẫm — để bảng màu tự thân
-// đã gợi ý đúng khung giờ mà không cần đọc nhãn.
-const CHUYEN_ORDER = ["SÁNG", "TRƯA", "CHIỀU", "TỐI"];
+const CHUYEN_ORDER = ["SÁNG", "TRƯA", "CHIỀU", "TỐI", "PHÂN BỔ", "KHAI TRƯƠNG"];
 const CHUYEN_COLORS = {
   SÁNG: "#FBBF24",
   TRƯA: "#FB923C",
   CHIỀU: "#38BDF8",
   TỐI: "#6366F1",
+  "PHÂN BỔ": "#06B6D4",
+  "KHAI TRƯƠNG": "#A855F7",
   Khác: "#94a3b8",
 };
 
@@ -236,9 +300,8 @@ const TRANG_THAI_COLORS = {
   "Hoàn thành": "#10b981",
 };
 
-// Khung giờ làm việc dùng để tính bình quân đơn/giờ (7h - 17h ~ 10 tiếng)
 const WORK_HOUR_START = 7;
-const WORK_HOUR_END = 17; // exclusive
+const WORK_HOUR_END = 17;
 const WORK_HOURS_COUNT = WORK_HOUR_END - WORK_HOUR_START;
 
 const chuyenKey = (chuyen) => {
@@ -248,10 +311,7 @@ const chuyenKey = (chuyen) => {
   return found || "Khác";
 };
 
-// Hạn KPI: 24 giờ kể từ TG import. VD 9h hôm nay import, 9h ngày hôm sau
-// chưa hoàn thành -> rớt KPI.
 const KPI_DEADLINE_HOURS = 24;
-
 const KPI_ORDER = ["Đạt KPI", "Đang soạn (còn hạn)", "Không đạt KPI"];
 const KPI_COLORS = {
   "Đạt KPI": "#10b981",
@@ -259,13 +319,6 @@ const KPI_COLORS = {
   "Không đạt KPI": "#ef4444",
 };
 
-/**
- * Phân loại 1 phiếu theo KPI (hạn 24h từ tgImport):
- * - "Đạt KPI": đã hoàn thành và tgHoanThanh <= tgImport + 24h
- * - "Đang soạn (còn hạn)": chưa hoàn thành nhưng vẫn còn trong hạn 24h tính từ hiện tại
- * - "Không đạt KPI": hoàn thành trễ (tgHoanThanh > hạn) HOẶC quá hạn 24h mà vẫn chưa hoàn thành
- * Trả về null nếu phiếu không có tgImport (không đủ dữ liệu để tính).
- */
 const classifyKPI = (item, now) => {
   if (!item.tgImport) return null;
   const deadline = dayjs(item.tgImport).add(KPI_DEADLINE_HOURS, "hour");
@@ -275,18 +328,129 @@ const classifyKPI = (item, now) => {
       ? "Không đạt KPI"
       : "Đạt KPI";
   }
-
-  // Chưa hoàn thành (hoặc thiếu tgHoanThanh dù trạng thái Hoàn thành)
   return now.isAfter(deadline) ? "Không đạt KPI" : "Đang soạn (còn hạn)";
 };
 
 /* ------------------------------------------------------------------ */
-/* UI phụ trợ                                                          */
+/* Thuật toán đặt label số liệu ngoài donut kèm đường dẫn              */
 /* ------------------------------------------------------------------ */
+const RADIAN = Math.PI / 180;
 
-// StatCard: nền màu nhẹ theo accent (tint), chip logo nổi bật trên nền
-// trắng bo tròn + viền màu để logo cửa hàng luôn là điểm nhấn đầu tiên
-// mắt chạm vào, số liệu vẫn giữ mono tabular để dễ so sánh.
+const computePieLabelLayout = (data, cx, cy, outerRadius, chartHeight) => {
+  const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
+  const labelRadius = outerRadius + 22;
+  const anchorRadius = outerRadius + 4;
+  const rowHeight = 18;
+
+  const minY = 14;
+  const maxY = chartHeight - 14;
+
+  let cumulated = 0;
+  const positioned = data.map((d) => {
+    const sweep = (d.value / total) * 360;
+    const midAngle = cumulated + sweep / 2;
+    cumulated += sweep;
+
+    const rad = -midAngle * RADIAN;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    return {
+      ...d,
+      percent: d.value / total,
+      x: cx + labelRadius * cos,
+      rawY: cy + labelRadius * sin,
+      anchorX: cx + anchorRadius * cos,
+      anchorY: cy + anchorRadius * sin,
+      side: cos >= 0 ? "right" : "left",
+    };
+  });
+
+  ["left", "right"].forEach((side) => {
+    const group = positioned
+      .filter((p) => p.side === side)
+      .sort((a, b) => a.rawY - b.rawY);
+    if (group.length === 0) return;
+
+    const neededHeight = (group.length - 1) * rowHeight;
+    const availableHeight = maxY - minY;
+
+    if (neededHeight <= availableHeight) {
+      for (let i = 1; i < group.length; i++) {
+        const gap = group[i].rawY - group[i - 1].rawY;
+        if (gap < rowHeight) group[i].rawY = group[i - 1].rawY + rowHeight;
+      }
+    } else {
+      const avgY = group.reduce((s, p) => s + p.rawY, 0) / group.length;
+      let startY = avgY - neededHeight / 2;
+      startY = Math.max(minY, Math.min(startY, maxY - neededHeight));
+      group.forEach((p, i) => {
+        p.rawY = startY + i * rowHeight;
+      });
+    }
+
+    group.forEach((p) => {
+      p.y = Math.max(minY, Math.min(p.rawY, maxY));
+    });
+  });
+
+  return positioned;
+};
+
+const usePieLabelRenderer = (data, chartHeight) =>
+  useMemo(() => {
+    let layoutCache = null;
+    let cacheKey = null;
+
+    return function PieLabel(props) {
+      const { cx, cy, outerRadius, index } = props;
+      const key = `${cx}-${cy}-${outerRadius}-${chartHeight}`;
+      if (!layoutCache || cacheKey !== key) {
+        layoutCache = computePieLabelLayout(
+          data,
+          cx,
+          cy,
+          outerRadius,
+          chartHeight,
+        );
+        cacheKey = key;
+      }
+
+      const pos = layoutCache[index];
+      if (!pos) return null;
+
+      const isRight = pos.side === "right";
+      const textX = pos.x + (isRight ? 6 : -6);
+
+      return (
+        <g>
+          <polyline
+            points={`${pos.anchorX},${pos.anchorY} ${pos.x},${pos.y}`}
+            fill="none"
+            stroke={pos.fill || "#cbd5e1"}
+            strokeWidth={1.25}
+          />
+          <circle cx={pos.anchorX} cy={pos.anchorY} r={2.5} fill={pos.fill} />
+          <text
+            x={textX}
+            y={pos.y}
+            textAnchor={isRight ? "start" : "end"}
+            dominantBaseline="central"
+            fontSize={12.5}
+            fontFamily={FONT_MONO}
+            fontWeight={700}
+            fill={pos.fill}
+          >
+            {formatNumber(pos.value)}
+          </text>
+        </g>
+      );
+    };
+  }, [data, chartHeight]);
+
+/* ------------------------------------------------------------------ */
+/* StatCard                                                            */
+/* ------------------------------------------------------------------ */
 export const StatCard = memo(function StatCard({
   icon: Icon,
   logo,
@@ -297,33 +461,86 @@ export const StatCard = memo(function StatCard({
   tint,
   iconColor,
   accent,
+  capturing,
 }) {
+  if (capturing) {
+    return (
+      <div
+        style={{
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          padding: 16,
+          background: "#ffffff",
+          fontFamily: "Arial, Helvetica, sans-serif",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#64748b",
+            marginBottom: 4,
+            whiteSpace: "normal",
+            wordBreak: "break-word",
+            letterSpacing: "normal",
+          }}
+        >
+          {typeof label === "string" ? label.toLocaleUpperCase("vi-VN") : label}
+        </div>
+        <div
+          style={{
+            fontSize: 26,
+            fontWeight: 700,
+            color: "#0f172a",
+            letterSpacing: "normal",
+          }}
+        >
+          {typeof value === "number" ? formatNumber(value) : value}
+        </div>
+        {sub && (
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              color: accent || "#94a3b8",
+              marginTop: 2,
+              whiteSpace: "normal",
+              wordBreak: "break-word",
+            }}
+          >
+            {sub}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const wrapperClass =
+    "group relative rounded-2xl p-4 shadow-sm ring-1 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg";
+
+  const wrapperStyle = {
+    background: accent
+      ? `linear-gradient(155deg, ${accent}14 0%, ${accent}05 55%, #ffffff 100%)`
+      : "linear-gradient(155deg, #f8fafc 0%, #ffffff 60%)",
+    borderColor: accent ? `${accent}33` : "#e2e8f0",
+    boxShadow: accent
+      ? `0 1px 2px rgba(15,23,42,0.04), 0 0 0 1px ${accent}26`
+      : undefined,
+  };
+
   return (
-    <div
-      className="group relative overflow-hidden rounded-2xl p-4 shadow-sm ring-1 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
-      style={{
-        background: accent
-          ? `linear-gradient(155deg, ${accent}14 0%, ${accent}05 55%, #ffffff 100%)`
-          : "linear-gradient(155deg, #f8fafc 0%, #ffffff 60%)",
-        borderColor: accent ? `${accent}33` : "#e2e8f0",
-        boxShadow: accent
-          ? `0 1px 2px rgba(15,23,42,0.04), 0 0 0 1px ${accent}26`
-          : undefined,
-      }}
-    >
+    <div className={wrapperClass} style={wrapperStyle}>
       {accent && (
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-[3px]"
-          style={{ backgroundColor: accent }}
-        />
-      )}
-      {accent && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-[0.16]"
-          style={{ backgroundColor: accent }}
-        />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+          <div
+            className="absolute inset-x-0 top-0 h-[3px]"
+            style={{ backgroundColor: accent }}
+          />
+          <div
+            className="absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-[0.16]"
+            style={{ backgroundColor: accent }}
+          />
+        </div>
       )}
       <div className="relative flex items-center gap-3">
         <div
@@ -358,10 +575,12 @@ export const StatCard = memo(function StatCard({
         </div>
         <div className="min-w-0">
           <div
-            className="truncate text-[11.5px] font-semibold uppercase tracking-wide text-slate-500"
+            className="truncate pt-0.5 text-[11.5px] font-semibold leading-[1.6] tracking-wide text-slate-500"
             style={{ fontFamily: FONT_SANS }}
           >
-            {label}
+            {typeof label === "string"
+              ? label.toLocaleUpperCase("vi-VN")
+              : label}
           </div>
           <div
             className="text-[27px] font-bold leading-tight tracking-tight text-slate-900"
@@ -375,10 +594,7 @@ export const StatCard = memo(function StatCard({
           {sub && (
             <div
               className="truncate text-[11px] font-medium"
-              style={{
-                fontFamily: FONT_SANS,
-                color: accent || "#94a3b8",
-              }}
+              style={{ fontFamily: FONT_SANS, color: accent || "#94a3b8" }}
             >
               {sub}
             </div>
@@ -389,9 +605,6 @@ export const StatCard = memo(function StatCard({
   );
 });
 
-// ChartCard: plain elevated card, clear hierarchy — title in the sans
-// face, supporting figure in mono, one thin rule to separate header
-// from content.
 export const ChartCard = memo(function ChartCard({
   title,
   children,
@@ -402,7 +615,7 @@ export const ChartCard = memo(function ChartCard({
     <div
       className={`rounded-2xl bg-white p-4 ring-1 ring-slate-200/70 transition-shadow duration-200 hover:shadow-md md:p-5 ${className}`}
     >
-      <div className="mb-3 flex items-baseline justify-between border-b border-slate-100 pb-3">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 pb-3">
         <h3
           className="text-[13.5px] font-semibold text-slate-800"
           style={{ fontFamily: FONT_SANS }}
@@ -423,16 +636,24 @@ export const ChartCard = memo(function ChartCard({
   );
 });
 
-// ChainProgressBar: flat, rounded capacity bar — percentage in mono,
-// smooth fill, no decorative tick marks.
+/* ------------------------------------------------------------------ */
+/* ChainProgressBar                                                    */
+/* ------------------------------------------------------------------ */
 const ChainProgressBar = memo(function ChainProgressBar({
   label,
-  done,
+  counts,
   total,
-  color,
   logo,
 }) {
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const segments = TRANG_THAI_ORDER.map((key) => ({
+    key,
+    value: counts[key] || 0,
+    color: TRANG_THAI_COLORS[key],
+    pct: total > 0 ? ((counts[key] || 0) / total) * 100 : 0,
+  }));
+  const doneCount = counts["Hoàn thành"] || 0;
+  const donePct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
   return (
     <div>
       <div className="mb-2 flex items-center justify-between text-[13px] font-medium text-slate-600">
@@ -450,23 +671,100 @@ const ChainProgressBar = memo(function ChainProgressBar({
               }}
             />
           ) : (
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: color }}
-            />
+            <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
           )}
           {label}
         </span>
         <span className="text-slate-500" style={{ fontFamily: FONT_MONO }}>
-          {done}/{total} &middot; <b className="text-slate-700">{pct}%</b>
+          {doneCount}/{total} &middot;{" "}
+          <b className="text-slate-700">{donePct}%</b>
         </span>
       </div>
-      <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, backgroundColor: color }}
-        />
+
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+        {segments.map(
+          (s) =>
+            s.value > 0 && (
+              <div
+                key={s.key}
+                title={`${s.key}: ${s.value}`}
+                className="h-full transition-all duration-500"
+                style={{ width: `${s.pct}%`, backgroundColor: s.color }}
+              />
+            ),
+        )}
       </div>
+
+      <div
+        className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-slate-400"
+        style={{ fontFamily: FONT_SANS }}
+      >
+        {segments.map((s) => (
+          <span key={s.key} className="flex items-center gap-1">
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: s.color }}
+            />
+            {s.key} <b className="text-slate-600">{s.value}</b>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* ChainFilterToggle — 2 logo CF/CS để lọc riêng 2 pie "chuyến" và     */
+/* "trạng thái". Click lại logo đang chọn hoặc nút "Xoá lọc" để về lại */
+/* toàn bộ dữ liệu.                                                    */
+/* ------------------------------------------------------------------ */
+const ChainFilterToggle = memo(function ChainFilterToggle({
+  selectedChain,
+  onSelect,
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => onSelect(selectedChain === "CF" ? null : "CF")}
+        title="Lọc theo Co.op Food / CF"
+        className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white p-1 ring-2 transition-all ${
+          selectedChain === "CF"
+            ? "scale-105 ring-green-500"
+            : "opacity-50 ring-slate-200 hover:opacity-100 hover:ring-slate-300"
+        }`}
+      >
+        <img
+          src={CHAIN_LOGOS.CF}
+          alt="CF"
+          className="h-full w-full rounded-[4px] object-contain"
+        />
+      </button>
+      <button
+        type="button"
+        onClick={() => onSelect(selectedChain === "CS" ? null : "CS")}
+        title="Lọc theo Co.op Smile / CS"
+        className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white p-1 ring-2 transition-all ${
+          selectedChain === "CS"
+            ? "scale-105 ring-sky-500"
+            : "opacity-50 ring-slate-200 hover:opacity-100 hover:ring-slate-300"
+        }`}
+      >
+        <img
+          src={CHAIN_LOGOS.CS}
+          alt="CS"
+          className="h-full w-full rounded-[4px] object-contain"
+        />
+      </button>
+      {selectedChain && (
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          className="text-[10.5px] font-medium text-slate-400 hover:text-red-500"
+        >
+          Xoá lọc
+        </button>
+      )}
     </div>
   );
 });
@@ -475,16 +773,15 @@ const ChainProgressBar = memo(function ChainProgressBar({
 /* Component chính                                                     */
 /* ------------------------------------------------------------------ */
 
-/**
- * Dashboard phiếu soạn.
- * Ngày lọc (tuNgay/denNgay) được điều khiển từ component cha (NhanSuSoanTable)
- * để có thể hiển thị chung một bộ lọc ngày trong header dùng chung của 2 tab.
- * onMeta báo trạng thái loading/số bản ghi lên cha để cha hiển thị trong header.
- */
 const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
   tuNgay,
   denNgay,
   onMeta,
+  // ✅ MỚI: gọi khi người dùng click vào 1 lát của pie "theo chuyến" hoặc
+  // "theo trạng thái". Nhận về { type: "chuyen" | "trangThai", value,
+  // chain, tuNgay, denNgay } — component cha (NhanSuSoanTable) dùng object
+  // này để chuyển qua tab Bảng dữ liệu và áp đúng bộ lọc tương ứng.
+  onNavigate,
 }) {
   useDashboardFonts();
 
@@ -492,16 +789,17 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // ✅ MỚI: lọc riêng cho 2 biểu đồ "theo chuyến" / "theo trạng thái" —
+  // click logo CF/CS chỉ ảnh hưởng 2 pie này, không ảnh hưởng các thẻ số
+  // liệu / biểu đồ khác (vẫn hiện toàn bộ dữ liệu như cũ).
+  const [selectedChain, setSelectedChain] = useState(null); // null | "CF" | "CS"
+
   useEffect(() => {
     let cancelled = false;
     const fetchData = async () => {
       setLoading(true);
       setError("");
       try {
-        // Lấy toàn bộ bản ghi trong khoảng ngày để tính toán ở client.
-        // Nếu tập dữ liệu lớn, nên đổi sang endpoint tổng hợp riêng ở backend
-        // (vd. GET /nhansusoan/dashboard-stats?tuNgay=..&denNgay=..) để tránh
-        // tải nặng và tính toán trực tiếp bằng MongoDB aggregation.
         const res = await nhanSuSoanService.getAllNhanSuSoan({
           page: 1,
           limit: 10000,
@@ -522,10 +820,6 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
     };
   }, [tuNgay, denNgay]);
 
-  // onMeta được "tách" khỏi dependency array của effect báo cáo bên dưới
-  // bằng cách đi qua ref. Cha thường truyền một hàm inline mới mỗi lần
-  // render — nếu đưa thẳng onMeta vào deps, effect sẽ chạy lại (và có thể
-  // gây render loop ở cha) dù loading/count/error không hề đổi.
   const onMetaRef = useRef(onMeta);
   useEffect(() => {
     onMetaRef.current = onMeta;
@@ -545,8 +839,11 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
     const chainStoreSet = { CF: new Set(), CS: new Set(), Khác: new Set() };
     const chainCount = { CF: 0, CS: 0, Khác: 0 };
     const chainDone = { CF: 0, CS: 0, Khác: 0 };
-    const chuyenCount = {};
-    const trangThaiCount = {};
+    const chainTrangThai = {
+      CF: { "Chưa soạn": 0, "Đang soạn": 0, "Hoàn thành": 0 },
+      CS: { "Chưa soạn": 0, "Đang soạn": 0, "Hoàn thành": 0 },
+      Khác: { "Chưa soạn": 0, "Đang soạn": 0, "Hoàn thành": 0 },
+    };
     const hourCount = {};
     const dayCount = {};
     const kpiCount = {};
@@ -556,23 +853,24 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       storeSet.add(storeCode);
 
       const chain = classifyChain(item.soDonHang);
+      const tt = item.trangThai || "Chưa soạn";
+
       chainCount[chain] += 1;
       chainStoreSet[chain].add(storeCode);
-      if (item.trangThai === "Hoàn thành") chainDone[chain] += 1;
-
-      const ck = chuyenKey(item.chuyen);
-      chuyenCount[ck] = (chuyenCount[ck] || 0) + 1;
-
-      const tt = item.trangThai || "Chưa soạn";
-      trangThaiCount[tt] = (trangThaiCount[tt] || 0) + 1;
+      if (tt === "Hoàn thành") chainDone[chain] += 1;
+      chainTrangThai[chain][tt] = (chainTrangThai[chain][tt] || 0) + 1;
 
       const kpi = classifyKPI(item, now);
       if (kpi) kpiCount[kpi] = (kpiCount[kpi] || 0) + 1;
 
+      if (item.tgNhanPhieu) {
+        const dNhan = dayjs(item.tgNhanPhieu);
+        const h = dNhan.hour();
+        hourCount[h] = (hourCount[h] || 0) + 1;
+      }
+
       if (item.tgImport) {
         const d = dayjs(item.tgImport);
-        const h = d.hour();
-        hourCount[h] = (hourCount[h] || 0) + 1;
         const dayKey = d.format("YYYY-MM-DD");
         if (!dayCount[dayKey]) {
           dayCount[dayKey] = {
@@ -584,25 +882,6 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
         dayCount[dayKey][tt] = (dayCount[dayKey][tt] || 0) + 1;
       }
     });
-
-    const chuyenData = CHUYEN_ORDER.filter((k) => chuyenCount[k]).map((k) => ({
-      name: k,
-      value: chuyenCount[k],
-      fill: CHUYEN_COLORS[k],
-    }));
-    if (chuyenCount["Khác"]) {
-      chuyenData.push({
-        name: "Khác",
-        value: chuyenCount["Khác"],
-        fill: CHUYEN_COLORS["Khác"],
-      });
-    }
-
-    const trangThaiData = TRANG_THAI_ORDER.map((k) => ({
-      name: k,
-      value: trangThaiCount[k] || 0,
-      fill: TRANG_THAI_COLORS[k],
-    }));
 
     const kpiData = KPI_ORDER.filter((k) => kpiCount[k]).map((k) => ({
       name: k,
@@ -642,12 +921,11 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       totalStores: storeSet.size,
       chainCount,
       chainDone,
+      chainTrangThai,
       chainStoreCount: {
         CF: chainStoreSet.CF.size,
         CS: chainStoreSet.CS.size,
       },
-      chuyenData,
-      trangThaiData,
       kpiData,
       kpiTotal,
       kpiDatRate,
@@ -657,8 +935,49 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
     };
   }, [rawItems, tuNgay, denNgay]);
 
-  // Trạng thái tổng hợp KPI — tính một lần mỗi khi stats đổi, dùng cho
-  // thẻ hero (màu, nhãn trạng thái, có cảnh báo hay không).
+  // ✅ MỚI: dữ liệu riêng cho 2 pie "theo chuyến" / "theo trạng thái",
+  // được tính lại theo `selectedChain` (lọc bằng logo CF/CS).
+  const chartFilteredItems = useMemo(() => {
+    if (!selectedChain) return rawItems;
+    return rawItems.filter(
+      (item) => classifyChain(item.soDonHang) === selectedChain,
+    );
+  }, [rawItems, selectedChain]);
+
+  const chainChartStats = useMemo(() => {
+    const chuyenCount = {};
+    const trangThaiCount = {};
+
+    chartFilteredItems.forEach((item) => {
+      const ck = chuyenKey(item.chuyen);
+      chuyenCount[ck] = (chuyenCount[ck] || 0) + 1;
+
+      const tt = item.trangThai || "Chưa soạn";
+      trangThaiCount[tt] = (trangThaiCount[tt] || 0) + 1;
+    });
+
+    const chuyenData = CHUYEN_ORDER.filter((k) => chuyenCount[k]).map((k) => ({
+      name: k,
+      value: chuyenCount[k],
+      fill: CHUYEN_COLORS[k],
+    }));
+    if (chuyenCount["Khác"]) {
+      chuyenData.push({
+        name: "Khác",
+        value: chuyenCount["Khác"],
+        fill: CHUYEN_COLORS["Khác"],
+      });
+    }
+
+    const trangThaiData = TRANG_THAI_ORDER.map((k) => ({
+      name: k,
+      value: trangThaiCount[k] || 0,
+      fill: TRANG_THAI_COLORS[k],
+    }));
+
+    return { chuyenData, trangThaiData };
+  }, [chartFilteredItems]);
+
   const kpiStatus = useMemo(() => {
     const rate = stats.kpiDatRate;
     if (rate >= 90) {
@@ -689,6 +1008,27 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       alert: true,
     };
   }, [stats.kpiDatRate]);
+
+  const chuyenLabel = usePieLabelRenderer(chainChartStats.chuyenData, 280);
+  const trangThaiLabel = usePieLabelRenderer(
+    chainChartStats.trangThaiData,
+    280,
+  );
+  const kpiLabel = usePieLabelRenderer(stats.kpiData, 230);
+
+  // ✅ MỚI: click vào 1 lát pie -> báo lên component cha (qua onNavigate)
+  // để nhảy qua tab Bảng dữ liệu, áp đúng bộ lọc: chuỗi (nếu đang chọn
+  // logo CF/CS) + chuyến/trạng thái vừa click + khoảng ngày đang xem.
+  const handleSliceClick = (type, value) => {
+    if (!onNavigate) return;
+    onNavigate({
+      type, // "chuyen" | "trangThai"
+      value,
+      chain: selectedChain, // null | "CF" | "CS"
+      tuNgay,
+      denNgay,
+    });
+  };
 
   return (
     <div className="space-y-5" style={{ fontFamily: FONT_SANS }}>
@@ -765,18 +1105,30 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
 
       {/* Chuyến + trạng thái + progress */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ChartCard title="Đơn hàng theo chuyến">
-          <ResponsiveContainer width="100%" height={220} debounce={150}>
-            <PieChart>
+        <ChartCard
+          title={`Đơn hàng theo chuyến${selectedChain ? ` — ${CHAIN_LABEL[selectedChain]}` : ""}`}
+          eyebrow={
+            <ChainFilterToggle
+              selectedChain={selectedChain}
+              onSelect={setSelectedChain}
+            />
+          }
+        >
+          <ResponsiveContainer width="100%" height={280} debounce={150}>
+            <PieChart margin={{ top: 24, right: 70, bottom: 10, left: 70 }}>
               <Pie
-                data={stats.chuyenData}
+                data={chainChartStats.chuyenData}
                 dataKey="value"
                 nameKey="name"
-                innerRadius={45}
-                outerRadius={80}
+                innerRadius={44}
+                outerRadius={72}
                 paddingAngle={2}
+                label={chuyenLabel}
+                labelLine={false}
+                cursor="pointer"
+                onClick={(data) => handleSliceClick("chuyen", data.name)}
               >
-                {stats.chuyenData.map((d, i) => (
+                {chainChartStats.chuyenData.map((d, i) => (
                   <Cell key={i} fill={d.fill} />
                 ))}
               </Pie>
@@ -786,18 +1138,30 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Đơn hàng theo trạng thái">
-          <ResponsiveContainer width="100%" height={220} debounce={150}>
-            <PieChart>
+        <ChartCard
+          title={`Đơn hàng theo trạng thái${selectedChain ? ` — ${CHAIN_LABEL[selectedChain]}` : ""}`}
+          eyebrow={
+            <ChainFilterToggle
+              selectedChain={selectedChain}
+              onSelect={setSelectedChain}
+            />
+          }
+        >
+          <ResponsiveContainer width="100%" height={280} debounce={150}>
+            <PieChart margin={{ top: 24, right: 70, bottom: 24, left: 70 }}>
               <Pie
-                data={stats.trangThaiData}
+                data={chainChartStats.trangThaiData}
                 dataKey="value"
                 nameKey="name"
-                innerRadius={45}
-                outerRadius={80}
+                innerRadius={44}
+                outerRadius={72}
                 paddingAngle={2}
+                label={trangThaiLabel}
+                labelLine={false}
+                cursor="pointer"
+                onClick={(data) => handleSliceClick("trangThai", data.name)}
               >
-                {stats.trangThaiData.map((d, i) => (
+                {chainChartStats.trangThaiData.map((d, i) => (
                   <Cell key={i} fill={d.fill} />
                 ))}
               </Pie>
@@ -808,37 +1172,31 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
         </ChartCard>
 
         <ChartCard title="Tiến độ xử lý theo chuỗi">
-          <div className="flex h-[220px] flex-col justify-center gap-6 px-1">
+          <div className="flex h-[280px] flex-col justify-center gap-6 px-1">
             <ChainProgressBar
               label={CHAIN_LABEL.CF}
-              done={stats.chainDone.CF}
+              counts={stats.chainTrangThai.CF}
               total={stats.chainCount.CF}
-              color={CHAIN_COLORS.CF}
               logo={CHAIN_LOGOS.CF}
             />
             <ChainProgressBar
               label={CHAIN_LABEL.CS}
-              done={stats.chainDone.CS}
+              counts={stats.chainTrangThai.CS}
               total={stats.chainCount.CS}
-              color={CHAIN_COLORS.CS}
               logo={CHAIN_LOGOS.CS}
             />
             {stats.chainCount["Khác"] > 0 && (
               <ChainProgressBar
                 label="Khác"
-                done={stats.chainDone["Khác"]}
+                counts={stats.chainTrangThai["Khác"]}
                 total={stats.chainCount["Khác"]}
-                color={CHAIN_COLORS["Khác"]}
               />
             )}
           </div>
         </ChartCard>
       </div>
 
-      {/* Thẻ SLA / KPI — điểm nhấn duy nhất của dashboard: một pill trạng   */}
-      {/* thái theo màu tín hiệu (xanh/vàng/đỏ), số liệu lớn, và donut nhỏ   */}
-      {/* bên cạnh — thay cho phong cách "bảng đèn xưởng" trước đây bằng    */}
-      {/* một thẻ sáng, phẳng, đúng chuẩn SaaS quốc tế.                     */}
+      {/* Thẻ SLA / KPI */}
       <div className="relative overflow-hidden rounded-2xl bg-white p-5 ring-1 ring-slate-200/70 md:p-6">
         <div
           aria-hidden
@@ -878,15 +1236,17 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
               trên {formatNumber(stats.kpiTotal)} phiếu có TG import
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={200} debounce={150}>
-            <PieChart>
+          <ResponsiveContainer width="100%" height={230} debounce={150}>
+            <PieChart margin={{ top: 24, right: 70, bottom: 24, left: 70 }}>
               <Pie
                 data={stats.kpiData}
                 dataKey="value"
                 nameKey="name"
-                innerRadius={45}
-                outerRadius={80}
+                innerRadius={42}
+                outerRadius={68}
                 paddingAngle={2}
+                label={kpiLabel}
+                labelLine={false}
               >
                 {stats.kpiData.map((d, i) => (
                   <Cell key={i} fill={d.fill} stroke="transparent" />
@@ -912,7 +1272,7 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
 
       {/* Đơn theo giờ */}
       <ChartCard
-        title="Số lượng đơn hàng phát ra theo từng giờ"
+        title="Số lượng đơn hàng phát ra theo từng giờ (theo TG nhận phiếu)"
         eyebrow={
           <span className="inline-flex items-center gap-1.5 text-slate-500">
             <Clock size={13} className="text-slate-400" />
@@ -971,13 +1331,21 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
               fill="#4F46E5"
               radius={[4, 4, 0, 0]}
               maxBarSize={28}
-            />
+            >
+              <LabelList
+                dataKey="soLuong"
+                position="top"
+                fontSize={11}
+                fontFamily={FONT_MONO}
+                fill="#475569"
+                formatter={(v) => (v > 0 ? formatNumber(v) : "")}
+              />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* Đơn theo ngày gần nhất — chồng 3 màu theo trạng thái để thấy      */}
-      {/* ngay tỉ lệ Chưa soạn / Đang soạn / Hoàn thành mỗi ngày.           */}
+      {/* Đơn theo ngày gần nhất */}
       <ChartCard title="Số lượng đơn hàng theo ngày (trong khoảng đã chọn)">
         <ResponsiveContainer width="100%" height={280} debounce={150}>
           <BarChart

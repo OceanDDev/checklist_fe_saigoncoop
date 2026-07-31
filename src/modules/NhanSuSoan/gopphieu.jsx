@@ -550,35 +550,33 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
 
       setSubmitting(true);
       try {
-        const now = new Date().toISOString(); // mốc tgHoanThanh CHUNG cho cả nhóm
         const maNV = skipNV ? null : nhanVienInfo.ma_nhan_vien;
-
-        // NV soạn chuẩn cho cả nhóm — nếu có phiếu nào đã có sẵn NV soạn thì
-        // dùng danh sách đó áp cho toàn bộ phiếu trong nhóm gộp.
         const nvSoanGop = resolveNvSoanForGroup(scannedList);
 
-        await Promise.all(
-          scannedList.map((item) => {
-            const isDaiDien = item._id === daiDienId;
-            const existingCodes = getExistingNvKCCodes(item);
-            const mergedNvKC = maNV
-              ? Array.from(new Set([...existingCodes, maNV]))
-              : existingCodes;
+        const updates = scannedList.map((item) => {
+          const isDaiDien = item._id === daiDienId;
+          const existingCodes = getExistingNvKCCodes(item);
+          const mergedNvKC = maNV
+            ? Array.from(new Set([...existingCodes, maNV]))
+            : existingCodes;
 
-            const payload = {
+          return {
+            id: item._id,
+            data: {
               soPhieuGop: soPhieuGop.trim(),
               kien: isDaiDien ? Number(kienGop) : 0,
               dong: isDaiDien ? Number(dongGop) : 0,
               trangThai: "Hoàn thành",
-              tgHoanThanh: now,
+              // Không cần gửi tgHoanThanh nữa — backend tự stamp giờ VN thật,
+              // và dùng CHUNG 1 mốc cho cả batch trong 1 request này.
               nvKC: mergedNvKC,
-              // Đồng bộ NV soạn cho cả nhóm nếu xác định được; nếu cả nhóm
-              // đều chưa có NV soạn thì giữ nguyên giá trị hiện tại của phiếu.
               ...(nvSoanGop.length > 0 ? { nvSoan: nvSoanGop } : {}),
-            };
-            return nhanSuSoanService.updateNhanSuSoan(item._id, payload);
-          }),
-        );
+            },
+          };
+        });
+
+        // 1 request duy nhất thay vì Promise.all N request
+        await nhanSuSoanService.updateManyNhanSuSoan({ updates });
 
         alert(
           skipNV
