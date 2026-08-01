@@ -22,7 +22,6 @@ import {
   LayoutDashboard,
   Users,
   Loader2,
-  FileSpreadsheet,
   Trash2,
   Pencil,
   PartyPopper,
@@ -41,6 +40,8 @@ import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 import HuyGiaoPhieu from "./huygiaophieu";
 import NhanSuSoanDashboard from "./dashboard";
 import NhanSuSoanEmployeeLookup from "./dashboard/nhansu";
+import ImportPhanBo from "./importphanbo";
+import ExportExcelButton from "./exportexcel";
 
 const TRANG_THAI_OPTIONS = ["Chưa soạn", "Đang soạn", "Hoàn thành"];
 const TRANG_THAI_BOOK_XE_OPTIONS = ["Chờ Book", "Chờ Xe", "Hoàn thành"];
@@ -236,22 +237,11 @@ const formatDateTime = (d) => {
   }).format(date);
 };
 
-// Trả về text thuần (mã hiển thị) từ mảng nvSoan/nvKC, dùng cho export Excel
-const nhanVienListToText = (list) => {
-  if (!list || list.length === 0) return "";
-  return list
-    .map((nv) => {
-      if (nv && typeof nv === "object")
-        return nv.ma_hien_thi || nv.ma_nhan_vien || "";
-      return nv;
-    })
-    .filter(Boolean)
-    .join(", ");
-};
-
 /** Đọc thông tin người dùng hiện tại từ localStorage.
  *  Dữ liệu lưu dạng object phẳng: { _id, name, username, role }.
- *  Chỉ role === 57 mới được thấy/dùng nút Xoá. */
+ *  Chỉ role === 57 mới được thấy/dùng nút Xoá.
+ *  Role === 58 là view-only: chỉ xem bảng dữ liệu + Dashboard, chỉ được
+ *  Xuất Excel, không thấy tab Năng suất NV, không thao tác gì khác. */
 const getCurrentUserRole = () => {
   try {
     const raw =
@@ -498,12 +488,15 @@ const DateRangeFilter = memo(function DateRangeFilter({
   );
 });
 
-/** Tab chuyển đổi giữa Bảng dữ liệu / Dashboard / Năng suất nhân viên */
-const ViewTabs = memo(function ViewTabs({ view, onChange }) {
+/** Tab chuyển đổi giữa Bảng dữ liệu / Dashboard / Năng suất nhân viên.
+ *  hideNhanSu: role view-only (58) không được thấy tab Năng suất NV. */
+const ViewTabs = memo(function ViewTabs({ view, onChange, hideNhanSu }) {
   const tabs = [
     { key: "table", label: "Bảng dữ liệu", icon: Table2 },
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { key: "nhansu", label: "Năng suất NV", icon: Users },
+    ...(hideNhanSu
+      ? []
+      : [{ key: "nhansu", label: "Năng suất NV", icon: Users }]),
   ];
   return (
     <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200">
@@ -533,7 +526,8 @@ const ViewTabs = memo(function ViewTabs({ view, onChange }) {
  *  trạng thái chọn/focus, các dòng còn lại không phải render lại.
  *  Khi được chọn (isSelected), dòng "nổi lên" nhẹ bằng translateY + shadow.
  *  `index` là vị trí dòng trong sortedItems — cần thiết để hỗ trợ chọn
- *  nhanh nhiều dòng bằng Shift + click (xem toggleSelectRow ở component cha). */
+ *  nhanh nhiều dòng bằng Shift + click (xem toggleSelectRow ở component cha).
+ *  `readOnly`: role view-only (58) — ẩn checkbox chọn dòng, tắt sửa Chuyến. */
 const TableRow = memo(function TableRow({
   item,
   index,
@@ -542,8 +536,9 @@ const TableRow = memo(function TableRow({
   isGroupBoundary,
   onToggleSelect,
   rowRef,
-  shiftPressedRef, // 👈 thêm
-  onEditChuyen, // 👈 thêm
+  shiftPressedRef,
+  onEditChuyen,
+  readOnly,
 }) {
   return (
     <tr
@@ -564,18 +559,20 @@ const TableRow = memo(function TableRow({
       }`}
     >
       <td className="px-3 py-2 whitespace-nowrap">
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onMouseDown={(e) => {
-            shiftPressedRef.current = e.shiftKey; // ghi nhận Shift NGAY trước khi toggle
-          }}
-          onChange={() =>
-            onToggleSelect(item._id, index, shiftPressedRef.current)
-          }
-          title="Giữ Shift + click để chọn nhanh nhiều dòng liên tiếp"
-          className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600 transition-transform duration-150 checked:scale-110"
-        />
+        {!readOnly && (
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onMouseDown={(e) => {
+              shiftPressedRef.current = e.shiftKey; // ghi nhận Shift NGAY trước khi toggle
+            }}
+            onChange={() =>
+              onToggleSelect(item._id, index, shiftPressedRef.current)
+            }
+            title="Giữ Shift + click để chọn nhanh nhiều dòng liên tiếp"
+            className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600 transition-transform duration-150 checked:scale-110"
+          />
+        )}
       </td>
       <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-800">
         {item.soDonHang}
@@ -596,19 +593,23 @@ const TableRow = memo(function TableRow({
         {item.noiXuatDen || ""}
       </td>
       <td className="px-3 py-2 whitespace-nowrap">
-        <button
-          type="button"
-          onClick={() => onEditChuyen(item)}
-          className="group relative inline-flex items-center"
-          title="Bấm để sửa Chuyến"
-        >
+        {readOnly ? (
           <ChuyenBadge value={item.chuyen} />
-          <Pencil
-            size={10}
-            strokeWidth={2.5}
-            className="absolute -right-1 -top-1 rounded-full bg-white p-[1px] text-slate-400 opacity-0 shadow ring-1 ring-slate-200 transition-opacity group-hover:opacity-100"
-          />
-        </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onEditChuyen(item)}
+            className="group relative inline-flex items-center"
+            title="Bấm để sửa Chuyến"
+          >
+            <ChuyenBadge value={item.chuyen} />
+            <Pencil
+              size={10}
+              strokeWidth={2.5}
+              className="absolute -right-1 -top-1 rounded-full bg-white p-[1px] text-slate-400 opacity-0 shadow ring-1 ring-slate-200 transition-opacity group-hover:opacity-100"
+            />
+          </button>
+        )}
       </td>
       <td className="px-3 py-2 whitespace-nowrap text-slate-700">
         {item.lichDiHang || ""}
@@ -687,7 +688,6 @@ const NhanSuSoanTable = forwardRef(
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(20);
     const [total, setTotal] = useState(0);
-    const [exporting, setExporting] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [editingChuyenItem, setEditingChuyenItem] = useState(null);
     const [savingChuyen, setSavingChuyen] = useState(false);
@@ -699,6 +699,10 @@ const NhanSuSoanTable = forwardRef(
 
     // Chỉ role 57 mới được thấy/dùng nút Xoá.
     const canDelete = useMemo(() => getCurrentUserRole() === 57, []);
+    // Role 58: chỉ xem — không tick chọn, không sửa Chuyến, không thao tác
+    // gộp/giao/huỷ giao/hoàn thành/import/xoá, không xem tab Năng suất NV.
+    // Chỉ được: xem Bảng dữ liệu (read-only), xem Dashboard, Xuất Excel.
+    const isViewerRole = useMemo(() => getCurrentUserRole() === 58, []);
 
     // Bản nháp của các ô lọc dạng gõ chữ — cập nhật UI ngay lập tức,
     // nhưng chỉ đẩy vào `filters` (và gọi API) sau khi ngừng gõ ~350ms.
@@ -892,6 +896,12 @@ const NhanSuSoanTable = forwardRef(
       rowRefs.current[focusedRowIndex]?.scrollIntoView({ block: "nearest" });
     }, [focusedRowIndex]);
 
+    // Role view-only lỡ đang ở tab "nhansu" (VD: đổi role giữa chừng phiên
+    // làm việc) -> tự chuyển về tab Bảng dữ liệu vì tab đó đã bị ẩn khỏi họ.
+    useEffect(() => {
+      if (isViewerRole && view === "nhansu") setView("table");
+    }, [isViewerRole, view]);
+
     const fetchNhanSuSoan = useCallback(async () => {
       setLoading(true);
       setError("");
@@ -987,6 +997,8 @@ const NhanSuSoanTable = forwardRef(
 
     useEffect(() => {
       const handleGlobalKeyDown = (e) => {
+        if (isViewerRole) return; // view-only: không cho thao tác bằng phím tắt
+
         const active = document.activeElement;
         const tag = active?.tagName;
         const isTypingField =
@@ -1041,7 +1053,14 @@ const NhanSuSoanTable = forwardRef(
       };
       document.addEventListener("keydown", handleGlobalKeyDown);
       return () => document.removeEventListener("keydown", handleGlobalKeyDown);
-    }, [selectedItems, focusedRowIndex, sortedItems, view, toggleSelectRow]);
+    }, [
+      selectedItems,
+      focusedRowIndex,
+      sortedItems,
+      view,
+      toggleSelectRow,
+      isViewerRole,
+    ]);
 
     useEffect(() => {
       if (view === "table") fetchNhanSuSoan();
@@ -1058,131 +1077,6 @@ const NhanSuSoanTable = forwardRef(
       () => Math.max(1, Math.ceil(total / limit)),
       [total, limit],
     );
-
-    const handleExportExcel = useCallback(async () => {
-      setExporting(true);
-      try {
-        let rowsToExport = selectedItems;
-
-        // Không tick dòng nào -> xuất TOÀN BỘ dữ liệu khớp filter hiện tại
-        // (bao gồm cả tuNgay/denNgay), không chỉ trang đang hiển thị trên UI.
-        if (rowsToExport.length === 0) {
-          const res = await nhanSuSoanService.getAllNhanSuSoan({
-            page: 1,
-            limit: FETCH_ALL_LIMIT,
-            ...filters,
-          });
-          rowsToExport = res.data || res.items || [];
-        }
-
-        if (rowsToExport.length === 0) {
-          alert("Không có dữ liệu để xuất Excel.");
-          return;
-        }
-
-        const ExcelJS = (await import("exceljs")).default;
-        const workbook = new ExcelJS.Workbook();
-        workbook.creator = "SC Logistics";
-        workbook.created = new Date();
-
-        const sheet = workbook.addWorksheet("Phiếu Soạn", {
-          views: [{ state: "frozen", ySplit: 1 }],
-        });
-
-        sheet.columns = [
-          { header: "Số đơn hàng", key: "soDonHang", width: 16 },
-          { header: "Số phiếu gộp", key: "soPhieuGop", width: 14 },
-          { header: "Mã NXĐ", key: "maNXD", width: 12 },
-          { header: "Nơi xuất đến", key: "noiXuatDen", width: 26 },
-          { header: "Chuyến", key: "chuyen", width: 10 },
-          { header: "Lịch đi hàng", key: "lichDiHang", width: 14 },
-          { header: "NV soạn", key: "nvSoan", width: 24 },
-          { header: "NV KC", key: "nvKC", width: 24 },
-          { header: "Kiện", key: "kien", width: 8 },
-          { header: "Dòng", key: "dong", width: 8 },
-          { header: "Trạng thái", key: "trangThai", width: 14 },
-          { header: "Trạng thái Book Xe", key: "trangThaiBookXe", width: 18 },
-          { header: "TG import", key: "tgImport", width: 18 },
-          { header: "TG hoàn thành", key: "tgHoanThanh", width: 18 },
-          { header: "TG nhận phiếu", key: "tgNhanPhieu", width: 18 },
-        ];
-
-        const headerRow = sheet.getRow(1);
-        headerRow.font = { bold: true, color: { argb: "FF1E293B" } };
-        headerRow.alignment = { vertical: "middle", horizontal: "center" };
-        headerRow.height = 22;
-        headerRow.eachCell((cell) => {
-          cell.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFE2E8F0" },
-          };
-          cell.border = {
-            top: { style: "thin", color: { argb: "FFCBD5E1" } },
-            left: { style: "thin", color: { argb: "FFCBD5E1" } },
-            bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
-            right: { style: "thin", color: { argb: "FFCBD5E1" } },
-          };
-        });
-
-        rowsToExport.forEach((item) => {
-          sheet.addRow({
-            soDonHang: item.soDonHang || "",
-            soPhieuGop: item.soPhieuGop || "",
-            maNXD: item.maNXD || "",
-            noiXuatDen: item.noiXuatDen || "",
-            chuyen: item.chuyen || "",
-            lichDiHang: item.lichDiHang || "",
-            nvSoan: nhanVienListToText(item.nvSoanChiTiet || item.nvSoan),
-            nvKC: nhanVienListToText(item.nvKCChiTiet || item.nvKC),
-            kien: item.kien ?? 0,
-            dong: item.dong ?? 0,
-            trangThai: item.trangThai || "",
-            trangThaiBookXe: item.trangThaiBookXe || "Chờ Book",
-            tgImport: formatDateTime(item.tgImport),
-            tgHoanThanh: formatDateTime(item.tgHoanThanh),
-            tgNhanPhieu: formatDateTime(item.tgNhanPhieu),
-          });
-        });
-
-        // Viền + căn giữa cho toàn bộ dữ liệu (trừ header đã set riêng ở trên)
-        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-          if (rowNumber === 1) return;
-          row.eachCell({ includeEmpty: false }, (cell) => {
-            cell.border = {
-              top: { style: "thin", color: { argb: "FFE2E8F0" } },
-              left: { style: "thin", color: { argb: "FFE2E8F0" } },
-              bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
-              right: { style: "thin", color: { argb: "FFE2E8F0" } },
-            };
-            cell.alignment = { vertical: "middle" };
-          });
-        });
-
-        sheet.autoFilter = {
-          from: { row: 1, column: 1 },
-          to: { row: 1, column: sheet.columns.length },
-        };
-
-        const buffer = await workbook.xlsx.writeBuffer();
-        const blob = new Blob([buffer], {
-          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `PhieuSoan_${dayjs().format("YYYYMMDD_HHmmss")}.xlsx`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        console.error("Lỗi xuất Excel:", err);
-        alert("Xuất Excel thất bại. Vui lòng thử lại.");
-      } finally {
-        setExporting(false);
-      }
-    }, [selectedItems, filters]);
 
     // ─── Xoá phiếu — chỉ role 57 ────────────────────────────────────────────
     // Xoá các phiếu đang được tick chọn (bulk), giống cách các thao tác
@@ -1216,9 +1110,20 @@ const NhanSuSoanTable = forwardRef(
         {/* Header dùng chung cho cả 3 tab */}
         <div className="flex flex-col gap-3 rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-200 backdrop-blur md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            <h1 className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
-              {title}
-            </h1>
+            <div className="flex flex-wrap items-baseline gap-3">
+              <h1 className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
+                {title}
+              </h1>
+
+              {/* ✅ Khoảng ngày đang lọc — chỉ hiện ở tab Dashboard, cùng size/kiểu
+        chữ với tiêu đề (text-2xl, gradient giống hệt) cho đồng bộ. */}
+              {view === "dashboard" && (
+                <span className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
+                  {dayjs(dashTuNgay).format("DD/MM/YYYY")} -{" "}
+                  {dayjs(dashDenNgay).format("DD/MM/YYYY")}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-slate-500">
               {view === "table"
                 ? description
@@ -1229,61 +1134,63 @@ const NhanSuSoanTable = forwardRef(
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <ViewTabs view={view} onChange={setView} />
+            <ViewTabs
+              view={view}
+              onChange={setView}
+              hideNhanSu={isViewerRole}
+            />
 
             {view === "table" && (
               <div className="flex flex-wrap items-center gap-3">
-                {selectedIds.size > 0 && (
+                {!isViewerRole && selectedIds.size > 0 && (
                   <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
                     Đã chọn {selectedIds.size} phiếu
                   </span>
                 )}
 
-                {/* Nhóm 1: thao tác xử lý trên phiếu (theo đúng luồng: gộp -> giao -> huỷ giao -> hoàn thành) */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <GopPhieu ref={gopPhieuRef} onSuccess={handleActionSuccess} />
-                  <ScanGiaoPhieu
-                    ref={scanGiaoPhieuRef}
-                    onSuccess={handleActionSuccess}
-                  />
-                  <HuyGiaoPhieu
-                    ref={huyGiaoPhieuRef}
-                    onSuccess={handleActionSuccess}
-                  />
-                  <ScanHoanThanh
-                    ref={scanHoanThanhRef}
-                    onSuccess={handleActionSuccess}
-                  />
-                </div>
+                {/* Nhóm 1: thao tác xử lý trên phiếu (theo đúng luồng: gộp -> giao -> huỷ giao -> hoàn thành)
+                    Ẩn hoàn toàn với role view-only (58). */}
+                {!isViewerRole && (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <GopPhieu
+                        ref={gopPhieuRef}
+                        onSuccess={handleActionSuccess}
+                      />
+                      <ScanGiaoPhieu
+                        ref={scanGiaoPhieuRef}
+                        onSuccess={handleActionSuccess}
+                      />
+                      <HuyGiaoPhieu
+                        ref={huyGiaoPhieuRef}
+                        onSuccess={handleActionSuccess}
+                      />
+                      <ScanHoanThanh
+                        ref={scanHoanThanhRef}
+                        onSuccess={handleActionSuccess}
+                      />
+                    </div>
 
-                {/* Đường chia nhóm */}
-                <div className="hidden h-6 w-px bg-slate-200 sm:block" />
+                    {/* Đường chia nhóm */}
+                    <div className="hidden h-6 w-px bg-slate-200 sm:block" />
+                  </>
+                )}
 
-                {/* Nhóm 2: dữ liệu (nhập / xuất / xoá) */}
+                {/* Nhóm 2: dữ liệu (nhập / xuất / xoá) — role view-only chỉ
+                    còn thấy nút Xuất Excel. */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
-                  <button
-                    type="button"
-                    onClick={handleExportExcel}
-                    disabled={exporting || loading}
-                    title={
-                      selectedIds.size > 0
-                        ? `Xuất Excel ${selectedIds.size} phiếu đã chọn`
-                        : "Xuất Excel toàn bộ dữ liệu đang hiển thị"
-                    }
-                    className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-emerald-700 hover:to-teal-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:hover:from-emerald-600 disabled:hover:to-teal-600"
-                  >
-                    {exporting ? (
-                      <Loader2 size={15} className="animate-spin" />
-                    ) : (
-                      <FileSpreadsheet size={15} />
-                    )}
-                    {exporting
-                      ? "Đang xuất..."
-                      : selectedIds.size > 0
-                        ? `Xuất Excel (${selectedIds.size})`
-                        : "Xuất Excel"}
-                  </button>
+                  {!isViewerRole && (
+                    <>
+                      <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
+                      <ImportPhanBo onImported={fetchNhanSuSoan} />
+                    </>
+                  )}
+                  <ExportExcelButton
+                    selectedItems={selectedItems}
+                    filters={filters}
+                    isViewerRole={isViewerRole}
+                    disabled={loading}
+                  />
 
                   {canDelete && (
                     <button
@@ -1318,11 +1225,11 @@ const NhanSuSoanTable = forwardRef(
                 {dashMeta.loading && (
                   <Loader2 size={18} className="animate-spin text-blue-500" />
                 )}
-                {!dashMeta.loading && !dashMeta.error && (
-                  <span className="text-xs text-slate-400">
-                    ({dashMeta.count} bản ghi)
-                  </span>
-                )}
+
+                {/* ✅ MỚI: badge nổi bật hiển thị khoảng ngày đang lọc + số bản ghi,
+        đứng ngay cạnh ô chọn ngày để dễ nhận biết đang xem dữ liệu ngày
+        nào mà không cần mở lại popup lịch. */}
+
                 <DateRangeFilter
                   label="Lọc theo TG import"
                   startValue={dashTuNgay}
@@ -1351,9 +1258,10 @@ const NhanSuSoanTable = forwardRef(
           />
         )}
 
-        {/* Tab Năng suất nhân viên — tách hẳn khỏi Dashboard để không còn
-            bị chèn/đè lên toolbar hay các thẻ số liệu của Dashboard nữa. */}
-        {view === "nhansu" && <NhanSuSoanEmployeeLookup />}
+        {/* Tab Năng suất nhân viên — không thấy được nếu là role view-only (58),
+            tách hẳn khỏi Dashboard để không còn bị chèn/đè lên toolbar hay
+            các thẻ số liệu của Dashboard nữa. */}
+        {view === "nhansu" && !isViewerRole && <NhanSuSoanEmployeeLookup />}
 
         {/* Tab Bảng dữ liệu */}
         {view === "table" && (
@@ -1376,7 +1284,7 @@ const NhanSuSoanTable = forwardRef(
                   setPage(1);
                 }}
               />
-              {selectedIds.size > 0 && (
+              {!isViewerRole && selectedIds.size > 0 && (
                 <span className="text-xs text-slate-400">
                   Mẹo: giữ <b className="text-slate-600">Shift</b> rồi tick 1
                   dòng khác để chọn nhanh cả khoảng.
@@ -1390,16 +1298,18 @@ const NhanSuSoanTable = forwardRef(
                 <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 backdrop-blur">
                   <tr className="border-b-2 border-slate-200">
                     <th className="w-8 px-3 py-2.5">
-                      <input
-                        type="checkbox"
-                        checked={
-                          sortedItems.length > 0 &&
-                          selectedIds.size === sortedItems.length
-                        }
-                        onChange={toggleSelectAll}
-                        title="Chọn tất cả"
-                        className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
-                      />
+                      {!isViewerRole && (
+                        <input
+                          type="checkbox"
+                          checked={
+                            sortedItems.length > 0 &&
+                            selectedIds.size === sortedItems.length
+                          }
+                          onChange={toggleSelectAll}
+                          title="Chọn tất cả"
+                          className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
+                        />
+                      )}
                     </th>
                     <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
                       Số đơn hàng
@@ -1671,8 +1581,9 @@ const NhanSuSoanTable = forwardRef(
                         isGroupBoundary={groupBoundaryFlags[idx]}
                         onToggleSelect={toggleSelectRow}
                         rowRef={rowRefCallbacks[idx]}
-                        shiftPressedRef={shiftPressedRef} // 👈 thêm dòng này
-                        onEditChuyen={handleOpenEditChuyen} // 👈 thêm
+                        shiftPressedRef={shiftPressedRef}
+                        onEditChuyen={handleOpenEditChuyen}
+                        readOnly={isViewerRole}
                       />
                     ))}
                 </tbody>

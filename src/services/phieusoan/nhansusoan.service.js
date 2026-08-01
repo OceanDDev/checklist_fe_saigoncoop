@@ -187,7 +187,18 @@ const deleteAllNhanSuSoan = async () => {
     throw error;
   }
 };
-
+const importPhanBo = async (data) => {
+  try {
+    const response = await ApiServer.post(
+      `${URL.phieusoan.nhansusoan}/import-phanbo`,
+      { data },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi importPhanBo:", error);
+    throw error;
+  }
+};
 export const nhanSuSoanService = {
   getAllNhanSuSoan, // GET    /api/saigoncoop/nhansusoan?page=1&limit=50&...
   getNhanSuSoanById, // GET    /api/saigoncoop/nhansusoan/:id
@@ -199,4 +210,5 @@ export const nhanSuSoanService = {
   deleteNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/:id
   deleteManyNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/many
   deleteAllNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/delete-all
+  importPhanBo
 };

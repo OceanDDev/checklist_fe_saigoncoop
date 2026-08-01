@@ -74,6 +74,7 @@ const Header = () => {
       55: "SO KHỚP HÓA ĐƠN",
       56: "QUẢN LÝ TTB",
       57: "QUẢN LÝ PHIẾU SOẠN ",
+       58: "QUẢN LÝ PHIẾU SOẠN ",
       70: "BOOK XE ",
 
     };

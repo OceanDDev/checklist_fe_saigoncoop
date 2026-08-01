@@ -27,6 +27,7 @@ import {
   X,
   AlertTriangle,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
@@ -820,6 +821,46 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
     };
   }, [tuNgay, denNgay]);
 
+  // ─── Biểu đồ "theo giờ" — lọc riêng theo TG NHẬN PHIẾU ─────────────────
+  // Biểu đồ này KHÔNG dùng chung tập dữ liệu `rawItems` (vốn đang lọc theo
+  // TG import) vì như vậy sẽ bỏ sót những phiếu có TG nhận phiếu nằm trong
+  // khoảng ngày đang xem nhưng TG import lại nằm ngoài khoảng đó. Thay vào
+  // đó, tự gọi API riêng với tuNgayNP/denNgayNP = khoảng ngày đang chọn,
+  // hoàn toàn độc lập với TG import.
+  const [hourItems, setHourItems] = useState([]);
+  const [hourLoading, setHourLoading] = useState(false);
+  const [hourError, setHourError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchHourData = async () => {
+      setHourLoading(true);
+      setHourError("");
+      try {
+        const res = await nhanSuSoanService.getAllNhanSuSoan({
+          page: 1,
+          limit: 10000,
+          // Lọc theo TG NHẬN PHIẾU — không liên quan gì đến TG import.
+          tuNgayNP: tuNgay,
+          denNgayNP: denNgay,
+        });
+        if (!cancelled) setHourItems(res.data || res.items || []);
+      } catch (err) {
+        console.error("Lỗi tải dữ liệu biểu đồ theo giờ (TG nhận phiếu):", err);
+        if (!cancelled) {
+          setHourItems([]);
+          setHourError("Không tải được dữ liệu biểu đồ theo giờ.");
+        }
+      } finally {
+        if (!cancelled) setHourLoading(false);
+      }
+    };
+    fetchHourData();
+    return () => {
+      cancelled = true;
+    };
+  }, [tuNgay, denNgay]);
+
   const onMetaRef = useRef(onMeta);
   useEffect(() => {
     onMetaRef.current = onMeta;
@@ -831,7 +872,6 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
 
   const stats = useMemo(() => {
     const items = rawItems;
-    const soDay = Math.max(1, dayjs(denNgay).diff(dayjs(tuNgay), "day") + 1);
     const now = dayjs();
 
     const totalOrders = items.length;
@@ -844,7 +884,6 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       CS: { "Chưa soạn": 0, "Đang soạn": 0, "Hoàn thành": 0 },
       Khác: { "Chưa soạn": 0, "Đang soạn": 0, "Hoàn thành": 0 },
     };
-    const hourCount = {};
     const dayCount = {};
     const kpiCount = {};
 
@@ -862,12 +901,6 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
 
       const kpi = classifyKPI(item, now);
       if (kpi) kpiCount[kpi] = (kpiCount[kpi] || 0) + 1;
-
-      if (item.tgNhanPhieu) {
-        const dNhan = dayjs(item.tgNhanPhieu);
-        const h = dNhan.hour();
-        hourCount[h] = (hourCount[h] || 0) + 1;
-      }
 
       if (item.tgImport) {
         const d = dayjs(item.tgImport);
@@ -892,13 +925,6 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
     const kpiDatCount = kpiCount["Đạt KPI"] || 0;
     const kpiDatRate =
       kpiTotal > 0 ? Math.round((kpiDatCount / kpiTotal) * 100) : 0;
-
-    const avgPerHour = totalOrders / (soDay * WORK_HOURS_COUNT);
-
-    const hourData = Array.from({ length: 24 }, (_, h) => ({
-      hour: `${h.toString().padStart(2, "0")}h`,
-      soLuong: hourCount[h] || 0,
-    }));
 
     const dayData = Object.keys(dayCount)
       .sort()
@@ -929,11 +955,31 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       kpiData,
       kpiTotal,
       kpiDatRate,
-      hourData,
       dayData,
-      avgPerHour,
     };
   }, [rawItems, tuNgay, denNgay]);
+
+  // ─── Số liệu riêng cho biểu đồ "theo giờ" — tính từ hourItems (đã lọc
+  // theo TG nhận phiếu ở trên), không liên quan đến `stats`/`rawItems`.
+  const hourStats = useMemo(() => {
+    const soDay = Math.max(1, dayjs(denNgay).diff(dayjs(tuNgay), "day") + 1);
+    const hourCount = {};
+
+    hourItems.forEach((item) => {
+      if (!item.tgNhanPhieu) return;
+      const h = dayjs(item.tgNhanPhieu).hour();
+      hourCount[h] = (hourCount[h] || 0) + 1;
+    });
+
+    const hourData = Array.from({ length: 24 }, (_, h) => ({
+      hour: `${h.toString().padStart(2, "0")}h`,
+      soLuong: hourCount[h] || 0,
+    }));
+
+    const avgPerHour = hourItems.length / (soDay * WORK_HOURS_COUNT);
+
+    return { hourData, avgPerHour, total: hourItems.length };
+  }, [hourItems, tuNgay, denNgay]);
 
   // ✅ MỚI: dữ liệu riêng cho 2 pie "theo chuyến" / "theo trạng thái",
   // được tính lại theo `selectedChain` (lọc bằng logo CF/CS).
@@ -1270,21 +1316,33 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
         </div>
       </div>
 
-      {/* Đơn theo giờ */}
+      {/* Đơn theo giờ — lọc riêng theo TG nhận phiếu, không phụ thuộc TG import */}
+      {hourError && (
+        <div className="flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          <AlertTriangle size={16} className="shrink-0" />
+          {hourError}
+        </div>
+      )}
       <ChartCard
         title="Số lượng đơn hàng phát ra theo từng giờ (theo TG nhận phiếu)"
         eyebrow={
           <span className="inline-flex items-center gap-1.5 text-slate-500">
-            <Clock size={13} className="text-slate-400" />
+            {hourLoading ? (
+              <Loader2 size={13} className="animate-spin text-slate-400" />
+            ) : (
+              <Clock size={13} className="text-slate-400" />
+            )}
             Bình quân{" "}
-            <b className="text-slate-700">{stats.avgPerHour.toFixed(1)}</b>{" "}
-            đơn/giờ ({WORK_HOUR_START}h-{WORK_HOUR_END}h)
+            <b className="text-slate-700">{hourStats.avgPerHour.toFixed(1)}</b>{" "}
+            đơn/giờ ({WORK_HOUR_START}h-{WORK_HOUR_END}h) &middot; trên{" "}
+            <b className="text-slate-700">{formatNumber(hourStats.total)}</b>{" "}
+            phiếu có TG nhận phiếu
           </span>
         }
       >
         <ResponsiveContainer width="100%" height={260} debounce={150}>
           <BarChart
-            data={stats.hourData}
+            data={hourStats.hourData}
             margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
           >
             <CartesianGrid
@@ -1313,7 +1371,7 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
               }}
             />
             <ReferenceLine
-              y={stats.avgPerHour}
+              y={hourStats.avgPerHour}
               stroke="#f59e0b"
               strokeWidth={1.5}
               strokeDasharray="4 4"

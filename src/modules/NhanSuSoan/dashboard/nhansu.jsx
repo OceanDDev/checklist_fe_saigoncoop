@@ -410,6 +410,8 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
   kpi,
   capturing,
   boPhanStatsAll,
+  tuNgay, // ✅ MỚI
+  denNgay, // ✅ MỚI
 }) {
   const kpiSummaryByGroup = useMemo(() => {
     const result = {};
@@ -440,13 +442,33 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
   const displayRows = capturing ? captureRows : mergedRows;
   const colSpanTotal = 3 + GROUPS.length * 4;
 
+  // ✅ FIX: html2canvas render sai kỹ thuật gradient-chữ (bg-clip-text +
+  // text-transparent) — nó vẽ nguyên khối gradient thành 1 hình chữ nhật
+  // đặc, chữ biến mất/bị đè lên. Override bằng inline style trước đây
+  // KHÔNG đủ mạnh vì class Tailwind (bg-clip-text/text-transparent) vẫn
+  // còn nguyên trong className. Cách đúng: chuyển hẳn sang class khác khi
+  // đang capturing — bỏ hoàn toàn bg-clip-text/text-transparent, dùng màu
+  // chữ đặc bình thường (text-slate-900). Lúc xem trên web (capturing =
+  // false) vẫn giữ hiệu ứng gradient đẹp như cũ.
+  const titleClass = capturing
+    ? "text-xl font-bold tracking-tight text-slate-900"
+    : "bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-xl font-bold tracking-tight text-transparent";
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
-        <h3 className="text-sm font-bold tracking-wide text-slate-700">
+      {/* ✅ Tiêu đề nổi bật hơn — bỏ chấm xám, tăng cỡ chữ, dùng gradient chung
+    kiểu với tiêu đề "QUẢN LÝ PHIẾU SOẠN", kèm badge khoảng ngày đang lọc
+    ngay cạnh (đồng bộ với cách hiển thị ở tab Dashboard). */}
+      <div className="mb-4 flex flex-wrap items-baseline gap-3">
+        <h3 className={titleClass}>
           {`Năng suất ${vaiTroLabel}`.toLocaleUpperCase("vi-VN")}
         </h3>
+        {tuNgay && denNgay && (
+          <span className={titleClass}>
+            {dayjs(tuNgay).format("DD/MM/YYYY")} -{" "}
+            {dayjs(denNgay).format("DD/MM/YYYY")}
+          </span>
+        )}
       </div>
 
       {boPhanStatsAll && (
@@ -477,6 +499,7 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
             label={`BQ kiện HT (${vaiTroLabel})`}
             value={boPhanStatsAll.bqKienHoanThanh.toFixed(2)}
             accent="bg-gradient-to-br from-amber-500 to-orange-600"
+            capturing={capturing}
           />
         </div>
       )}
@@ -656,7 +679,6 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
     </div>
   );
 });
-
 /* ------------------------------------------------------------------ */
 /* Component chính — KHÔNG còn modal, hiển thị trực tiếp trên trang,   */
 /* 1 bảng duy nhất chia sẵn cột Tổng / CF / CS thay vì 3 bảng riêng.   */
@@ -1107,14 +1129,6 @@ const NhanSuSoanEmployeeLookup = () => {
           boPhanStatsAll &&
           filteredDsNhanVien.length > 0 && (
             <div ref={captureRef} className="space-y-4 bg-white p-2 pt-6">
-              <div className="text-xs font-semibold tracking-wide text-slate-400">
-                {`Năng suất ${vaiTroLabel} — ${
-                  selectedChucVu || selectedBoPhan || "Tất cả"
-                } (${dayjs(tuNgay).format("DD/MM/YYYY")} - ${dayjs(
-                  denNgay,
-                ).format("DD/MM/YYYY")})`.toLocaleUpperCase("vi-VN")}
-              </div>
-
               <MergedProductivityTable
                 mergedRows={mergedRows}
                 vaiTroLabel={vaiTroLabel}
@@ -1122,6 +1136,8 @@ const NhanSuSoanEmployeeLookup = () => {
                 kpi={kpi}
                 capturing={capturing}
                 boPhanStatsAll={boPhanStatsAll}
+                tuNgay={tuNgay}
+                denNgay={denNgay}
               />
             </div>
           )}
