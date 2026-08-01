@@ -2,7 +2,8 @@
 /* eslint-disable react/prop-types */
 // pages/chamcong/Table.jsx
 import { chamCongService } from "@/services/chamcong.service";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from "react";
 import ExcelJS from "exceljs";
 import ImportNangSuat from "./ImportNangSuat";
 
@@ -47,6 +48,36 @@ function isSameDay(a, b) {
     a.getDate() === b.getDate()
   );
 }
+
+// ─── Helpers đối chiếu năng suất (bên NhanSuSoan) ────────────────────────────
+const normalizeCode = (c) => (c ?? "").toString().trim().toUpperCase();
+
+// nvSoanChiTiet / nvKCChiTiet đã được backend resolve mã phụ -> mã chính,
+// nên chỉ cần gom theo `ma_nhan_vien` (mã chính) là tự động tính luôn phần
+// chấm bằng mã phụ cho đúng người.
+const extractMaNVSet = (chiTiet, raw) => {
+  const list = chiTiet && chiTiet.length ? chiTiet : raw || [];
+  const set = new Set();
+  list.forEach((x) => {
+    const code = x && typeof x === "object" ? x.ma_nhan_vien : x;
+    const norm = normalizeCode(code);
+    if (norm) set.add(norm);
+  });
+  return set;
+};
+
+// Ngày dạng YYYY-MM-DD theo giờ VN — dùng để khớp đúng "ngày hoàn thành"
+// với ngày của bản ghi chấm công, tránh lệch ngày do UTC.
+const toDateKeyVN = (isoOrDate) => {
+  if (!isoOrDate) return "";
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+    }).format(new Date(isoOrDate));
+  } catch {
+    return "";
+  }
+};
 
 // ─── Export Excel ─────────────────────────────────────────────────────────────
 async function exportChamCongMau(records, { year, month } = {}) {
@@ -265,7 +296,7 @@ const MONTHS_VI = [
 ];
 const DAYS_VI = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
-const MiniCalendar = ({
+const MiniCalendar = memo(function MiniCalendar({
   viewYear,
   viewMonth,
   startDate,
@@ -275,7 +306,7 @@ const MiniCalendar = ({
   onDayHover,
   onPrev,
   onNext,
-}) => {
+}) {
   const firstDay = new Date(viewYear, viewMonth, 1).getDay();
   const total = daysInMonth(viewYear, viewMonth + 1);
   const cells = [];
@@ -363,10 +394,62 @@ const MiniCalendar = ({
       </div>
     </div>
   );
-};
+});
 
 // ─── DateRange Picker ─────────────────────────────────────────────────────────
-const DateRangePicker = ({ startDate, endDate, onChange }) => {
+const QUICK_RANGES = [
+  {
+    label: "Hôm nay",
+    getRange: () => {
+      const t = new Date();
+      return { startDate: t, endDate: t };
+    },
+  },
+  {
+    label: "7 ngày",
+    getRange: () => {
+      const e = new Date(),
+        s = new Date();
+      s.setDate(s.getDate() - 6);
+      return { startDate: s, endDate: e };
+    },
+  },
+  {
+    label: "30 ngày",
+    getRange: () => {
+      const e = new Date(),
+        s = new Date();
+      s.setDate(s.getDate() - 29);
+      return { startDate: s, endDate: e };
+    },
+  },
+  {
+    label: "Tháng này",
+    getRange: () => {
+      const n = new Date();
+      return {
+        startDate: new Date(n.getFullYear(), n.getMonth(), 1),
+        endDate: new Date(n.getFullYear(), n.getMonth() + 1, 0),
+      };
+    },
+  },
+  {
+    label: "Tháng trước",
+    getRange: () => {
+      const n = new Date();
+      return {
+        startDate: new Date(n.getFullYear(), n.getMonth() - 1, 1),
+        endDate: new Date(n.getFullYear(), n.getMonth(), 0),
+      };
+    },
+  },
+];
+
+const DateRangePicker = memo(function DateRangePicker({
+  startDate,
+  endDate,
+  onChange,
+}) {
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
@@ -381,26 +464,35 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
     return () => document.removeEventListener("mousedown", fn);
   }, []);
 
-  const handleDayClick = (day) => {
-    if (!startDate || (startDate && endDate)) {
-      onChange({ startDate: day, endDate: null });
-    } else {
-      if (day < startDate) onChange({ startDate: day, endDate: startDate });
-      else if (isSameDay(day, startDate))
-        onChange({ startDate: day, endDate: day });
-      else onChange({ startDate, endDate: day });
-      setOpen(false);
-    }
-  };
+  const handleDayClick = useCallback(
+    (day) => {
+      if (!startDate || (startDate && endDate)) {
+        onChange({ startDate: day, endDate: null });
+      } else {
+        if (day < startDate) onChange({ startDate: day, endDate: startDate });
+        else if (isSameDay(day, startDate))
+          onChange({ startDate: day, endDate: day });
+        else onChange({ startDate, endDate: day });
+        setOpen(false);
+      }
+    },
+    [startDate, endDate, onChange],
+  );
 
-  const prev = () =>
-    viewMonth === 0
-      ? (setViewMonth(11), setViewYear((y) => y - 1))
-      : setViewMonth((m) => m - 1);
-  const next = () =>
-    viewMonth === 11
-      ? (setViewMonth(0), setViewYear((y) => y + 1))
-      : setViewMonth((m) => m + 1);
+  const prev = useCallback(
+    () =>
+      viewMonth === 0
+        ? (setViewMonth(11), setViewYear((y) => y - 1))
+        : setViewMonth((m) => m - 1),
+    [viewMonth],
+  );
+  const next = useCallback(
+    () =>
+      viewMonth === 11
+        ? (setViewMonth(0), setViewYear((y) => y + 1))
+        : setViewMonth((m) => m + 1),
+    [viewMonth],
+  );
 
   const fromLabel = startDate ? toDisplayStr(startDate) : "";
   const toLabel = endDate ? toDisplayStr(endDate) : "";
@@ -453,61 +545,13 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
       {open && (
         <div className="absolute z-50 mt-1.5 left-0 bg-card border border-border rounded-2xl shadow-2xl p-4 w-80">
           <div className="flex flex-wrap gap-1.5 mb-3 pb-3 border-b border-border">
-            {[
-              {
-                label: "Hôm nay",
-                fn: () => {
-                  const t = new Date();
-                  onChange({ startDate: t, endDate: t });
-                  setOpen(false);
-                },
-              },
-              {
-                label: "7 ngày",
-                fn: () => {
-                  const e = new Date(),
-                    s = new Date();
-                  s.setDate(s.getDate() - 6);
-                  onChange({ startDate: s, endDate: e });
-                  setOpen(false);
-                },
-              },
-              {
-                label: "30 ngày",
-                fn: () => {
-                  const e = new Date(),
-                    s = new Date();
-                  s.setDate(s.getDate() - 29);
-                  onChange({ startDate: s, endDate: e });
-                  setOpen(false);
-                },
-              },
-              {
-                label: "Tháng này",
-                fn: () => {
-                  const n = new Date();
-                  onChange({
-                    startDate: new Date(n.getFullYear(), n.getMonth(), 1),
-                    endDate: new Date(n.getFullYear(), n.getMonth() + 1, 0),
-                  });
-                  setOpen(false);
-                },
-              },
-              {
-                label: "Tháng trước",
-                fn: () => {
-                  const n = new Date();
-                  onChange({
-                    startDate: new Date(n.getFullYear(), n.getMonth() - 1, 1),
-                    endDate: new Date(n.getFullYear(), n.getMonth(), 0),
-                  });
-                  setOpen(false);
-                },
-              },
-            ].map(({ label, fn }) => (
+            {QUICK_RANGES.map(({ label, getRange }) => (
               <button
                 key={label}
-                onClick={fn}
+                onClick={() => {
+                  onChange(getRange());
+                  setOpen(false);
+                }}
                 className="px-2.5 py-1 text-xs font-medium rounded-lg bg-muted/50 hover:bg-emerald-500/15 hover:text-emerald-400 text-muted-foreground border border-border hover:border-emerald-500/30 transition-colors"
               >
                 {label}
@@ -534,10 +578,10 @@ const DateRangePicker = ({ startDate, endDate, onChange }) => {
       )}
     </div>
   );
-};
+});
 
 // ─── Modal Xuất Excel ─────────────────────────────────────────────────────────
-const ExportChamCongMau = ({ records = [] }) => {
+const ExportChamCongMau = memo(function ExportChamCongMau({ records = [] }) {
   const now = new Date();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -693,10 +737,15 @@ const ExportChamCongMau = ({ records = [] }) => {
       )}
     </>
   );
-};
+});
 
 // ─── TimePicker24 ─────────────────────────────────────────────────────────────
-const TimePicker24 = ({ value, onChange, minTime, optional }) => {
+const TimePicker24 = memo(function TimePicker24({
+  value,
+  onChange,
+  minTime,
+  optional,
+}) {
   const selCls =
     "bg-muted/40 border border-border rounded-xl text-sm text-foreground outline-none focus:ring-2 focus:ring-ring transition-all text-center cursor-pointer py-2.5";
   const [hh, mm] = value ? value.split(":") : ["", ""];
@@ -769,7 +818,7 @@ const TimePicker24 = ({ value, onChange, minTime, optional }) => {
       )}
     </div>
   );
-};
+});
 
 // ─── Icon bút chì ─────────────────────────────────────────────────────────────
 const PencilIcon = () => (
@@ -789,7 +838,12 @@ const PencilIcon = () => (
 );
 
 // ─── Inline Cell Edit ─────────────────────────────────────────────────────────
-const InlineCellEdit = ({ record, field, minTimeField, onSaved }) => {
+const InlineCellEdit = memo(function InlineCellEdit({
+  record,
+  field,
+  minTimeField,
+  onSaved,
+}) {
   const toTimeStr = (iso) => {
     if (!iso) return "";
     const d = new Date(iso);
@@ -805,6 +859,7 @@ const InlineCellEdit = ({ record, field, minTimeField, onSaved }) => {
     setVal(toTimeStr(record[field]));
     setEditing(false);
     setError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record[field]]);
 
   const displayVal = record[field]
@@ -894,10 +949,10 @@ const InlineCellEdit = ({ record, field, minTimeField, onSaved }) => {
       </div>
     </div>
   );
-};
+});
 
 // ─── Modal Khóa / Mở Khóa ────────────────────────────────────────────────────
-const KhoaModal = ({ record, onClose, onSaved }) => {
+const KhoaModal = memo(function KhoaModal({ record, onClose, onSaved }) {
   const isLocked = !!record?.is_locked;
   const [lyDo, setLyDo] = useState(record?.ly_do_khoa || "");
   const [loading, setLoading] = useState(false);
@@ -1012,10 +1067,10 @@ const KhoaModal = ({ record, onClose, onSaved }) => {
       </div>
     </div>
   );
-};
+});
 
 // ─── Modal Ghi Chú ────────────────────────────────────────────────────────────
-const GhiChuModal = ({ record, onClose, onSaved }) => {
+const GhiChuModal = memo(function GhiChuModal({ record, onClose, onSaved }) {
   const [ghiChu, setGhiChu] = useState(record?.ghi_chu || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1082,10 +1137,10 @@ const GhiChuModal = ({ record, onClose, onSaved }) => {
       </div>
     </div>
   );
-};
+});
 
 // ─── Modal Vi Phạm ────────────────────────────────────────────────────────────
-const ViPhamModal = ({ record, onClose }) => {
+const ViPhamModal = memo(function ViPhamModal({ record, onClose }) {
   const fmt = (iso) => {
     if (!iso) return "—";
     const d = new Date(new Date(iso).getTime() + 7 * 60 * 60 * 1000);
@@ -1187,9 +1242,9 @@ const ViPhamModal = ({ record, onClose }) => {
       </div>
     </div>
   );
-};
+});
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers hiển thị ─────────────────────────────────────────────────────────
 const formatTime = (iso) => {
   if (!iso) return null;
   return new Date(iso).toLocaleTimeString("vi-VN", {
@@ -1215,6 +1270,211 @@ const formatTongGio = (gio) => {
   return `${h}h${String(m).padStart(2, "0")}`;
 };
 
+const th =
+  "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
+const td = "px-5 py-4 text-sm border-b border-border/50 align-middle";
+
+// ─── TableRow (tách riêng + memo) ─────────────────────────────────────────────
+// Chỉ re-render khi chính dòng này (hoặc props liên quan) thay đổi — tick
+// chọn 1 dòng không còn kéo theo toàn bộ bảng render lại.
+const TableRow = memo(function TableRow({
+  record: r,
+  index,
+  isChecked,
+  role,
+  stats, // { phieu, kien, dong } | null — từ nhansusoan (đã tính theo đúng ngày Hoàn thành)
+  onToggleSelect,
+  onGhiChu,
+  onKhoa,
+  onViPham,
+}) {
+  const hasCheckout = !!r.gio_ra;
+  const isViPham = !!r.vi_pham_cham_ho;
+  const isLocked = !!r.is_locked;
+
+
+  return (
+    <tr
+      className={`transition-colors ${
+        isLocked
+          ? "bg-orange-500/5 hover:bg-orange-500/8 opacity-60"
+          : isViPham
+            ? "bg-red-500/5 hover:bg-red-500/10"
+            : isChecked
+              ? "bg-emerald-500/5"
+              : "hover:bg-muted/20"
+      }`}
+    >
+      <td className={td}>
+        <input
+          type="checkbox"
+          checked={isChecked}
+          onChange={() => onToggleSelect(r._id)}
+          disabled={isLocked}
+          className="w-4 h-4 rounded accent-emerald-500 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+        />
+      </td>
+      <td className={`${td} text-muted-foreground text-xs font-mono`}>
+        {String(index + 1).padStart(2, "0")}
+      </td>
+      <td className={td}>
+        <span className="font-mono text-sm font-semibold text-emerald-400 bg-emerald-500/8 px-2 py-0.5 rounded-md">
+          {r.ma_nhan_vien}
+        </span>
+      </td>
+      <td className={`${td} font-medium text-foreground`}>
+        {r.ten_nhan_vien}
+      </td>
+      <td className={`${td} text-muted-foreground`}>{r.bo_phan || "—"}</td>
+      <td className={`${td} text-muted-foreground`}>{r.chuc_vu || "—"}</td>
+      <td className={td}>
+        <span className="font-mono text-sm text-sky-400 font-semibold">
+          {formatTime(r.gio_vao) || "—"}
+        </span>
+      </td>
+      <td className={td}>
+        <span
+          className={`font-mono text-sm font-semibold ${hasCheckout ? "text-orange-400" : "text-muted-foreground/50"}`}
+        >
+          {formatTime(r.gio_ra) || "—"}
+        </span>
+      </td>
+      <td className={td}>
+        <span
+          className={`font-mono text-sm font-semibold ${r.tong_gio > 0 ? "text-violet-400" : "text-muted-foreground/50"}`}
+        >
+          {r.tong_gio > 0 ? formatTongGio(r.tong_gio) : "—"}
+        </span>
+      </td>
+
+      {role !== 30 && (
+        <td className={td}>
+          <InlineCellEdit record={r} field="gio_vao_phu" onSaved={onGhiChu.refresh} />
+        </td>
+      )}
+      {role !== 30 && (
+        <td className={td}>
+          <InlineCellEdit
+            record={r}
+            field="gio_ra_phu"
+            minTimeField="gio_vao_phu"
+            onSaved={onGhiChu.refresh}
+          />
+        </td>
+      )}
+      {role !== 30 && (
+        <td className={td}>
+          <span
+            className={`font-mono text-sm font-semibold ${r.tong_gio_phu > 0 ? "text-teal-400" : "text-muted-foreground/30"}`}
+          >
+            {r.tong_gio_phu > 0 ? formatTongGio(r.tong_gio_phu) : "—"}
+          </span>
+        </td>
+      )}
+
+      <td className={`${td} text-muted-foreground`}>{formatDate(r.ngay)}</td>
+
+      <td className={td}>
+        <div className="flex flex-col gap-1.5">
+          {isLocked ? (
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/20"
+              title={r.ly_do_khoa}
+            >
+              🔒 Đã khóa
+            </span>
+          ) : hasCheckout ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Hợp lệ
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+              Chưa Hợp lệ
+            </span>
+          )}
+          {isViPham && (
+            <button
+              onClick={() => onViPham(r)}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 transition-colors cursor-pointer"
+            >
+              <span className="animate-pulse">🚨</span>Vi phạm
+              {r.vi_pham_so_lan > 1 && (
+                <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none">
+                  {r.vi_pham_so_lan}x
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+      </td>
+
+
+      <td className={`${td} text-center`}>
+        {stats?.phieu ? (
+          <span className="font-semibold text-violet-400 bg-violet-500/8 px-2 py-0.5 rounded text-xs">
+            {stats.phieu.toLocaleString()}
+          </span>
+        ) : (
+          <span className="text-muted-foreground/30 text-xs">—</span>
+        )}
+      </td>
+      <td className={`${td} text-center`}>
+        {stats?.kien ? (
+          <span className="font-semibold text-sky-400 bg-sky-500/8 px-2 py-0.5 rounded text-xs">
+            {stats.kien.toLocaleString()}
+          </span>
+        ) : (
+          <span className="text-muted-foreground/30 text-xs">—</span>
+        )}
+      </td>
+      <td className={`${td} text-center`}>
+        {stats?.dong ? (
+          <span className="font-semibold text-orange-400 bg-orange-500/8 px-2 py-0.5 rounded text-xs">
+            {stats.dong.toLocaleString()}
+          </span>
+        ) : (
+          <span className="text-muted-foreground/30 text-xs">—</span>
+        )}
+      </td>
+
+      <td
+        className={`${td} text-muted-foreground max-w-[160px] truncate`}
+        title={r.ghi_chu}
+      >
+        {r.ghi_chu || <span className="opacity-40 italic">Chưa có</span>}
+      </td>
+
+      {/* Thao tác — chỉ hiện với role !== 30 */}
+      {role !== 30 && (
+        <td className={`${td} text-center`}>
+          <div className="flex items-center justify-center gap-1.5">
+            {!isLocked && (
+              <button
+                onClick={() => onGhiChu(r)}
+                className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:border-ring hover:text-foreground transition-colors"
+              >
+                Ghi chú
+              </button>
+            )}
+            <button
+              onClick={() => onKhoa(r)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                isLocked
+                  ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/15"
+                  : "text-orange-400 border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/15"
+              }`}
+            >
+              {isLocked ? "🔓 Mở khóa" : "🔒 Khóa"}
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
+  );
+});
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ChamCongTable({ role }) {
   const [data, setData] = useState([]);
@@ -1227,15 +1487,14 @@ export default function ChamCongTable({ role }) {
   const [filterViPham] = useState(false);
   const [filterBoPhan, setFilterBoPhan] = useState("");
   const [filterChucVu, setFilterChucVu] = useState("");
-  const [filterTrangThai, setFilterTrangThai] = useState(""); 
+  const [filterTrangThai, setFilterTrangThai] = useState("");
+  const [filterNangSuat, setFilterNangSuat] = useState("");
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
-    return {
-      startDate: now,
-      endDate: now,
-    };
+    return { startDate: now, endDate: now };
   });
 
+  // ── Dữ liệu chấm công ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -1256,52 +1515,171 @@ export default function ChamCongTable({ role }) {
     setSelected(new Set());
   }, [data]);
 
-  const boPhanList = [
-    ...new Set(data.map((r) => r.bo_phan).filter(Boolean)),
-  ].sort();
-  const chucVuList = [
-    ...new Set(data.map((r) => r.chuc_vu).filter(Boolean)),
-  ].sort();
+  // ── Đối chiếu năng suất từ NhanSuSoan (chỉ phiếu Hoàn thành) ────────────────
+  // Map key: "MANV|YYYY-MM-DD" -> { phieu, kien, dong }
+  const [phieuStatsMap, setPhieuStatsMap] = useState(new Map());
+  const [loadingPhieuStats, setLoadingPhieuStats] = useState(false);
 
-  const filtered = data.filter((r) => {
-    if (role === 30 && r.bo_phan?.toLowerCase() !== "nhà cung cấp") return false;
-    if (filterViPham && !r.vi_pham_cham_ho) return false;
-    if (filterBoPhan && r.bo_phan !== filterBoPhan) return false;
-    if (filterChucVu && r.chuc_vu !== filterChucVu) return false;
-    if (filterTrangThai === "hop_le" && (r.is_locked || !r.gio_ra)) return false;
-if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return false;
-    if (!search) return true;
+  const fetchPhieuStats = useCallback(async () => {
+    if (!dateRange.startDate || !dateRange.endDate) {
+      setPhieuStatsMap(new Map());
+      return;
+    }
+    setLoadingPhieuStats(true);
+    try {
+      const res = await nhanSuSoanService.getAllNhanSuSoan({
+        page: 1,
+        limit: 100000, // lấy hết phiếu Hoàn thành khớp khoảng ngày
+        trangThai: "Hoàn thành",
+        tuNgayHT: toApiStr(dateRange.startDate),
+        denNgayHT: toApiStr(dateRange.endDate),
+      });
+      const list = res?.data || res?.items || [];
+      const map = new Map();
+
+      list.forEach((item) => {
+        // ✅ Chỉ tính phiếu có tgHoanThanh rơi đúng vào 1 ngày cụ thể
+        const ngayHT = toDateKeyVN(item.tgHoanThanh);
+        if (!ngayHT) return;
+
+        // ✅ Cộng dồn RIÊNG cho từng vai trò: nếu 1 người vừa Soạn vừa Kiểm
+        // chéo trên CÙNG 1 phiếu thì tính là 2 lượt (VD: Soạn 2 phiếu/3 kiện/
+        // 2 dòng + Kiểm chéo 2 phiếu/3 kiện/2 dòng = Tổng 4 phiếu/6 kiện/4
+        // dòng) — không dedupe giữa 2 vai trò như trước nữa. Trong CÙNG 1
+        // vai trò (VD trùng mã do mã phụ trỏ về mã chính) vẫn dùng Set để
+        // không cộng đôi.
+        const soanCodes = extractMaNVSet(item.nvSoanChiTiet, item.nvSoan);
+        const kcCodes = extractMaNVSet(item.nvKCChiTiet, item.nvKC);
+
+        const addStats = (code) => {
+          const key = `${code}|${ngayHT}`;
+          const entry = map.get(key) || { phieu: 0, kien: 0, dong: 0 };
+          entry.phieu += 1;
+          entry.kien += item.kien || 0;
+          entry.dong += item.dong || 0;
+          map.set(key, entry);
+        };
+
+        soanCodes.forEach(addStats);
+        kcCodes.forEach(addStats);
+      });
+
+      setPhieuStatsMap(map);
+    } catch (err) {
+      console.error("Lỗi tải thống kê phiếu Hoàn thành:", err);
+    } finally {
+      setLoadingPhieuStats(false);
+    }
+  }, [dateRange]);
+
+  useEffect(() => {
+    fetchPhieuStats();
+  }, [fetchPhieuStats]);
+
+  // Map record._id -> stats (tính 1 lần khi data hoặc phieuStatsMap đổi,
+  // KHÔNG tính lại mỗi lần render/toggle chọn dòng).
+  const statsByRecordId = useMemo(() => {
+    const map = new Map();
+    data.forEach((r) => {
+      const key = `${normalizeCode(r.ma_nhan_vien)}|${toDateKeyVN(r.ngay)}`;
+      map.set(r._id, phieuStatsMap.get(key) || null);
+    });
+    return map;
+  }, [data, phieuStatsMap]);
+
+  const coNangSuatRecord = useCallback(
+    (r) => {
+      const s = statsByRecordId.get(r._id);
+      return !!s && ((s.phieu || 0) > 0 || (s.kien || 0) > 0 || (s.dong || 0) > 0);
+    },
+    [statsByRecordId],
+  );
+
+  // ── Danh sách lọc (memo hoá — chỉ tính lại khi data đổi) ────────────────────
+  const boPhanList = useMemo(
+    () => [...new Set(data.map((r) => r.bo_phan).filter(Boolean))].sort(),
+    [data],
+  );
+  const chucVuList = useMemo(
+    () => [...new Set(data.map((r) => r.chuc_vu).filter(Boolean))].sort(),
+    [data],
+  );
+
+  const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return (
-      r.ma_nhan_vien?.toLowerCase().includes(q) ||
-      r.ten_nhan_vien?.toLowerCase().includes(q)
-    );
-  });
+    return data.filter((r) => {
+      if (role === 30 && r.bo_phan?.toLowerCase() !== "nhà cung cấp")
+        return false;
+      if (filterViPham && !r.vi_pham_cham_ho) return false;
+      if (filterBoPhan && r.bo_phan !== filterBoPhan) return false;
+      if (filterChucVu && r.chuc_vu !== filterChucVu) return false;
+      if (filterTrangThai === "hop_le" && (r.is_locked || !r.gio_ra))
+        return false;
+      if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra))
+        return false;
+      if (filterNangSuat === "co" && !coNangSuatRecord(r)) return false;
+      if (filterNangSuat === "khong" && coNangSuatRecord(r)) return false;
+      if (!q) return true;
+      return (
+        r.ma_nhan_vien?.toLowerCase().includes(q) ||
+        r.ten_nhan_vien?.toLowerCase().includes(q)
+      );
+    });
+  }, [
+    data,
+    role,
+    filterViPham,
+    filterBoPhan,
+    filterChucVu,
+    filterTrangThai,
+    filterNangSuat,
+    search,
+    coNangSuatRecord,
+  ]);
 
-  const soViPham = data.filter((r) => r.vi_pham_cham_ho).length;
+  const soViPham = useMemo(
+    () => data.filter((r) => r.vi_pham_cham_ho).length,
+    [data],
+  );
+  const soKhongNangSuat = useMemo(
+    () =>
+      filtered.filter((r) => !r.is_locked && r.gio_ra && !coNangSuatRecord(r))
+        .length,
+    [filtered, coNangSuatRecord],
+  );
+  const selectableCount = useMemo(
+    () => filtered.filter((r) => !r.is_locked).length,
+    [filtered],
+  );
 
-  // Chỉ cho phép select những row KHÔNG bị khóa
-  const toggleSelect = (id) => {
-    const record = data.find((r) => r._id === id);
-    if (record?.is_locked) return;
+  // ── Handlers (useCallback để giữ định danh ổn định cho TableRow memo) ──────
+  const toggleSelect = useCallback((id) => {
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-  };
-  const toggleAll = () => {
-    const selectableIds = filtered
-      .filter((r) => !r.is_locked)
-      .map((r) => r._id);
-    if (selected.size === selectableIds.length && selectableIds.length > 0) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(selectableIds));
-    }
-  };
+  }, []);
 
-  const exportSelected = async () => {
+  const toggleAll = useCallback(() => {
+    setSelected((prev) => {
+      const selectableIds = filtered.filter((r) => !r.is_locked).map((r) => r._id);
+      if (prev.size === selectableIds.length && selectableIds.length > 0) {
+        return new Set();
+      }
+      return new Set(selectableIds);
+    });
+  }, [filtered]);
+
+  // Bọc setGhiChuModal thành 1 hàm có thêm `.refresh` để InlineCellEdit (Vào
+  // Phụ / Ra Phụ) dùng chung callback ổn định thay vì tạo closure mới mỗi
+  // lần render dòng.
+  const openGhiChu = useCallback((r) => setGhiChuModal(r), []);
+  openGhiChu.refresh = fetchData;
+  const openKhoa = useCallback((r) => setKhoaModal(r), []);
+  const openViPham = useCallback((r) => setViPhamModal(r), []);
+
+  const exportSelected = useCallback(async () => {
     const rows = filtered.filter((r) => selected.has(r._id) && !r.is_locked);
     if (rows.length === 0) return;
 
@@ -1349,6 +1727,7 @@ if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return fal
         : []),
       { header: "Ngày", key: "ngay", width: 13 },
       { header: "Trạng Thái", key: "trang_thai", width: 14 },
+      { header: "Năng Suất", key: "nang_suat", width: 14 },
       { header: "Phiếu", key: "so_phieu", width: 8 },
       { header: "Kiện", key: "so_kien", width: 8 },
       { header: "Dòng", key: "so_dong", width: 8 },
@@ -1379,6 +1758,8 @@ if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return fal
     });
     rows.forEach((r, idx) => {
       const hasCheckout = !!r.gio_ra;
+      const s = statsByRecordId.get(r._id);
+      const coNS = !!s && ((s.phieu || 0) > 0 || (s.kien || 0) > 0 || (s.dong || 0) > 0);
       const row = ws.addRow({
         stt: idx + 1,
         ma_nhan_vien: r.ma_nhan_vien,
@@ -1397,9 +1778,10 @@ if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return fal
           : {}),
         ngay: fmtDate(r.ngay),
         trang_thai: hasCheckout ? "Hợp lệ" : "Chưa hợp lệ",
-        so_phieu: r.so_phieu ?? "",
-        so_kien: r.so_kien ?? "",
-        so_dong: r.so_dong ?? "",
+        nang_suat: coNS ? "Có năng suất" : hasCheckout ? "Không năng suất" : "Chưa hoàn tất",
+        so_phieu: s?.phieu ?? "",
+        so_kien: s?.kien ?? "",
+        so_dong: s?.dong ?? "",
         ghi_chu: r.ghi_chu || "",
       });
       row.height = 18;
@@ -1430,14 +1812,9 @@ if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return fal
     a.download = `cham-cong_${rows.length}-ban-ghi.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [filtered, selected, role, statsByRecordId]);
 
-  const th =
-    "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-4 bg-muted/40 border-b border-border text-left whitespace-nowrap";
-  const td = "px-5 py-4 text-sm border-b border-border/50 align-middle";
-
-  // Tính số row có thể select (không bị khóa)
-  const selectableCount = filtered.filter((r) => !r.is_locked).length;
+  const colSpan = role === 30 ? 15 : 20;
 
   return (
     <>
@@ -1551,16 +1928,24 @@ if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return fal
             ))}
           </select>
           <select
-  value={filterTrangThai}
-  onChange={(e) => setFilterTrangThai(e.target.value)}
-  className="bg-card border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring transition-all cursor-pointer min-w-[160px]"
->
-  <option value="all">Tất cả trạng thái</option>
-  <option value="hop_le">Hợp lệ</option>
-  <option value="chua_hop_le">Chưa hợp lệ</option>
-</select>
+            value={filterTrangThai}
+            onChange={(e) => setFilterTrangThai(e.target.value)}
+            className="bg-card border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring transition-all cursor-pointer min-w-[160px]"
+          >
+            <option value="">Tất cả trạng thái</option>
+            <option value="hop_le">Hợp lệ</option>
+            <option value="chua_hop_le">Chưa hợp lệ</option>
+          </select>
+          <select
+            value={filterNangSuat}
+            onChange={(e) => setFilterNangSuat(e.target.value)}
+            className="bg-card border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring transition-all cursor-pointer min-w-[170px]"
+          >
+            <option value="">Tất cả năng suất</option>
+            <option value="co">✅ Có năng suất</option>
+            <option value="khong">⚠️ Không có năng suất</option>
+          </select>
         </div>
-        
 
         {/* Table */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
@@ -1569,6 +1954,17 @@ if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return fal
               Lịch sử chấm công
             </span>
             <div className="flex items-center gap-2">
+              {loadingPhieuStats && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <span className="animate-spin">◌</span> Đang đối chiếu năng
+                  suất...
+                </span>
+              )}
+              {soKhongNangSuat > 0 && (
+                <span className="text-xs font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
+                  ⚠️ {soKhongNangSuat} không năng suất
+                </span>
+              )}
               {soViPham > 0 && (
                 <span className="text-xs font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
                   🚨 {soViPham} vi phạm
@@ -1619,7 +2015,7 @@ if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return fal
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={role === 30 ? 14 : 19}
+                      colSpan={colSpan}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -1630,7 +2026,7 @@ if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return fal
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={role === 30 ? 14 : 19}
+                      colSpan={colSpan}
                       className="text-center py-16 text-sm text-muted-foreground"
                     >
                       <div className="text-4xl mb-3 opacity-30">⏱</div>Chưa có
@@ -1638,214 +2034,20 @@ if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra)) return fal
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((r, i) => {
-                    const isChecked = selected.has(r._id);
-                    const hasCheckout = !!r.gio_ra;
-                    const isViPham = !!r.vi_pham_cham_ho;
-                    const isLocked = !!r.is_locked;
-
-                    return (
-                      <tr
-                        key={r._id}
-                        className={`transition-colors ${
-                          isLocked
-                            ? "bg-orange-500/5 hover:bg-orange-500/8 opacity-60"
-                            : isViPham
-                              ? "bg-red-500/5 hover:bg-red-500/10"
-                              : isChecked
-                                ? "bg-emerald-500/5"
-                                : "hover:bg-muted/20"
-                        }`}
-                      >
-                        <td className={td}>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleSelect(r._id)}
-                            disabled={isLocked}
-                            className="w-4 h-4 rounded accent-emerald-500 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
-                          />
-                        </td>
-                        <td
-                          className={`${td} text-muted-foreground text-xs font-mono`}
-                        >
-                          {String(i + 1).padStart(2, "0")}
-                        </td>
-                        <td className={td}>
-                          <span className="font-mono text-sm font-semibold text-emerald-400 bg-emerald-500/8 px-2 py-0.5 rounded-md">
-                            {r.ma_nhan_vien}
-                          </span>
-                        </td>
-                        <td className={`${td} font-medium text-foreground`}>
-                          {r.ten_nhan_vien}
-                        </td>
-                        <td className={`${td} text-muted-foreground`}>
-                          {r.bo_phan || "—"}
-                        </td>
-                        <td className={`${td} text-muted-foreground`}>
-                          {r.chuc_vu || "—"}
-                        </td>
-                        <td className={td}>
-                          <span className="font-mono text-sm text-sky-400 font-semibold">
-                            {formatTime(r.gio_vao) || "—"}
-                          </span>
-                        </td>
-                        <td className={td}>
-                          <span
-                            className={`font-mono text-sm font-semibold ${hasCheckout ? "text-orange-400" : "text-muted-foreground/50"}`}
-                          >
-                            {formatTime(r.gio_ra) || "—"}
-                          </span>
-                        </td>
-                        <td className={td}>
-                          <span
-                            className={`font-mono text-sm font-semibold ${r.tong_gio > 0 ? "text-violet-400" : "text-muted-foreground/50"}`}
-                          >
-                            {r.tong_gio > 0 ? formatTongGio(r.tong_gio) : "—"}
-                          </span>
-                        </td>
-
-                        {role !== 30 && (
-                          <td className={td}>
-                            <InlineCellEdit
-                              record={r}
-                              field="gio_vao_phu"
-                              onSaved={fetchData}
-                            />
-                          </td>
-                        )}
-                        {role !== 30 && (
-                          <td className={td}>
-                            <InlineCellEdit
-                              record={r}
-                              field="gio_ra_phu"
-                              minTimeField="gio_vao_phu"
-                              onSaved={fetchData}
-                            />
-                          </td>
-                        )}
-                        {role !== 30 && (
-                          <td className={td}>
-                            <span
-                              className={`font-mono text-sm font-semibold ${r.tong_gio_phu > 0 ? "text-teal-400" : "text-muted-foreground/30"}`}
-                            >
-                              {r.tong_gio_phu > 0
-                                ? formatTongGio(r.tong_gio_phu)
-                                : "—"}
-                            </span>
-                          </td>
-                        )}
-
-                        <td className={`${td} text-muted-foreground`}>
-                          {formatDate(r.ngay)}
-                        </td>
-
-                        <td className={td}>
-                          <div className="flex flex-col gap-1.5">
-                            {isLocked ? (
-                              <span
-                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                                title={r.ly_do_khoa}
-                              >
-                                🔒 Đã khóa
-                              </span>
-                            ) : hasCheckout ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                Hợp lệ
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-                                Chưa Hợp lệ
-                              </span>
-                            )}
-                            {isViPham && (
-                              <button
-                                onClick={() => setViPhamModal(r)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 transition-colors cursor-pointer"
-                              >
-                                <span className="animate-pulse">🚨</span>Vi phạm
-                                {r.vi_pham_so_lan > 1 && (
-                                  <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none">
-                                    {r.vi_pham_so_lan}x
-                                  </span>
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className={`${td} text-center`}>
-                          {r.so_phieu != null ? (
-                            <span className="font-semibold text-violet-400 bg-violet-500/8 px-2 py-0.5 rounded text-xs">
-                              {r.so_phieu.toLocaleString()}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/30 text-xs">
-                              —
-                            </span>
-                          )}
-                        </td>
-                        <td className={`${td} text-center`}>
-                          {r.so_kien != null ? (
-                            <span className="font-semibold text-sky-400 bg-sky-500/8 px-2 py-0.5 rounded text-xs">
-                              {r.so_kien.toLocaleString()}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/30 text-xs">
-                              —
-                            </span>
-                          )}
-                        </td>
-                        <td className={`${td} text-center`}>
-                          {r.so_dong != null ? (
-                            <span className="font-semibold text-orange-400 bg-orange-500/8 px-2 py-0.5 rounded text-xs">
-                              {r.so_dong.toLocaleString()}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/30 text-xs">
-                              —
-                            </span>
-                          )}
-                        </td>
-                        <td
-                          className={`${td} text-muted-foreground max-w-[160px] truncate`}
-                          title={r.ghi_chu}
-                        >
-                          {r.ghi_chu || (
-                            <span className="opacity-40 italic">Chưa có</span>
-                          )}
-                        </td>
-
-                        {/* Thao tác — chỉ hiện với role !== 30 */}
-                        {role !== 30 && (
-                          <td className={`${td} text-center`}>
-                            <div className="flex items-center justify-center gap-1.5">
-                              {!isLocked && (
-                                <button
-                                  onClick={() => setGhiChuModal(r)}
-                                  className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:border-ring hover:text-foreground transition-colors"
-                                >
-                                  Ghi chú
-                                </button>
-                              )}
-                              <button
-                                onClick={() => setKhoaModal(r)}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                                  isLocked
-                                    ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/15"
-                                    : "text-orange-400 border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/15"
-                                }`}
-                              >
-                                {isLocked ? "🔓 Mở khóa" : "🔒 Khóa"}
-                              </button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })
+                  filtered.map((r, i) => (
+                    <TableRow
+                      key={r._id}
+                      record={r}
+                      index={i}
+                      isChecked={selected.has(r._id)}
+                      role={role}
+                      stats={statsByRecordId.get(r._id) || null}
+                      onToggleSelect={toggleSelect}
+                      onGhiChu={openGhiChu}
+                      onKhoa={openKhoa}
+                      onViPham={openViPham}
+                    />
+                  ))
                 )}
               </tbody>
             </table>
