@@ -9,6 +9,8 @@ const ROLE_FULL = 28;
 // ✅ Single source of truth — phải khớp với schema backend
 const BO_PHAN_CHUC_VU = {
   "Nhà Cung Cấp": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất", "Tăng Ca Soạn"],
+  "Dịch Vụ Ngoài": ["Bảo Vệ", "Vệ Sinh"],
+
   "Xuất hàng": [
     "Xử lý đơn hàng",
     "Soạn hàng",

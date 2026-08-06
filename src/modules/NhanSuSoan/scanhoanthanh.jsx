@@ -135,8 +135,10 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
         return true;
       });
 
+      // ✅ Loại cả phiếu "Chưa soạn" (chưa giao soạn) lẫn phiếu "Hoàn thành"
+      // (đã xong, không cần/không cho quét KC lại) ra khỏi danh sách hợp lệ.
       const validItems = uniqueItems.filter(
-        (it) => it.trangThai !== "Chưa soạn",
+        (it) => it.trangThai !== "Chưa soạn" && it.trangThai !== "Hoàn thành",
       );
       const skippedCount = uniqueItems.length - validItems.length;
 
@@ -182,7 +184,7 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
       );
       if (skippedCount > 0 && !conflict) {
         setScanError(
-          `Đã bỏ qua ${skippedCount} phiếu đang ở trạng thái "Chưa soạn" trong số phiếu đã chọn — cần giao soạn trước.`,
+          `Đã bỏ qua ${skippedCount} phiếu trong số phiếu đã chọn (đang "Chưa soạn" cần giao soạn trước, hoặc đã "Hoàn thành" rồi).`,
         );
       }
     }
@@ -240,6 +242,12 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
         setScanError(
           `Phiếu "${code}" đang ở trạng thái "Chưa soạn" — cần giao soạn trước khi nhập KC.`,
         );
+        return;
+      }
+
+      // ✅ Phiếu đã "Hoàn thành" thì không cho quét/nhập KC lại nữa.
+      if (matched.trangThai === "Hoàn thành") {
+        setScanError(`Phiếu "${code}" đã ở trạng thái "Hoàn thành" rồi.`);
         return;
       }
 

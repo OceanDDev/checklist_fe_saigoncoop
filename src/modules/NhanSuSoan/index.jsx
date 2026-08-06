@@ -1107,145 +1107,154 @@ const NhanSuSoanTable = forwardRef(
 
     return (
       <div className="mx-auto max-w-[1900px] space-y-4 p-4 md:p-6 bg-gradient-to-b from-slate-50 to-white min-h-screen">
-        {/* Header dùng chung cho cả 3 tab */}
-        <div className="flex flex-col gap-3 rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-200 backdrop-blur md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-baseline gap-3">
-              <h1 className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
-                {title}
-              </h1>
+    {/* ✅ Header tách 2 hàng cố định:
+            - Hàng 1: tiêu đề (trái) + Tabs (phải) — Tabs KHÔNG BAO GIỜ bị xê
+              dịch, vì hàng này không chứa bất kỳ nút thao tác nào khác.
+            - Hàng 2: toolbar chứa toàn bộ nút thao tác theo từng tab — tự do
+              wrap/thêm bớt nút thoải mái mà không ảnh hưởng đến Tabs ở trên. */}
+        <div className="space-y-3">
+          {/* Hàng 1: Tiêu đề + Tabs cố định */}
+          <div className="flex flex-col gap-3 rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-200 backdrop-blur md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-baseline gap-3">
+                <h1 className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
+                  {title}
+                </h1>
 
-              {/* ✅ Khoảng ngày đang lọc — chỉ hiện ở tab Dashboard, cùng size/kiểu
-        chữ với tiêu đề (text-2xl, gradient giống hệt) cho đồng bộ. */}
-              {view === "dashboard" && (
-                <span className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
-                  {dayjs(dashTuNgay).format("DD/MM/YYYY")} -{" "}
-                  {dayjs(dashDenNgay).format("DD/MM/YYYY")}
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-slate-500">
-              {view === "table"
-                ? description
-                : view === "dashboard"
-                  ? "Tổng quan đơn hàng theo chuỗi, chuyến, trạng thái và tiến độ xử lý"
-                  : "Năng suất soạn hàng / kiểm chéo theo bộ phận, chức vụ và từng nhân viên"}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <ViewTabs
-              view={view}
-              onChange={setView}
-              hideNhanSu={isViewerRole}
-            />
-
-            {view === "table" && (
-              <div className="flex flex-wrap items-center gap-3">
-                {!isViewerRole && selectedIds.size > 0 && (
-                  <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
-                    Đã chọn {selectedIds.size} phiếu
+                {/* Khoảng ngày đang lọc — chỉ hiện ở tab Dashboard */}
+                {view === "dashboard" && (
+                  <span className="bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
+                    {dayjs(dashTuNgay).format("DD/MM/YYYY")} -{" "}
+                    {dayjs(dashDenNgay).format("DD/MM/YYYY")}
                   </span>
                 )}
+              </div>
+              <p className="text-sm text-slate-500">
+                {view === "table"
+                  ? description
+                  : view === "dashboard"
+                    ? "Tổng quan đơn hàng theo chuỗi, chuyến, trạng thái và tiến độ xử lý"
+                    : "Năng suất soạn hàng / kiểm chéo theo bộ phận, chức vụ và từng nhân viên"}
+              </p>
+            </div>
 
-                {/* Nhóm 1: thao tác xử lý trên phiếu (theo đúng luồng: gộp -> giao -> huỷ giao -> hoàn thành)
-                    Ẩn hoàn toàn với role view-only (58). */}
-                {!isViewerRole && (
-                  <>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <GopPhieu
-                        ref={gopPhieuRef}
-                        onSuccess={handleActionSuccess}
-                      />
-                      <ScanGiaoPhieu
-                        ref={scanGiaoPhieuRef}
-                        onSuccess={handleActionSuccess}
-                      />
-                      <HuyGiaoPhieu
-                        ref={huyGiaoPhieuRef}
-                        onSuccess={handleActionSuccess}
-                      />
-                      <ScanHoanThanh
-                        ref={scanHoanThanhRef}
-                        onSuccess={handleActionSuccess}
-                      />
-                    </div>
+            {/* ✅ Tabs neo cố định bên phải — flex-shrink-0 để không bao giờ
+                bị co lại hay đẩy đi bởi bất cứ nội dung nào khác trong hàng này. */}
+            <div className="flex-shrink-0">
+              <ViewTabs
+                view={view}
+                onChange={setView}
+                hideNhanSu={isViewerRole}
+              />
+            </div>
+          </div>
 
-                    {/* Đường chia nhóm */}
-                    <div className="hidden h-6 w-px bg-slate-200 sm:block" />
-                  </>
-                )}
+          {/* Hàng 2: Toolbar — chỉ hiện khi có nút cần dùng (table/dashboard),
+              tách khối riêng nên thêm/bớt bao nhiêu nút cũng không đụng Tabs. */}
+          {(view === "table" || view === "dashboard") && (
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white/80 p-3 shadow-sm ring-1 ring-slate-200 backdrop-blur">
+              {view === "table" && (
+                <>
+                  {!isViewerRole && selectedIds.size > 0 && (
+                    <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
+                      Đã chọn {selectedIds.size} phiếu
+                    </span>
+                  )}
 
-                {/* Nhóm 2: dữ liệu (nhập / xuất / xoá) — role view-only chỉ
-                    còn thấy nút Xuất Excel. */}
-                <div className="flex flex-wrap items-center gap-2">
+                  {/* Nhóm 1: thao tác xử lý trên phiếu (gộp -> giao -> huỷ giao -> hoàn thành)
+                      Ẩn hoàn toàn với role view-only (58). */}
                   {!isViewerRole && (
                     <>
-                      <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
-                      <ImportPhanBo onImported={fetchNhanSuSoan} />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <GopPhieu
+                          ref={gopPhieuRef}
+                          onSuccess={handleActionSuccess}
+                        />
+                        <ScanGiaoPhieu
+                          ref={scanGiaoPhieuRef}
+                          onSuccess={handleActionSuccess}
+                        />
+                        <HuyGiaoPhieu
+                          ref={huyGiaoPhieuRef}
+                          onSuccess={handleActionSuccess}
+                        />
+                        <ScanHoanThanh
+                          ref={scanHoanThanhRef}
+                          onSuccess={handleActionSuccess}
+                        />
+                      </div>
+
+                      {/* Đường chia nhóm */}
+                      <div className="hidden h-6 w-px bg-slate-200 sm:block" />
                     </>
                   )}
-                  <ExportExcelButton
-                    selectedItems={selectedItems}
-                    filters={filters}
-                    isViewerRole={isViewerRole}
-                    disabled={loading}
-                  />
 
-                  {canDelete && (
-                    <button
-                      type="button"
-                      onClick={handleDeleteSelected}
-                      disabled={deleting || selectedIds.size === 0}
-                      title={
-                        selectedIds.size > 0
-                          ? `Xoá ${selectedIds.size} phiếu đã chọn`
-                          : "Chọn ít nhất 1 phiếu để xoá"
-                      }
-                      className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-rose-700 hover:to-red-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:hover:from-rose-600 disabled:hover:to-red-600"
-                    >
-                      {deleting ? (
-                        <Loader2 size={15} className="animate-spin" />
-                      ) : (
-                        <Trash2 size={15} />
-                      )}
-                      {deleting
-                        ? "Đang xoá..."
-                        : selectedIds.size > 0
-                          ? `Xoá (${selectedIds.size})`
-                          : "Xoá"}
-                    </button>
+                  {/* Nhóm 2: dữ liệu (nhập / xuất / xoá) — role view-only chỉ
+                      còn thấy nút Xuất Excel. */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!isViewerRole && (
+                      <>
+                        <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
+                        <ImportPhanBo onImported={fetchNhanSuSoan} />
+                      </>
+                    )}
+                    <ExportExcelButton
+                      selectedItems={selectedItems}
+                      filters={filters}
+                      isViewerRole={isViewerRole}
+                      disabled={loading}
+                    />
+
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteSelected}
+                        disabled={deleting || selectedIds.size === 0}
+                        title={
+                          selectedIds.size > 0
+                            ? `Xoá ${selectedIds.size} phiếu đã chọn`
+                            : "Chọn ít nhất 1 phiếu để xoá"
+                        }
+                        className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-rose-700 hover:to-red-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:hover:from-rose-600 disabled:hover:to-red-600"
+                      >
+                        {deleting ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={15} />
+                        )}
+                        {deleting
+                          ? "Đang xoá..."
+                          : selectedIds.size > 0
+                            ? `Xoá (${selectedIds.size})`
+                            : "Xoá"}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {view === "dashboard" && (
+                <>
+                  {dashMeta.loading && (
+                    <Loader2 size={18} className="animate-spin text-blue-500" />
                   )}
-                </div>
-              </div>
-            )}
-
-            {view === "dashboard" && (
-              <div className="flex flex-wrap items-center gap-2">
-                {dashMeta.loading && (
-                  <Loader2 size={18} className="animate-spin text-blue-500" />
-                )}
-
-                {/* ✅ MỚI: badge nổi bật hiển thị khoảng ngày đang lọc + số bản ghi,
-        đứng ngay cạnh ô chọn ngày để dễ nhận biết đang xem dữ liệu ngày
-        nào mà không cần mở lại popup lịch. */}
-
-                <DateRangeFilter
-                  label="Lọc theo TG import"
-                  startValue={dashTuNgay}
-                  endValue={dashDenNgay}
-                  onChange={(s, e) => {
-                    setDashTuNgay(s);
-                    setDashDenNgay(e);
-                  }}
-                  onClear={() => {
-                    setDashTuNgay(getDefaultTuNgay());
-                    setDashDenNgay(getDefaultDenNgay());
-                  }}
-                />
-              </div>
-            )}
-          </div>
+                  <DateRangeFilter
+                    label="Lọc theo TG import"
+                    startValue={dashTuNgay}
+                    endValue={dashDenNgay}
+                    onChange={(s, e) => {
+                      setDashTuNgay(s);
+                      setDashDenNgay(e);
+                    }}
+                    onClear={() => {
+                      setDashTuNgay(getDefaultTuNgay());
+                      setDashDenNgay(getDefaultDenNgay());
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Tab Dashboard */}

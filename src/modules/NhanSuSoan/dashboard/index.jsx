@@ -337,14 +337,23 @@ const classifyKPI = (item, now) => {
 /* ------------------------------------------------------------------ */
 const RADIAN = Math.PI / 180;
 
-const computePieLabelLayout = (data, cx, cy, outerRadius, chartHeight) => {
+const computePieLabelLayout = (
+  data,
+  cx,
+  cy,
+  outerRadius,
+  chartHeight,
+  bottomReserve = 14,
+) => {
   const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
   const labelRadius = outerRadius + 22;
   const anchorRadius = outerRadius + 4;
   const rowHeight = 18;
 
   const minY = 14;
-  const maxY = chartHeight - 14;
+  // ✅ Chừa thêm khoảng trống ở đáy cho phần Legend (mặc định Legend cao
+  // ~24-28px) để nhãn số liệu không bị rớt xuống đè lên chữ chú thích.
+  const maxY = chartHeight - bottomReserve;
 
   let cumulated = 0;
   const positioned = data.map((d) => {
@@ -398,14 +407,14 @@ const computePieLabelLayout = (data, cx, cy, outerRadius, chartHeight) => {
   return positioned;
 };
 
-const usePieLabelRenderer = (data, chartHeight) =>
+const usePieLabelRenderer = (data, chartHeight, bottomReserve = 14) =>
   useMemo(() => {
     let layoutCache = null;
     let cacheKey = null;
 
     return function PieLabel(props) {
       const { cx, cy, outerRadius, index } = props;
-      const key = `${cx}-${cy}-${outerRadius}-${chartHeight}`;
+      const key = `${cx}-${cy}-${outerRadius}-${chartHeight}-${bottomReserve}`;
       if (!layoutCache || cacheKey !== key) {
         layoutCache = computePieLabelLayout(
           data,
@@ -413,6 +422,7 @@ const usePieLabelRenderer = (data, chartHeight) =>
           cy,
           outerRadius,
           chartHeight,
+          bottomReserve,
         );
         cacheKey = key;
       }
@@ -447,7 +457,7 @@ const usePieLabelRenderer = (data, chartHeight) =>
         </g>
       );
     };
-  }, [data, chartHeight]);
+  }, [data, chartHeight, bottomReserve]);
 
 /* ------------------------------------------------------------------ */
 /* StatCard                                                            */
@@ -1055,13 +1065,13 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
     };
   }, [stats.kpiDatRate]);
 
-  const chuyenLabel = usePieLabelRenderer(chainChartStats.chuyenData, 280);
+  const chuyenLabel = usePieLabelRenderer(chainChartStats.chuyenData, 280, 40);
   const trangThaiLabel = usePieLabelRenderer(
     chainChartStats.trangThaiData,
     280,
+    40,
   );
-  const kpiLabel = usePieLabelRenderer(stats.kpiData, 230);
-
+  const kpiLabel = usePieLabelRenderer(stats.kpiData, 280, 20);
   // ✅ MỚI: click vào 1 lát pie -> báo lên component cha (qua onNavigate)
   // để nhảy qua tab Bảng dữ liệu, áp đúng bộ lọc: chuỗi (nếu đang chọn
   // logo CF/CS) + chuyến/trạng thái vừa click + khoảng ngày đang xem.
@@ -1282,14 +1292,14 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
               trên {formatNumber(stats.kpiTotal)} phiếu có TG import
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={230} debounce={150}>
-            <PieChart margin={{ top: 24, right: 70, bottom: 24, left: 70 }}>
+        <ResponsiveContainer width="100%" height={280} debounce={150}>
+            <PieChart margin={{ top: 24, right: 70, bottom: 50, left: 70 }}>
               <Pie
                 data={stats.kpiData}
                 dataKey="value"
                 nameKey="name"
-                innerRadius={42}
-                outerRadius={68}
+                innerRadius={38}
+                outerRadius={62}
                 paddingAngle={2}
                 label={kpiLabel}
                 labelLine={false}

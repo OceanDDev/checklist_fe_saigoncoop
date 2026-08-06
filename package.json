@@ -32,7 +32,7 @@
     "dayjs": "^1.11.13",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
-    "framer-motion": "^12.18.1",
+    "framer-motion": "^12.43.0",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.517.0",

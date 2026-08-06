@@ -30,6 +30,8 @@ import { StatCard, DateRangeFilter } from "./index";
 /* ------------------------------------------------------------------ */
 const BO_PHAN_CHUC_VU = {
   "Nhà Cung Cấp": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất", "Tăng Ca Soạn"],
+  "Dịch Vụ Ngoài": ["Bảo Vệ", "Vệ Sinh"],
+
   "Xuất hàng": [
     "Xử lý đơn hàng",
     "Soạn hàng",
@@ -71,7 +73,7 @@ const TRANG_THAI_HOAN_THANH = "Hoàn thành";
 const EMPTY_STATS = { phieu: 0, kien: 0, dong: 0 };
 
 const KPI_STORAGE_KEY = "nhansusoan_kpi_target_v1";
-const KPI_DEFAULT = { phieu: 35, kien: 280, dong: 240 };
+const KPI_DEFAULT = { kien: 280, dong: 240 };
 
 const loadKpiFromStorage = () => {
   try {
@@ -79,7 +81,6 @@ const loadKpiFromStorage = () => {
     if (!raw) return { ...KPI_DEFAULT };
     const parsed = JSON.parse(raw);
     return {
-      phieu: Number(parsed.phieu) || KPI_DEFAULT.phieu,
       kien: Number(parsed.kien) || KPI_DEFAULT.kien,
       dong: Number(parsed.dong) || KPI_DEFAULT.dong,
     };
@@ -199,6 +200,19 @@ const isZeroRow = (row) =>
 const getDefaultTuNgay = () => dayjs().subtract(6, "day").format("YYYY-MM-DD");
 const getDefaultDenNgay = () => dayjs().format("YYYY-MM-DD");
 
+// ✅ MỚI: lấy ngày hôm nay (dùng cho nút "Hôm nay")
+const getToday = () => dayjs().format("YYYY-MM-DD");
+
+// ✅ MỚI: chuẩn hóa chuỗi tìm kiếm — bỏ dấu tiếng Việt + về chữ thường,
+// để search không phân biệt dấu/hoa-thường.
+const normalizeSearchText = (str) =>
+  (str || "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
 // ✅ Xây dựng bảng năng suất (dùng cho khối Tổng — thẻ số liệu SL nhân sự,
 // BQ đơn/người, BQ dòng/kiện hoàn thành).
 const computeBoPhanStats = (filteredDsNhanVien, map) => {
@@ -273,39 +287,129 @@ const computeBoPhanStats = (filteredDsNhanVien, map) => {
   };
 };
 
-// ✅ Trạng thái KPI của 1 "nhóm" (Tổng / CF / CS) cho 1 nhân viên — hàm
-// thuần, chỉ cần object có { byTrangThai, hasMaPhu, totalPhieu }.
-const getTrangThaiKPI = (group, isSingleDay, kpi) => {
-  if (!isSingleDay) return "khong-ap-dung";
-  if ((group.totalPhieu || 0) === 0) return "chua-bat-dau";
+/* ------------------------------------------------------------------ */
+/* Logic đánh giá KPI cột "Tổng" (CF + CS)                             */
+/* ------------------------------------------------------------------ */
+const KPI_NEAR_RATIO = 0.95;
 
-  const ht = group.byTrangThai[TRANG_THAI_HOAN_THANH] || EMPTY_STATS;
-
-  // ✅ Chỉ đánh giá (kể cả xét mã phụ) khi TẤT CẢ phiếu nhận trong ngày đã
-  // ở trạng thái "Hoàn thành". Nếu còn phiếu "Chưa soạn"/"Đang soạn" ->
-  // luôn hiện "—" như bình thường, kể cả khi có phiếu chấm bằng mã phụ.
-  if ((ht.phieu || 0) < (group.totalPhieu || 0)) return "chua-hoan-tat";
-
-  // ✅ Chỉ xét mã phụ SAU KHI đã soạn xong hết -> lúc này mới hiện badge
-  // "Mã phụ" (loại khỏi đánh giá đạt/chưa đạt).
-  if (group.hasMaPhu) return "khong-tinh-kpi";
-
-  const target = {
-    phieu: Number(kpi.phieu) || 0,
-    kien: Number(kpi.kien) || 0,
-    dong: Number(kpi.dong) || 0,
-  };
-  // ✅ Đổi từ AND -> OR: chỉ cần đạt 1 trong 3 tiêu chí (Phiếu / Kiện /
-  // Dòng) là coi như đạt KPI, không cần đạt cả 3.
-  const dat =
-    (ht.phieu || 0) >= target.phieu ||
-    (ht.kien || 0) >= target.kien ||
-    (ht.dong || 0) >= target.dong;
-  return dat ? "dat" : "chua-dat";
+const KPI_TIER_BG = {
+  0: "bg-emerald-200/70", // dat - xanh lá đậm
+  1: "bg-blue-200/70", // case1 - xanh dương đậm
+  2: "bg-orange-200/70", // case2 - cam đậm
+  3: "bg-rose-200/70", // chưa đạt - đỏ đậm
 };
 
-// ✅ Gộp dữ liệu 1 nhân viên từ 3 map (Tổng / CF / CS) thành 1 dòng duy nhất.
-const buildMergedRows = (filteredDsNhanVien, mapAll, mapCF, mapCS) => {
+const KPI_TIER_LABEL = {
+  0: undefined,
+  1: "Đạt ≥95% KPI, tính đủ",
+  2: "Đạt KPI nhờ cộng chéo CF/CS",
+  3: undefined,
+};
+
+// Các trạng thái không thực sự được chấm KPI -> để nền trắng, không tô màu
+const getRowKpiBg = (rowEval) => {
+  if (rowEval.status === "dat" || rowEval.status === "chua-dat") {
+    return {
+      bg: KPI_TIER_BG[rowEval.tier],
+      title: KPI_TIER_LABEL[rowEval.tier],
+    };
+  }
+  return { bg: "", title: undefined }; // mã phụ / chưa hoàn tất / chưa bắt đầu / không áp dụng
+};
+
+const KPI_TIER = { dat: 0, case1: 1, case2: 2, "chua-dat": 3 };
+
+const evaluateKpiRow = (row, isSingleDay, kpi) => {
+  const group = row.tong;
+  const naResult = (status) => ({
+    status,
+    tier: null,
+    kien: { state: status, display: group.totalKien || 0 },
+    dong: { state: status, display: group.totalDong || 0 },
+  });
+
+  if (!isSingleDay) return naResult("khong-ap-dung");
+  if ((group.totalPhieu || 0) === 0) return naResult("chua-bat-dau");
+
+  const ht = group.byTrangThai[TRANG_THAI_HOAN_THANH] || EMPTY_STATS;
+  if ((ht.phieu || 0) < (group.totalPhieu || 0))
+    return naResult("chua-hoan-tat");
+  if (group.hasMaPhu) return naResult("khong-tinh-kpi");
+
+  const target = { kien: Number(kpi.kien) || 0, dong: Number(kpi.dong) || 0 };
+  const htCF =
+    (row.cf && row.cf.byTrangThai[TRANG_THAI_HOAN_THANH]) || EMPTY_STATS;
+  const htCS =
+    (row.cs && row.cs.byTrangThai[TRANG_THAI_HOAN_THANH]) || EMPTY_STATS;
+
+  // Case 2: tìm số cao nhất trong 4 giá trị CF/CS x Kiện/Dòng,
+  // cộng chéo với số liệu KHÁC loại của người còn lại, so với KPI cùng
+  // loại với số max đó, cap không vượt KPI.
+  const candidates = [
+    { side: "cf", type: "kien", value: htCF.kien || 0 },
+    { side: "cf", type: "dong", value: htCF.dong || 0 },
+    { side: "cs", type: "kien", value: htCS.kien || 0 },
+    { side: "cs", type: "dong", value: htCS.dong || 0 },
+  ];
+  const maxCandidate = candidates.reduce((a, b) => (b.value > a.value ? b : a));
+  const otherSide = maxCandidate.side === "cf" ? "cs" : "cf";
+  const otherType = maxCandidate.type === "kien" ? "dong" : "kien";
+  const otherHt = otherSide === "cf" ? htCF : htCS;
+  const crossSum = maxCandidate.value + (otherHt[otherType] || 0);
+  const crossType = maxCandidate.type; // 'kien' | 'dong'
+  const crossTarget = target[crossType];
+  const case2Eligible = crossTarget > 0 && crossSum >= crossTarget;
+
+  // Trả về { state, display } — display là số HIỂN THỊ lên bảng
+  // (cap tối đa = target, không được vượt), chỉ khác actual khi case1/case2.
+  const evalMetric = (actual, tgt, isCrossType) => {
+    if (tgt <= 0) return { state: "chua-dat", display: actual };
+    if (actual >= tgt) return { state: "dat", display: actual };
+    if (actual >= tgt * KPI_NEAR_RATIO) return { state: "case1", display: tgt };
+    if (isCrossType && case2Eligible) {
+      return { state: "case2", display: Math.min(crossSum, tgt) };
+    }
+    return { state: "chua-dat", display: actual };
+  };
+
+  const kienResult = evalMetric(
+    ht.kien || 0,
+    target.kien,
+    crossType === "kien",
+  );
+  const dongResult = evalMetric(
+    ht.dong || 0,
+    target.dong,
+    crossType === "dong",
+  );
+
+  const tier = Math.min(KPI_TIER[kienResult.state], KPI_TIER[dongResult.state]);
+  const status = tier < 3 ? "dat" : "chua-dat";
+
+  return { status, tier, kien: kienResult, dong: dongResult };
+};
+
+// Sắp xếp theo màu: xanh lá -> xanh dương -> cam -> đỏ -> trắng (cuối cùng)
+const getKpiSortPriority = (rowEval) => {
+  if (rowEval.status === "dat") {
+    // tier: 0 = xanh lá, 1 = xanh dương (case1), 2 = cam (case2)
+    return rowEval.tier; // 0, 1, hoặc 2
+  }
+  if (rowEval.status === "chua-dat") return 3; // đỏ
+  if (rowEval.status === "khong-tinh-kpi") return 4; // Mã phụ - trắng
+  if (rowEval.status === "chua-hoan-tat") return 5; // Chưa xong - trắng
+  if (rowEval.status === "chua-bat-dau") return 6; // Chưa xong - trắng
+  return 7; // khong-ap-dung
+};
+
+const buildMergedRows = (
+  filteredDsNhanVien,
+  mapAll,
+  mapCF,
+  mapCS,
+  isSingleDay,
+  kpi,
+) => {
   const emptyGroup = () => ({
     byTrangThai: makeEmptyByTrangThai(),
     totalPhieu: 0,
@@ -327,7 +431,15 @@ const buildMergedRows = (filteredDsNhanVien, mapAll, mapCF, mapCS) => {
     };
   });
 
-  rows.sort((a, b) => b.tong.totalDong - a.tong.totalDong);
+  rows.sort((a, b) => {
+    const evalA = evaluateKpiRow(a, isSingleDay, kpi);
+    const evalB = evaluateKpiRow(b, isSingleDay, kpi);
+    const prioA = getKpiSortPriority(evalA);
+    const prioB = getKpiSortPriority(evalB);
+    if (prioA !== prioB) return prioA - prioB;
+    // Cùng nhóm màu -> sắp theo tổng dòng giảm dần
+    return b.tong.totalDong - a.tong.totalDong;
+  });
   return rows;
 };
 
@@ -372,6 +484,8 @@ const KPI_BADGE = {
 // CSS tự transform, html2canvas phải tự tính lại chữ hoa lúc chụp ảnh và xử
 // lý sai dấu tiếng Việt. Viết HOA sẵn ở đây + bỏ class `uppercase` ở nơi
 // dùng label này (xem MergedProductivityTable bên dưới) để tránh lỗi.
+// ✅ hasKpi: chỉ nhóm Tổng mới đánh giá/hiển thị KPI. CF và CS chỉ hiển thị
+// số liệu Phiếu/Kiện/Dòng, không còn cột/badge KPI riêng.
 const GROUPS = [
   {
     key: "tong",
@@ -380,6 +494,7 @@ const GROUPS = [
     headerBg: "bg-slate-100",
     headerText: "text-slate-600",
     cellBg: "",
+    hasKpi: true,
   },
   {
     key: "cf",
@@ -388,6 +503,7 @@ const GROUPS = [
     headerBg: "bg-green-50",
     headerText: "text-green-700",
     cellBg: "bg-green-50/50",
+    hasKpi: false,
   },
   {
     key: "cs",
@@ -396,6 +512,7 @@ const GROUPS = [
     headerBg: "bg-blue-50",
     headerText: "text-blue-700",
     cellBg: "bg-blue-50/50",
+    hasKpi: false,
   },
 ];
 
@@ -415,33 +532,32 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
 }) {
   const kpiSummaryByGroup = useMemo(() => {
     const result = {};
-    GROUPS.forEach(({ key }) => {
-      if (!isSingleDay) {
+    GROUPS.forEach(({ key, hasKpi }) => {
+      if (!hasKpi || !isSingleDay) {
         result[key] = null;
         return;
       }
       let dat = 0;
       let tong = 0;
       mergedRows.forEach((r) => {
-        const tt = getTrangThaiKPI(r[key], isSingleDay, kpi);
-        if (tt === "dat" || tt === "chua-dat") {
+        const evalResult = evaluateKpiRow(r, isSingleDay, kpi);
+        if (evalResult.status === "dat" || evalResult.status === "chua-dat") {
           tong += 1;
-          if (tt === "dat") dat += 1;
+          if (evalResult.status === "dat") dat += 1;
         }
       });
       result[key] = { dat, tong };
     });
     return result;
   }, [mergedRows, isSingleDay, kpi]);
-
   const captureRows = useMemo(
     () => mergedRows.filter((r) => !isZeroRow(r.tong)),
     [mergedRows],
   );
 
   const displayRows = capturing ? captureRows : mergedRows;
-  const colSpanTotal = 3 + GROUPS.length * 4;
-
+  const colSpanTotal =
+    3 + GROUPS.reduce((sum, g) => sum + (g.hasKpi ? 4 : 3), 0);
   // ✅ FIX: html2canvas render sai kỹ thuật gradient-chữ (bg-clip-text +
   // text-transparent) — nó vẽ nguyên khối gradient thành 1 hình chữ nhật
   // đặc, chữ biến mất/bị đè lên. Override bằng inline style trước đây
@@ -526,41 +642,43 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
               >
                 TÊN NV
               </th>
-              {GROUPS.map(({ key, label, dot, headerBg, headerText }) => {
-                const summary = kpiSummaryByGroup[key];
-                return (
-                  <th
-                    key={key}
-                    colSpan={4}
-                    className={`border-b border-l border-slate-200 px-3 py-1.5 text-center font-bold tracking-wide text-[11px] ${headerBg} ${headerText}`}
-                  >
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${dot}`} />
-                        {label}
-                      </span>
-                      {summary && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal ${
-                            summary.tong === 0
-                              ? "bg-slate-100 text-slate-400"
-                              : summary.dat === summary.tong
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-rose-100 text-rose-700"
-                          }`}
-                        >
-                          {summary.tong === 0
-                            ? "Chưa bắt đầu"
-                            : `${summary.dat}/${summary.tong} đạt KPI`}
+              {GROUPS.map(
+                ({ key, label, dot, headerBg, headerText, hasKpi }) => {
+                  const summary = kpiSummaryByGroup[key];
+                  return (
+                    <th
+                      key={key}
+                      colSpan={hasKpi ? 4 : 3}
+                      className={`border-b border-l border-slate-200 px-3 py-1.5 text-center font-bold tracking-wide text-[11px] ${headerBg} ${headerText}`}
+                    >
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className={`h-2 w-2 rounded-full ${dot}`} />
+                          {label}
                         </span>
-                      )}
-                    </div>
-                  </th>
-                );
-              })}
+                        {summary && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal ${
+                              summary.tong === 0
+                                ? "bg-slate-100 text-slate-400"
+                                : summary.dat === summary.tong
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-rose-100 text-rose-700"
+                            }`}
+                          >
+                            {summary.tong === 0
+                              ? "Chưa bắt đầu"
+                              : `${summary.dat}/${summary.tong} đạt KPI`}
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                },
+              )}
             </tr>
             <tr>
-              {GROUPS.map(({ key, headerBg, headerText }) => (
+              {GROUPS.map(({ key, headerBg, headerText, hasKpi }) => (
                 <Fragment key={key}>
                   <th
                     className={`border-l border-slate-200 px-2 py-1 text-right text-[11px] font-semibold ${headerBg} ${headerText} opacity-80`}
@@ -577,11 +695,13 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
                   >
                     Dòng
                   </th>
-                  <th
-                    className={`px-2 py-1 text-center text-[11px] font-semibold ${headerBg} ${headerText} opacity-80`}
-                  >
-                    KPI
-                  </th>
+                  {hasKpi && (
+                    <th
+                      className={`px-2 py-1 text-center text-[11px] font-semibold ${headerBg} ${headerText} opacity-80`}
+                    >
+                      KPI
+                    </th>
+                  )}
                 </Fragment>
               ))}
             </tr>
@@ -599,38 +719,69 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
                 </td>
               </tr>
             ) : (
-              displayRows.map((r) => (
-                <tr key={r.maNhanVien} className="border-t border-slate-100">
-                  <td className="px-3 py-1.5 text-slate-500">{r.chucVu}</td>
-                  <td className="px-3 py-1.5 font-semibold text-slate-700">
-                    {r.maNhanVien}
-                  </td>
-                  <td className="px-3 py-1.5 text-slate-700">
-                    {r.tenNhanVien}
-                  </td>
-                  {GROUPS.map(({ key, cellBg }) => {
-                    const g = r[key];
-                    const kpiTt = getTrangThaiKPI(g, isSingleDay, kpi);
-                    // ⚠️ chưa đạt KPI luôn ưu tiên tô đỏ, đè lên màu nhóm CF/CS
-                    const bg = kpiTt === "chua-dat" ? "bg-rose-50/70" : cellBg;
-                    const cellClass = `px-2 py-1.5 text-right ${bg}`;
-                    return (
-                      <Fragment key={key}>
-                        <td
-                          className={`border-l border-slate-100 ${cellClass}`}
-                        >
-                          {g.totalPhieu || ""}
-                        </td>
-                        <td className={cellClass}>{g.totalKien || ""}</td>
-                        <td className={cellClass}>{g.totalDong || ""}</td>
-                        <td className={`px-2 py-1.5 text-center ${bg}`}>
-                          {KPI_BADGE[kpiTt]}
-                        </td>
-                      </Fragment>
-                    );
-                  })}
-                </tr>
-              ))
+              displayRows.map((r) => {
+                const rowEval = evaluateKpiRow(r, isSingleDay, kpi);
+                const { bg: tongBg, title: tongTitle } = getRowKpiBg(rowEval);
+
+                return (
+                  <tr key={r.maNhanVien} className="border-t border-slate-100">
+                    <td className="px-3 py-1.5 text-slate-500">{r.chucVu}</td>
+                    <td className="px-3 py-1.5 font-semibold text-slate-700">
+                      {r.maNhanVien}
+                    </td>
+                    <td className="px-3 py-1.5 text-slate-700">
+                      {r.tenNhanVien}
+                    </td>
+                    {GROUPS.map(({ key, cellBg, hasKpi }) => {
+                      const g = r[key];
+
+                      if (hasKpi) {
+                        return (
+                          <Fragment key={key}>
+                            <td
+                              className={`border-l border-slate-100 px-2 py-1.5 text-right ${tongBg}`}
+                              title={tongTitle}
+                            >
+                              {g.totalPhieu || ""}
+                            </td>
+                            <td
+                              className={`px-2 py-1.5 text-right ${tongBg}`}
+                              title={tongTitle}
+                            >
+                              {rowEval.kien.display || ""}
+                            </td>
+                            <td
+                              className={`px-2 py-1.5 text-right ${tongBg}`}
+                              title={tongTitle}
+                            >
+                              {rowEval.dong.display || ""}
+                            </td>
+                            <td
+                              className={`px-2 py-1.5 text-center ${tongBg}`}
+                              title={tongTitle}
+                            >
+                              {KPI_BADGE[rowEval.status]}
+                            </td>
+                          </Fragment>
+                        );
+                      }
+
+                      const cellClass = `px-2 py-1.5 text-right ${cellBg}`;
+                      return (
+                        <Fragment key={key}>
+                          <td
+                            className={`border-l border-slate-100 ${cellClass}`}
+                          >
+                            {g.totalPhieu || ""}
+                          </td>
+                          <td className={cellClass}>{g.totalKien || ""}</td>
+                          <td className={cellClass}>{g.totalDong || ""}</td>
+                        </Fragment>
+                      );
+                    })}
+                  </tr>
+                );
+              })
             )}
           </tbody>
           <tfoot>
@@ -638,7 +789,7 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
               <td className="px-3 py-2" colSpan={3}>
                 Total
               </td>
-              {GROUPS.map(({ key, cellBg }) => {
+              {GROUPS.map(({ key, cellBg, hasKpi }) => {
                 const sum = mergedRows.reduce(
                   (acc, r) => {
                     acc.phieu += r[key].totalPhieu || 0;
@@ -662,13 +813,15 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
                     <td className={`px-2 py-2 text-right ${cellBg}`}>
                       {sum.dong}
                     </td>
-                    <td
-                      className={`px-2 py-2 text-center text-[10px] ${cellBg}`}
-                    >
-                      {summary && summary.tong > 0
-                        ? `${summary.dat}/${summary.tong}`
-                        : "—"}
-                    </td>
+                    {hasKpi && (
+                      <td
+                        className={`px-2 py-2 text-center text-[10px] ${cellBg}`}
+                      >
+                        {summary && summary.tong > 0
+                          ? `${summary.dat}/${summary.tong}`
+                          : "—"}
+                      </td>
+                    )}
                   </Fragment>
                 );
               })}
@@ -694,10 +847,15 @@ const NhanSuSoanEmployeeLookup = () => {
 
   const [selectedBoPhan, setSelectedBoPhan] = useState("");
   const [selectedChucVu, setSelectedChucVu] = useState("");
+  // ✅ MỚI: lọc theo đúng 1 Mã nhân viên cụ thể trong danh sách đang có
+  const [selectedMaNV] = useState("");
   const [vaiTro, setVaiTro] = useState("soan");
   const [dsNhanVien, setDsNhanVien] = useState([]);
   const [loadingNV, setLoadingNV] = useState(false);
   const [errorNV, setErrorNV] = useState("");
+
+  // ✅ MỚI: ô tìm kiếm nhanh theo Mã NV / Tên NV (lọc client-side)
+  const [searchKeyword, setSearchKeyword] = useState("");
 
   const [kpi, setKpi] = useState(loadKpiFromStorage);
 
@@ -725,6 +883,13 @@ const NhanSuSoanEmployeeLookup = () => {
   const captureRef = useRef(null);
   const [capturing, setCapturing] = useState(false);
 
+  // ✅ MỚI: set nhanh khoảng ngày về đúng "hôm nay" (tuNgay = denNgay = hôm nay)
+  const handleQuickToday = useCallback(() => {
+    const today = getToday();
+    setTuNgay(today);
+    setDenNgay(today);
+  }, []);
+
   // ✅ Danh sách tuỳ chọn cho select "Chức vụ":
   // - Nếu ĐÃ chọn Bộ phận -> chỉ hiện chức vụ thuộc bộ phận đó (như cũ).
   // - Nếu CHƯA chọn Bộ phận -> hiện TẤT CẢ chức vụ (mọi bộ phận), cho phép
@@ -750,6 +915,8 @@ const NhanSuSoanEmployeeLookup = () => {
   const handleChangeChucVu = useCallback((e) => {
     setSelectedChucVu(e.target.value);
   }, []);
+
+
 
   // ✅ Chỉ cần MỘT trong hai (Bộ phận hoặc Chức vụ) được chọn là đã đủ để
   // tải danh sách nhân viên — không còn bắt buộc phải có Bộ phận trước.
@@ -822,10 +989,21 @@ const NhanSuSoanEmployeeLookup = () => {
 
   // ✅ Lọc lại 1 lần nữa ở client theo Chức vụ — phòng trường hợp API
   // getDanhSach chưa hỗ trợ lọc theo chuc_vu khi không kèm bo_phan.
+  // ✅ MỚI: đồng thời lọc theo Mã nhân viên nếu đã chọn cụ thể 1 người.
   const filteredDsNhanVien = useMemo(() => {
-    if (!selectedChucVu) return dsNhanVien;
-    return dsNhanVien.filter((nv) => nv.chuc_vu === selectedChucVu);
-  }, [dsNhanVien, selectedChucVu]);
+    let result = dsNhanVien;
+    if (selectedChucVu) {
+      result = result.filter((nv) => nv.chuc_vu === selectedChucVu);
+    }
+    if (selectedMaNV) {
+      result = result.filter(
+        (nv) =>
+          (nv.ma_nhan_vien || "").toString().trim().toUpperCase() ===
+          selectedMaNV,
+      );
+    }
+    return result;
+  }, [dsNhanVien, selectedChucVu, selectedMaNV]);
 
   // ✅ Ngày dùng để tính năng suất KHÁC NHAU theo vai trò:
   // - NV Soạn -> tính theo TG nhận phiếu (field `tgImport`, giống "TG import"
@@ -876,9 +1054,30 @@ const NhanSuSoanEmployeeLookup = () => {
 
   // ✅ Gộp Tổng/CF/CS của từng nhân viên thành 1 dòng duy nhất cho bảng chung.
   const mergedRows = useMemo(
-    () => buildMergedRows(filteredDsNhanVien, mapAll, mapCF, mapCS),
-    [filteredDsNhanVien, mapAll, mapCF, mapCS],
+    () =>
+      buildMergedRows(
+        filteredDsNhanVien,
+        mapAll,
+        mapCF,
+        mapCS,
+        isSingleDay,
+        kpi,
+      ),
+    [filteredDsNhanVien, mapAll, mapCF, mapCS, isSingleDay, kpi],
   );
+
+  // ✅ MỚI: lọc thêm 1 lớp nữa theo ô tìm kiếm nhanh (Mã NV / Tên NV),
+  // không phân biệt dấu/hoa-thường. Đây là danh sách thực sự truyền
+  // xuống bảng hiển thị + dùng để chụp ảnh.
+  const displayedMergedRows = useMemo(() => {
+    const kw = normalizeSearchText(searchKeyword);
+    if (!kw) return mergedRows;
+    return mergedRows.filter((r) => {
+      const ma = normalizeSearchText(r.maNhanVien);
+      const ten = normalizeSearchText(r.tenNhanVien);
+      return ma.includes(kw) || ten.includes(kw);
+    });
+  }, [mergedRows, searchKeyword]);
 
   const handleCapture = useCallback(async () => {
     if (!captureRef.current || !boPhanStatsAll || capturing) return;
@@ -944,6 +1143,7 @@ const NhanSuSoanEmployeeLookup = () => {
 
   const vaiTroLabel = vaiTro === "kc" ? "Kiểm chéo (KC)" : "Soạn";
   const daChonBoLoc = Boolean(selectedBoPhan || selectedChucVu);
+  const isToday = tuNgay === getToday() && denNgay === getToday();
 
   return (
     <div className="space-y-4">
@@ -1009,6 +1209,25 @@ const NhanSuSoanEmployeeLookup = () => {
             ))}
           </select>
 
+          {/* ✅ MỚI: Select lọc theo đúng 1 Mã nhân viên — options lấy từ
+              danh sách nhân viên đã tải theo Bộ phận/Chức vụ ở trên
+              (dsNhanVien), không phụ thuộc searchKeyword. */}
+      
+
+          {/* ✅ MỚI: nút "Hôm nay" kiểu chữ tối giản, set nhanh
+              tuNgay = denNgay = ngày hiện tại. */}
+          <button
+            type="button"
+            onClick={handleQuickToday}
+            className={`h-[42px] px-2 text-sm font-bold transition-colors ${
+              isToday
+                ? "text-indigo-700 underline underline-offset-4"
+                : "text-indigo-600 hover:text-indigo-800"
+            }`}
+          >
+            Hôm nay
+          </button>
+
           <DateRangeFilter
             startValue={tuNgay}
             endValue={denNgay}
@@ -1020,6 +1239,15 @@ const NhanSuSoanEmployeeLookup = () => {
               setTuNgay(getDefaultTuNgay());
               setDenNgay(getDefaultDenNgay());
             }}
+          />
+
+          {/* ✅ MỚI: ô tìm kiếm nhanh Mã NV / Tên NV trên bảng đang hiển thị */}
+          <input
+            type="text"
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            placeholder="Tìm mã NV / tên NV..."
+            className="h-[42px] w-52 rounded-xl border border-slate-300 bg-white px-3 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
           />
 
           <button
@@ -1049,16 +1277,6 @@ const NhanSuSoanEmployeeLookup = () => {
             KPI/ngày (Hoàn thành):
           </div>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            Phiếu
-            <input
-              type="number"
-              min={0}
-              value={kpi.phieu}
-              onChange={handleChangeKpi("phieu")}
-              className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
-            />
-          </label>
-          <label className="flex items-center gap-1.5 text-xs text-slate-600">
             Kiện
             <input
               type="number"
@@ -1082,7 +1300,7 @@ const NhanSuSoanEmployeeLookup = () => {
           <button
             type="button"
             onClick={() => setKpi({ ...KPI_DEFAULT })}
-            title={`Đặt lại KPI mặc định: ${KPI_DEFAULT.phieu} phiếu / ${KPI_DEFAULT.kien} kiện / ${KPI_DEFAULT.dong} dòng`}
+            title={`Đặt lại KPI mặc định: ${KPI_DEFAULT.kien} kiện / ${KPI_DEFAULT.dong} dòng`}
             className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-700 shadow-sm hover:bg-amber-100"
           >
             Đặt lại mặc định
@@ -1119,7 +1337,7 @@ const NhanSuSoanEmployeeLookup = () => {
 
         {daChonBoLoc && !loadingNV && filteredDsNhanVien.length === 0 && (
           <div className="py-6 text-sm text-slate-400">
-            Không có nhân viên nào phù hợp bộ phận/chức vụ đã chọn.
+            Không có nhân viên nào phù hợp bộ phận/chức vụ/mã NV đã chọn.
           </div>
         )}
 
@@ -1130,7 +1348,7 @@ const NhanSuSoanEmployeeLookup = () => {
           filteredDsNhanVien.length > 0 && (
             <div ref={captureRef} className="space-y-4 bg-white p-2 pt-6">
               <MergedProductivityTable
-                mergedRows={mergedRows}
+                mergedRows={displayedMergedRows}
                 vaiTroLabel={vaiTroLabel}
                 isSingleDay={isSingleDay}
                 kpi={kpi}
