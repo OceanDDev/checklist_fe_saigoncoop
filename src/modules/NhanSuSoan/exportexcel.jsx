@@ -209,23 +209,34 @@ const ExportExcelButton = ({
         });
       });
 
-      // ── Cột Dataload: công thức "*"&Kiện&"K-"&TTB&"T-"&(NVKC||NVSoan) ────
+      // ── Cột Dataload: công thức "*"&Kiện&"K-"&[TTB&"T-"]&NV&[hậu tố chuyến] ──
       // Dùng công thức (không phải giá trị tĩnh) để khi người dùng gõ tay
       // vào ô TTB, Dataload tự cập nhật theo ngay trong Excel.
       const kienLetter = sheet.getColumn("kien").letter;
       const nvKCLetter = sheet.getColumn("nvKC").letter;
       const nvSoanLetter = sheet.getColumn("nvSoan").letter;
+      const chuyenLetter = sheet.getColumn("chuyen").letter;
       const ttbLetter = isViewerRole ? sheet.getColumn("ttb").letter : null;
 
       sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         if (rowNumber === 1) return;
-        // Role 58: tham chiếu ô TTB người dùng tự note.
-        // Role khác: không có cột TTB -> mặc định 0.
-        const ttbPart = isViewerRole ? `${ttbLetter}${rowNumber}` : "0";
+
+        // TTB: chỉ hiện "{TTB}T-" khi ô TTB CÓ giá trị (role 58 mới có cột
+        // này). Ô TTB trống, hoặc role khác không có cột TTB -> bỏ hẳn
+        // phần "T" luôn, không còn "0T-" hay "T-" rỗng.
+        const ttbPart = isViewerRole
+          ? `IF(${ttbLetter}${rowNumber}<>"",${ttbLetter}${rowNumber}&"T-","")`
+          : `""`;
+
         const nvPart = `IF(${nvKCLetter}${rowNumber}<>"",${nvKCLetter}${rowNumber},${nvSoanLetter}${rowNumber})`;
-        // Kiện = 0 -> chỉ hiện "*0K", KHÔNG kèm "-TTB T-" và mã nhân viên.
+
+        // Chuyến = "Phân Bổ" hoặc "GIAO KHÁC" -> note thêm hậu tố "-PB" /
+        // "-GK" ở cuối chuỗi Dataload. Chuyến khác -> không thêm gì.
+        const chuyenPart = `IF(${chuyenLetter}${rowNumber}="PHÂN BỔ","-PB",IF(${chuyenLetter}${rowNumber}="GIAO KHÁCH","-GK",""))`;
+
+        // Kiện = 0 -> chỉ hiện "*0K", KHÔNG kèm TTB/NV/hậu tố chuyến.
         row.getCell("dataload").value = {
-          formula: `IF(${kienLetter}${rowNumber}=0,"*0K","*"&${kienLetter}${rowNumber}&"K-"&${ttbPart}&"T-"&${nvPart})`,
+          formula: `IF(${kienLetter}${rowNumber}=0,"*0K","*"&${kienLetter}${rowNumber}&"K-"&${ttbPart}&${nvPart}&${chuyenPart})`,
         };
       });
 

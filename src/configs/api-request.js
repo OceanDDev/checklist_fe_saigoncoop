@@ -113,12 +113,13 @@ const URL = {
     trangthietbi: ENDPOINT_PREFIX + "/trang-thiet-bi",
     tonkhocuahang: ENDPOINT_PREFIX + "/ton-kho-cua-hang",
   },
-  bookxe:{
+  bookxe: {
     bookxe: ENDPOINT_PREFIX + "/bookxe",
-        historybookxe: ENDPOINT_PREFIX + "/historybookxe"
-
-  }
+    historybookxe: ENDPOINT_PREFIX + "/historybookxe",
+  },
+  khuyenmai: {
+    khuyenmai: ENDPOINT_PREFIX + "/khuyenmai",
+  },
 };
 
 export { URL, ApiServer, DEF_HEADERS };
-  

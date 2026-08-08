@@ -76,6 +76,8 @@ const Header = () => {
       57: "QUẢN LÝ PHIẾU SOẠN ",
        58: "QUẢN LÝ PHIẾU SOẠN ",
       70: "BOOK XE ",
+            71: "SO KHỚP DATA",
+
 
     };
     return roles[role] || "CHECKLIST";

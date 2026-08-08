@@ -48,6 +48,7 @@ import NhanSuSoanTable from "./modules/NhanSuSoan";
 import QuanLyHDTable from "./modules/QuanLyHoaDon";
 import TrangThietBiTable from "./modules/trangthietbi";
 import HomeBookXe from "./modules/bookxe";
+import SoKhopKhuyenMaiTable from "./modules/khuyenmai";
 
 function App() {
   return (
@@ -374,11 +375,23 @@ function App() {
         <Route path="/qr-display" element={<QrDisplay />} />
         <Route path="/qr-scan" element={<QrScanner />} />
 
+        {/* SO KHOP KHUYEN MAI */}
+        <Route
+          path="/khuyenmai"
+          element={
+            <PrivateRoute allowRoles={[71]}>
+              <MainLayout>
+                <SoKhopKhuyenMaiTable />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        
         {/* PHIEU SOAN */}
         <Route
           path="/nhansusoan"
           element={
-            <PrivateRoute allowRoles={[52,57,58]}>
+            <PrivateRoute allowRoles={[52, 57, 58]}>
               <MainLayout>
                 <NhanSuSoanTable />
               </MainLayout>
