@@ -21,6 +21,30 @@ function tinhGioThuc(tongGio, gioVao) {
 
   return tongGio - 1; // trừ 1 giờ
 }
+
+// Giờ công của 1 bản ghi (ưu tiên giờ Vào/Ra Phụ, fallback Check-in/Check-out
+// — logic khớp với exportChamCongMau bên dưới). Vì mỗi record vốn là 1 nhân
+// viên / 1 ngày nên hàm này tự nhiên tính đúng theo TỪNG ngày, không cộng dồn
+// khi bảng đang lọc theo khoảng nhiều ngày.
+function tinhGioCongRecord(r) {
+  if (!r) return 0;
+  const vaoPhu = r.gio_vao_phu ? new Date(r.gio_vao_phu) : null;
+  const raPhu = r.gio_ra_phu ? new Date(r.gio_ra_phu) : null;
+  const vao = r.gio_vao ? new Date(r.gio_vao) : null;
+  const ra = r.gio_ra ? new Date(r.gio_ra) : null;
+  const gioStart = vaoPhu || vao;
+  const gioEnd = raPhu || ra;
+  if (!gioStart || !gioEnd || gioEnd <= gioStart) return 0;
+  const raw = (gioEnd - gioStart) / 3_600_000;
+  return tinhGioThuc(raw, gioStart);
+}
+
+// KPI năng suất: 280 kiện / 240 dòng cho 1 ca 8h => quy đổi ra theo giờ công
+const KPI_KIEN_PER_GIO = 35; // 280 / 8
+const KPI_DONG_PER_GIO = 30; // 240 / 8
+
+const formatPerGio = (v) => (v == null ? null : v.toFixed(1));
+
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
 }
@@ -581,6 +605,10 @@ const DateRangePicker = memo(function DateRangePicker({
 });
 
 // ─── Modal Xuất Excel ─────────────────────────────────────────────────────────
+// Tự gọi API lấy dữ liệu theo đúng tháng/năm được chọn trong modal — KHÔNG
+// dùng `records` (đã bị giới hạn theo dateRange đang lọc ngoài bảng) làm
+// nguồn chính. Nhờ vậy chọn tháng 7 rồi bấm Xuất là ra đủ dữ liệu tháng 7,
+// bất kể ngoài bảng đang lọc theo khoảng ngày nào.
 const ExportChamCongMau = memo(function ExportChamCongMau({ records = [] }) {
   const now = new Date();
   const [open, setOpen] = useState(false);
@@ -593,12 +621,35 @@ const ExportChamCongMau = memo(function ExportChamCongMau({ records = [] }) {
   const handleExport = async () => {
     setLoading(true);
     try {
+      // Tự gọi API lấy đúng khoảng ngày của tháng/năm đang chọn
+      const tuNgay = new Date(year, month - 1, 1);
+      const denNgay = new Date(year, month, 0); // ngày cuối cùng của tháng
+
+      let sourceRecords = records;
+      try {
+        const res = await chamCongService.getAllChamCong({
+          tu_ngay: toApiStr(tuNgay),
+          den_ngay: toApiStr(denNgay),
+        });
+        sourceRecords = res?.data || [];
+      } catch (fetchErr) {
+        console.error("Lỗi tải dữ liệu tháng để xuất Excel:", fetchErr);
+        // fallback: vẫn thử lọc trong `records` đã có sẵn nếu API lỗi
+        sourceRecords = records;
+      }
+
       // Lọc theo tháng/năm VÀ bỏ qua bản ghi bị khóa
-      const filtered = records.filter((r) => {
+      const filtered = sourceRecords.filter((r) => {
         if (r.is_locked) return false;
         const d = new Date(r.ngay);
         return d.getFullYear() === year && d.getMonth() + 1 === month;
       });
+
+      if (filtered.length === 0) {
+        alert(`Không có dữ liệu chấm công trong Tháng ${month}/${year}`);
+        return;
+      }
+
       await exportChamCongMau(filtered, { year, month, donVi, boPhan });
       setOpen(false);
     } catch (e) {
@@ -1282,7 +1333,7 @@ const TableRow = memo(function TableRow({
   index,
   isChecked,
   role,
-  stats, // { phieu, kien, dong } | null — từ nhansusoan (đã tính theo đúng ngày Hoàn thành)
+  stats, // { phieu, kien, dong, gioCong, phieuPerGio, kienPerGio, dongPerGio } | null
   onToggleSelect,
   onGhiChu,
   onKhoa,
@@ -1291,7 +1342,6 @@ const TableRow = memo(function TableRow({
   const hasCheckout = !!r.gio_ra;
   const isViPham = !!r.vi_pham_cham_ho;
   const isLocked = !!r.is_locked;
-
 
   return (
     <tr
@@ -1322,9 +1372,7 @@ const TableRow = memo(function TableRow({
           {r.ma_nhan_vien}
         </span>
       </td>
-      <td className={`${td} font-medium text-foreground`}>
-        {r.ten_nhan_vien}
-      </td>
+      <td className={`${td} font-medium text-foreground`}>{r.ten_nhan_vien}</td>
       <td className={`${td} text-muted-foreground`}>{r.bo_phan || "—"}</td>
       <td className={`${td} text-muted-foreground`}>{r.chuc_vu || "—"}</td>
       <td className={td}>
@@ -1349,7 +1397,11 @@ const TableRow = memo(function TableRow({
 
       {role !== 30 && (
         <td className={td}>
-          <InlineCellEdit record={r} field="gio_vao_phu" onSaved={onGhiChu.refresh} />
+          <InlineCellEdit
+            record={r}
+            field="gio_vao_phu"
+            onSaved={onGhiChu.refresh}
+          />
         </td>
       )}
       {role !== 30 && (
@@ -1410,29 +1462,48 @@ const TableRow = memo(function TableRow({
         </div>
       </td>
 
-
+      {/* Phiếu / giờ công */}
       <td className={`${td} text-center`}>
-        {stats?.phieu ? (
-          <span className="font-semibold text-violet-400 bg-violet-500/8 px-2 py-0.5 rounded text-xs">
-            {stats.phieu.toLocaleString()}
+        {stats?.phieuPerGio != null ? (
+          <span
+            className="font-semibold text-violet-400 bg-violet-500/8 px-2 py-0.5 rounded text-xs"
+            title={`${stats.phieu.toLocaleString()} phiếu / ${formatTongGio(stats.gioCong)} giờ công`}
+          >
+            {formatPerGio(stats.phieuPerGio)}
           </span>
         ) : (
           <span className="text-muted-foreground/30 text-xs">—</span>
         )}
       </td>
+      {/* Kiện / giờ công — so KPI 35/h */}
       <td className={`${td} text-center`}>
-        {stats?.kien ? (
-          <span className="font-semibold text-sky-400 bg-sky-500/8 px-2 py-0.5 rounded text-xs">
-            {stats.kien.toLocaleString()}
+        {stats?.kienPerGio != null ? (
+          <span
+            className={`font-semibold px-2 py-0.5 rounded text-xs ${
+              stats.kienPerGio >= KPI_KIEN_PER_GIO
+                ? "text-emerald-400 bg-emerald-500/8"
+                : "text-red-400 bg-red-500/8"
+            }`}
+            title={`${stats.kien.toLocaleString()} kiện / ${formatTongGio(stats.gioCong)} giờ công (KPI ${KPI_KIEN_PER_GIO}/h)`}
+          >
+            {formatPerGio(stats.kienPerGio)}
           </span>
         ) : (
           <span className="text-muted-foreground/30 text-xs">—</span>
         )}
       </td>
+      {/* Dòng / giờ công — so KPI 30/h */}
       <td className={`${td} text-center`}>
-        {stats?.dong ? (
-          <span className="font-semibold text-orange-400 bg-orange-500/8 px-2 py-0.5 rounded text-xs">
-            {stats.dong.toLocaleString()}
+        {stats?.dongPerGio != null ? (
+          <span
+            className={`font-semibold px-2 py-0.5 rounded text-xs ${
+              stats.dongPerGio >= KPI_DONG_PER_GIO
+                ? "text-emerald-400 bg-emerald-500/8"
+                : "text-red-400 bg-red-500/8"
+            }`}
+            title={`${stats.dong.toLocaleString()} dòng / ${formatTongGio(stats.gioCong)} giờ công (KPI ${KPI_DONG_PER_GIO}/h)`}
+          >
+            {formatPerGio(stats.dongPerGio)}
           </span>
         ) : (
           <span className="text-muted-foreground/30 text-xs">—</span>
@@ -1488,7 +1559,6 @@ export default function ChamCongTable({ role }) {
   const [filterBoPhan, setFilterBoPhan] = useState("");
   const [filterChucVu, setFilterChucVu] = useState("");
   const [filterTrangThai, setFilterTrangThai] = useState("");
-  const [filterNangSuat, setFilterNangSuat] = useState("");
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
     return { startDate: now, endDate: now };
@@ -1577,23 +1647,29 @@ export default function ChamCongTable({ role }) {
   }, [fetchPhieuStats]);
 
   // Map record._id -> stats (tính 1 lần khi data hoặc phieuStatsMap đổi,
-  // KHÔNG tính lại mỗi lần render/toggle chọn dòng).
+  // KHÔNG tính lại mỗi lần render/toggle chọn dòng). Mỗi record vốn là 1
+  // nhân viên/1 ngày nên `gioCong` luôn tính đúng theo NGÀY của chính dòng
+  // đó — không bị ảnh hưởng bởi khoảng ngày đang lọc ngoài bảng.
   const statsByRecordId = useMemo(() => {
     const map = new Map();
     data.forEach((r) => {
       const key = `${normalizeCode(r.ma_nhan_vien)}|${toDateKeyVN(r.ngay)}`;
-      map.set(r._id, phieuStatsMap.get(key) || null);
+      const raw = phieuStatsMap.get(key) || null;
+      const gioCong = tinhGioCongRecord(r);
+      let stats = null;
+      if (raw) {
+        stats = {
+          ...raw,
+          gioCong,
+          phieuPerGio: gioCong > 0 ? raw.phieu / gioCong : null,
+          kienPerGio: gioCong > 0 ? raw.kien / gioCong : null,
+          dongPerGio: gioCong > 0 ? raw.dong / gioCong : null,
+        };
+      }
+      map.set(r._id, stats);
     });
     return map;
   }, [data, phieuStatsMap]);
-
-  const coNangSuatRecord = useCallback(
-    (r) => {
-      const s = statsByRecordId.get(r._id);
-      return !!s && ((s.phieu || 0) > 0 || (s.kien || 0) > 0 || (s.dong || 0) > 0);
-    },
-    [statsByRecordId],
-  );
 
   // ── Danh sách lọc (memo hoá — chỉ tính lại khi data đổi) ────────────────────
   const boPhanList = useMemo(
@@ -1617,8 +1693,6 @@ export default function ChamCongTable({ role }) {
         return false;
       if (filterTrangThai === "chua_hop_le" && (r.is_locked || !!r.gio_ra))
         return false;
-      if (filterNangSuat === "co" && !coNangSuatRecord(r)) return false;
-      if (filterNangSuat === "khong" && coNangSuatRecord(r)) return false;
       if (!q) return true;
       return (
         r.ma_nhan_vien?.toLowerCase().includes(q) ||
@@ -1632,21 +1706,14 @@ export default function ChamCongTable({ role }) {
     filterBoPhan,
     filterChucVu,
     filterTrangThai,
-    filterNangSuat,
     search,
-    coNangSuatRecord,
   ]);
 
   const soViPham = useMemo(
     () => data.filter((r) => r.vi_pham_cham_ho).length,
     [data],
   );
-  const soKhongNangSuat = useMemo(
-    () =>
-      filtered.filter((r) => !r.is_locked && r.gio_ra && !coNangSuatRecord(r))
-        .length,
-    [filtered, coNangSuatRecord],
-  );
+
   const selectableCount = useMemo(
     () => filtered.filter((r) => !r.is_locked).length,
     [filtered],
@@ -1663,7 +1730,9 @@ export default function ChamCongTable({ role }) {
 
   const toggleAll = useCallback(() => {
     setSelected((prev) => {
-      const selectableIds = filtered.filter((r) => !r.is_locked).map((r) => r._id);
+      const selectableIds = filtered
+        .filter((r) => !r.is_locked)
+        .map((r) => r._id);
       if (prev.size === selectableIds.length && selectableIds.length > 0) {
         return new Set();
       }
@@ -1728,9 +1797,10 @@ export default function ChamCongTable({ role }) {
       { header: "Ngày", key: "ngay", width: 13 },
       { header: "Trạng Thái", key: "trang_thai", width: 14 },
       { header: "Năng Suất", key: "nang_suat", width: 14 },
-      { header: "Phiếu", key: "so_phieu", width: 8 },
-      { header: "Kiện", key: "so_kien", width: 8 },
-      { header: "Dòng", key: "so_dong", width: 8 },
+      { header: "Giờ Công", key: "gio_cong", width: 10 },
+      { header: "Phiếu/Giờ", key: "so_phieu", width: 10 },
+      { header: "Kiện/Giờ", key: "so_kien", width: 10 },
+      { header: "Dòng/Giờ", key: "so_dong", width: 10 },
       { header: "Ghi Chú", key: "ghi_chu", width: 24 },
     ];
     ws.columns = COLS.map(({ header, key, width }) => ({ header, key, width }));
@@ -1759,7 +1829,8 @@ export default function ChamCongTable({ role }) {
     rows.forEach((r, idx) => {
       const hasCheckout = !!r.gio_ra;
       const s = statsByRecordId.get(r._id);
-      const coNS = !!s && ((s.phieu || 0) > 0 || (s.kien || 0) > 0 || (s.dong || 0) > 0);
+      const coNS =
+        !!s && ((s.phieu || 0) > 0 || (s.kien || 0) > 0 || (s.dong || 0) > 0);
       const row = ws.addRow({
         stt: idx + 1,
         ma_nhan_vien: r.ma_nhan_vien,
@@ -1778,10 +1849,16 @@ export default function ChamCongTable({ role }) {
           : {}),
         ngay: fmtDate(r.ngay),
         trang_thai: hasCheckout ? "Hợp lệ" : "Chưa hợp lệ",
-        nang_suat: coNS ? "Có năng suất" : hasCheckout ? "Không năng suất" : "Chưa hoàn tất",
-        so_phieu: s?.phieu ?? "",
-        so_kien: s?.kien ?? "",
-        so_dong: s?.dong ?? "",
+        nang_suat: coNS
+          ? "Có năng suất"
+          : hasCheckout
+            ? "Không năng suất"
+            : "Chưa hoàn tất",
+        gio_cong: s?.gioCong ? fmtGio(s.gioCong) : "",
+        so_phieu:
+          s?.phieuPerGio != null ? Number(s.phieuPerGio.toFixed(1)) : "",
+        so_kien: s?.kienPerGio != null ? Number(s.kienPerGio.toFixed(1)) : "",
+        so_dong: s?.dongPerGio != null ? Number(s.dongPerGio.toFixed(1)) : "",
         ghi_chu: r.ghi_chu || "",
       });
       row.height = 18;
@@ -1936,15 +2013,6 @@ export default function ChamCongTable({ role }) {
             <option value="hop_le">Hợp lệ</option>
             <option value="chua_hop_le">Chưa hợp lệ</option>
           </select>
-          <select
-            value={filterNangSuat}
-            onChange={(e) => setFilterNangSuat(e.target.value)}
-            className="bg-card border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring transition-all cursor-pointer min-w-[170px]"
-          >
-            <option value="">Tất cả năng suất</option>
-            <option value="co">✅ Có năng suất</option>
-            <option value="khong">⚠️ Không có năng suất</option>
-          </select>
         </div>
 
         {/* Table */}
@@ -1960,11 +2028,7 @@ export default function ChamCongTable({ role }) {
                   suất...
                 </span>
               )}
-              {soKhongNangSuat > 0 && (
-                <span className="text-xs font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
-                  ⚠️ {soKhongNangSuat} không năng suất
-                </span>
-              )}
+
               {soViPham > 0 && (
                 <span className="text-xs font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
                   🚨 {soViPham} vi phạm
@@ -2002,9 +2066,19 @@ export default function ChamCongTable({ role }) {
                   {role !== 30 && <th className={th}>T.Giờ Phụ</th>}
                   <th className={th}>Ngày</th>
                   <th className={th}>Trạng Thái</th>
-                  <th className={`${th} text-center`}>Phiếu</th>
-                  <th className={`${th} text-center`}>Kiện</th>
-                  <th className={`${th} text-center`}>Dòng</th>
+                  <th className={`${th} text-center`}>Phiếu/Giờ</th>
+                  <th
+                    className={`${th} text-center`}
+                    title={`KPI ${KPI_KIEN_PER_GIO} kiện/giờ`}
+                  >
+                    Kiện/Giờ
+                  </th>
+                  <th
+                    className={`${th} text-center`}
+                    title={`KPI ${KPI_DONG_PER_GIO} dòng/giờ`}
+                  >
+                    Dòng/Giờ
+                  </th>
                   <th className={th}>Ghi Chú</th>
                   {role !== 30 && (
                     <th className={`${th} text-center`}>Thao Tác</th>

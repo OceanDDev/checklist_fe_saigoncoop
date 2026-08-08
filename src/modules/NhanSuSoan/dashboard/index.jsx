@@ -283,7 +283,15 @@ const CHAIN_LOGOS = {
   CS: "/img/coopsmile.png",
 };
 
-const CHUYEN_ORDER = ["SÁNG", "TRƯA", "CHIỀU", "TỐI", "PHÂN BỔ", "KHAI TRƯƠNG"];
+const CHUYEN_ORDER = [
+  "SÁNG",
+  "TRƯA",
+  "CHIỀU",
+  "TỐI",
+  "PHÂN BỔ",
+  "KHAI TRƯƠNG",
+  "GIAO KHÁCH",
+];
 const CHUYEN_COLORS = {
   SÁNG: "#FBBF24",
   TRƯA: "#FB923C",
@@ -291,6 +299,7 @@ const CHUYEN_COLORS = {
   TỐI: "#6366F1",
   "PHÂN BỔ": "#06B6D4",
   "KHAI TRƯƠNG": "#A855F7",
+  "GIAO KHÁCH": "#E11D48", // đỏ (rose) — đồng bộ với UI Giao Khách ở bảng dữ liệu
   Khác: "#94a3b8",
 };
 
@@ -1292,7 +1301,7 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
               trên {formatNumber(stats.kpiTotal)} phiếu có TG import
             </div>
           </div>
-        <ResponsiveContainer width="100%" height={280} debounce={150}>
+          <ResponsiveContainer width="100%" height={280} debounce={150}>
             <PieChart margin={{ top: 24, right: 70, bottom: 50, left: 70 }}>
               <Pie
                 data={stats.kpiData}

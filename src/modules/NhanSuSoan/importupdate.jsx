@@ -1,9 +1,9 @@
 /* eslint-disable react/prop-types */
-// components/phieusoan/NhanSuSoan/importphanbo.jsx
+// components/phieusoan/NhanSuSoan/importupdate.jsx
 import { useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
-  Shuffle,
+  RefreshCw,
   Upload,
   X,
   Loader2,
@@ -48,7 +48,7 @@ const downloadTemplate = async () => {
   workbook.creator = "SC Logistics";
   workbook.created = new Date();
 
-  const sheet = workbook.addWorksheet("Import Phân Bổ");
+  const sheet = workbook.addWorksheet("Import Update");
   sheet.columns = TEMPLATE_COLUMNS.map((c) => ({
     header: c.label,
     key: c.key,
@@ -63,7 +63,7 @@ const downloadTemplate = async () => {
     cell.fill = {
       type: "pattern",
       pattern: "solid",
-      fgColor: { argb: "FFE0F2FE" }, // cyan nhạt — đồng bộ màu "PHÂN BỔ"
+      fgColor: { argb: "FFE0F2FE" }, // cyan nhạt
     };
     cell.border = {
       top: { style: "thin", color: { argb: "FFCBD5E1" } },
@@ -91,7 +91,7 @@ const downloadTemplate = async () => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "Template_Import_PhanBo.xlsx";
+  link.download = "Template_Import_Update.xlsx";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -176,13 +176,13 @@ const parseWorkbookFile = async (file) => {
   return rows;
 };
 
-const ImportPhanBo = ({ onImported }) => {
+const ImportUpdate = ({ onImported }) => {
   const [open, setOpen] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [parseError, setParseError] = useState("");
   const [rows, setRows] = useState([]);
-  const [result, setResult] = useState(null); // { success, duplicates, failed }
+  const [result, setResult] = useState(null); // { success, skipped, error }
   const fileInputRef = useRef(null);
 
   const resetState = useCallback(() => {
@@ -212,7 +212,7 @@ const ImportPhanBo = ({ onImported }) => {
       const parsed = await parseWorkbookFile(file);
       setRows(parsed);
     } catch (err) {
-      console.error("Lỗi đọc file import Phân Bổ:", err);
+      console.error("Lỗi đọc file Import Update:", err);
       setParseError(
         err.message || "Không đọc được file. Vui lòng kiểm tra lại định dạng.",
       );
@@ -228,20 +228,21 @@ const ImportPhanBo = ({ onImported }) => {
     if (validRows.length === 0) return;
     setImporting(true);
     try {
-      // Backend (importPhanBoNhanSuSoan) tự set chuyen: "PHÂN BỔ",
-      // trangThai/trangThaiBookXe: "Hoàn thành", và 1 mốc thời gian chung
-      // cho tgImport/tgHoanThanh/tgNhanPhieu — frontend chỉ gửi dữ liệu thô.
+      // Backend (importUpdateNhanSuSoan) chỉ update tgHoanThanh (và tgNhanPhieu
+      // nếu chưa có) cho các đơn ĐÃ TỒN TẠI theo soDonHang. Đơn không tồn tại
+      // sẽ bị bỏ qua (không insert mới). Các field khác trong file KHÔNG được
+      // dùng để ghi đè dữ liệu gốc, chỉ cần soDonHang để match.
       // eslint-disable-next-line no-unused-vars
       const payload = validRows.map(({ _rowNumber, _errors, ...item }) => item);
 
-      const res = await nhanSuSoanService.importPhanBo(payload);
+      const res = await nhanSuSoanService.importUpdateNhanSuSoan(payload);
       setResult({
-        success: res?.inserted?.length ?? 0,
+        success: res?.modifiedCount ?? 0,
         skipped: res?.skipped ?? [],
       });
       onImported?.();
     } catch (err) {
-      console.error("Lỗi import Phân Bổ:", err);
+      console.error("Lỗi Import Update:", err);
       setResult({ success: 0, skipped: [], error: true });
     } finally {
       setImporting(false);
@@ -253,11 +254,11 @@ const ImportPhanBo = ({ onImported }) => {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="Import dữ liệu đã Phân Bổ (bỏ qua bước soạn)"
+        title="Import cập nhật thời gian hoàn thành cho các đơn đã tồn tại"
         className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-cyan-700 hover:to-teal-700 hover:shadow-md active:scale-95"
       >
-        <Shuffle size={15} />
-        Import Phân Bổ
+        <RefreshCw size={15} />
+        Import Update
       </button>
 
       {open &&
@@ -272,10 +273,10 @@ const ImportPhanBo = ({ onImported }) => {
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
                 <div className="flex items-center gap-2">
                   <div className="grid h-8 w-8 place-items-center rounded-full bg-cyan-50 text-cyan-600">
-                    <Shuffle size={16} />
+                    <RefreshCw size={16} />
                   </div>
                   <h3 className="text-base font-bold text-slate-800">
-                    Import Phân Bổ
+                    Import Update
                   </h3>
                 </div>
                 <button
@@ -290,12 +291,6 @@ const ImportPhanBo = ({ onImported }) => {
               </div>
 
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-                <p className="text-sm text-slate-500">
-                  Dùng cho các đơn đã xử lý qua Phân Bổ (không qua bước soạn
-                  tay) — hệ thống sẽ tự đánh dấu <b>Hoàn thành</b> và Chuyến{" "}
-                  <b>PHÂN BỔ</b> ngay khi import.
-                </p>
-
                 <button
                   type="button"
                   onClick={downloadTemplate}
@@ -427,11 +422,11 @@ const ImportPhanBo = ({ onImported }) => {
                     )}
                     <div className="space-y-1">
                       {result.error ? (
-                        "Import thất bại. Vui lòng thử lại."
+                        "Cập nhật thất bại. Vui lòng thử lại."
                       ) : (
                         <>
                           <div>
-                            Đã import <b>{result.success}</b> phiếu Phân Bổ.
+                            Đã cập nhật <b>{result.success}</b> phiếu.
                             {result.skipped.length > 0 &&
                               ` ${result.skipped.length} phiếu bị bỏ qua.`}
                           </div>
@@ -478,8 +473,8 @@ const ImportPhanBo = ({ onImported }) => {
                       <FileSpreadsheet size={15} />
                     )}
                     {importing
-                      ? "Đang import..."
-                      : `Import ${validRows.length || ""} phiếu`}
+                      ? "Đang cập nhật..."
+                      : `Cập nhật ${validRows.length || ""} phiếu`}
                   </button>
                 )}
               </div>
@@ -491,4 +486,4 @@ const ImportPhanBo = ({ onImported }) => {
   );
 };
 
-export default ImportPhanBo;
+export default ImportUpdate;

@@ -187,15 +187,27 @@ const deleteAllNhanSuSoan = async () => {
     throw error;
   }
 };
-const importPhanBo = async (data) => {
+const importUpdateNhanSuSoan = async (data) => {
   try {
     const response = await ApiServer.post(
-      `${URL.phieusoan.nhansusoan}/import-phanbo`,
+      `${URL.phieusoan.nhansusoan}/import-update`,
       { data },
     );
     return response.data;
   } catch (error) {
-    console.error("Lỗi importPhanBo:", error);
+    console.error("Lỗi importUpdateNhanSuSoan:", error);
+    throw error;
+  }
+};
+const addGiaoKhach = async (data) => {
+  try {
+    const response = await ApiServer.post(
+      `${URL.phieusoan.nhansusoan}/add-giao-khach`,
+      { data },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi addGiaoKhach:", error);
     throw error;
   }
 };
@@ -210,5 +222,6 @@ export const nhanSuSoanService = {
   deleteNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/:id
   deleteManyNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/many
   deleteAllNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/delete-all
-  importPhanBo
+  importUpdateNhanSuSoan,
+  addGiaoKhach
 };

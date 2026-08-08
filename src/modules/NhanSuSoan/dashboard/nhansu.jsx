@@ -291,7 +291,7 @@ const computeBoPhanStats = (filteredDsNhanVien, map) => {
 /* Logic đánh giá KPI cột "Tổng" (CF + CS)                             */
 /* ------------------------------------------------------------------ */
 const KPI_NEAR_RATIO = 0.95;
-
+const KPI_CASE1_GATE = { kien: 235, dong: 170 };
 const KPI_TIER_BG = {
   0: "bg-emerald-200/70", // dat - xanh lá đậm
   1: "bg-blue-200/70", // case1 - xanh dương đậm
@@ -307,6 +307,8 @@ const KPI_TIER_LABEL = {
 };
 
 // Các trạng thái không thực sự được chấm KPI -> để nền trắng, không tô màu
+// ✅ Mã phụ giờ được tô XANH LÁ giống hệt nhóm "đạt KPI đầy đủ" (tier 0),
+// nhưng khi sort vẫn xếp riêng ngay dưới nhóm đó (xem getKpiSortPriority).
 const getRowKpiBg = (rowEval) => {
   if (rowEval.status === "dat" || rowEval.status === "chua-dat") {
     return {
@@ -314,7 +316,14 @@ const getRowKpiBg = (rowEval) => {
       title: KPI_TIER_LABEL[rowEval.tier],
     };
   }
-  return { bg: "", title: undefined }; // mã phụ / chưa hoàn tất / chưa bắt đầu / không áp dụng
+  if (rowEval.status === "khong-tinh-kpi") {
+    return {
+      bg: KPI_TIER_BG[0], // xanh lá, đồng bộ màu với tier 0
+      title:
+        "Có phiếu chấm bằng mã phụ — tô xanh lá, xếp ngay dưới nhóm đạt KPI đầy đủ",
+    };
+  }
+  return { bg: "", title: undefined }; // chưa hoàn tất / chưa bắt đầu / không áp dụng
 };
 
 const KPI_TIER = { dat: 0, case1: 1, case2: 2, "chua-dat": 3 };
@@ -362,24 +371,38 @@ const evaluateKpiRow = (row, isSingleDay, kpi) => {
 
   // Trả về { state, display } — display là số HIỂN THỊ lên bảng
   // (cap tối đa = target, không được vượt), chỉ khác actual khi case1/case2.
-  const evalMetric = (actual, tgt, isCrossType) => {
+  const evalMetric = (actual, tgt, gateOk, isCrossType) => {
     if (tgt <= 0) return { state: "chua-dat", display: actual };
     if (actual >= tgt) return { state: "dat", display: actual };
-    if (actual >= tgt * KPI_NEAR_RATIO) return { state: "case1", display: tgt };
+    // ✅ Case 1: chỉ xét khi ĐÃ qua gate (1 trong 2 bên CF/CS đạt riêng
+    // lẻ >= ngưỡng), VÀ tổng CF+CS >= 95% KPI.
+    if (gateOk && actual >= tgt * KPI_NEAR_RATIO) {
+      return { state: "case1", display: tgt };
+    }
     if (isCrossType && case2Eligible) {
       return { state: "case2", display: Math.min(crossSum, tgt) };
     }
     return { state: "chua-dat", display: actual };
   };
 
+  // ✅ Gate cho từng chỉ tiêu: true nếu CF hoặc CS (riêng lẻ) đạt ngưỡng
+  const kienGateOk =
+    (htCF.kien || 0) >= KPI_CASE1_GATE.kien ||
+    (htCS.kien || 0) >= KPI_CASE1_GATE.kien;
+  const dongGateOk =
+    (htCF.dong || 0) >= KPI_CASE1_GATE.dong ||
+    (htCS.dong || 0) >= KPI_CASE1_GATE.dong;
+
   const kienResult = evalMetric(
     ht.kien || 0,
     target.kien,
+    kienGateOk,
     crossType === "kien",
   );
   const dongResult = evalMetric(
     ht.dong || 0,
     target.dong,
+    dongGateOk,
     crossType === "dong",
   );
 
@@ -392,14 +415,14 @@ const evaluateKpiRow = (row, isSingleDay, kpi) => {
 // Sắp xếp theo màu: xanh lá -> xanh dương -> cam -> đỏ -> trắng (cuối cùng)
 const getKpiSortPriority = (rowEval) => {
   if (rowEval.status === "dat") {
-    // tier: 0 = xanh lá, 1 = xanh dương (case1), 2 = cam (case2)
-    return rowEval.tier; // 0, 1, hoặc 2
+    // tier: 0 = xanh lá (đạt đầy đủ), 1 = xanh dương (case1), 2 = cam (case2)
+    return rowEval.tier * 10; // 0, 10, hoặc 20
   }
-  if (rowEval.status === "chua-dat") return 3; // đỏ
-  if (rowEval.status === "khong-tinh-kpi") return 4; // Mã phụ - trắng
-  if (rowEval.status === "chua-hoan-tat") return 5; // Chưa xong - trắng
-  if (rowEval.status === "chua-bat-dau") return 6; // Chưa xong - trắng
-  return 7; // khong-ap-dung
+  if (rowEval.status === "khong-tinh-kpi") return 5; // Mã phụ - xanh lá, dưới tier 0
+  if (rowEval.status === "chua-dat") return 30; // đỏ
+  if (rowEval.status === "chua-hoan-tat") return 40; // Chưa xong - trắng
+  if (rowEval.status === "chua-bat-dau") return 50; // Chưa xong - trắng
+  return 60; // khong-ap-dung
 };
 
 const buildMergedRows = (
@@ -721,10 +744,13 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
             ) : (
               displayRows.map((r) => {
                 const rowEval = evaluateKpiRow(r, isSingleDay, kpi);
-                const { bg: tongBg, title: tongTitle } = getRowKpiBg(rowEval);
+                const { bg: tongBg } = getRowKpiBg(rowEval);
 
                 return (
-                  <tr key={r.maNhanVien} className="border-t border-slate-100">
+                  <tr
+                    key={r.maNhanVien}
+                    className="border-t border-slate-100 transition-colors hover:ring-2 hover:ring-inset hover:ring-blue-400"
+                  >
                     <td className="px-3 py-1.5 text-slate-500">{r.chucVu}</td>
                     <td className="px-3 py-1.5 font-semibold text-slate-700">
                       {r.maNhanVien}
@@ -740,26 +766,16 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
                           <Fragment key={key}>
                             <td
                               className={`border-l border-slate-100 px-2 py-1.5 text-right ${tongBg}`}
-                              title={tongTitle}
                             >
                               {g.totalPhieu || ""}
                             </td>
-                            <td
-                              className={`px-2 py-1.5 text-right ${tongBg}`}
-                              title={tongTitle}
-                            >
+                            <td className={`px-2 py-1.5 text-right ${tongBg}`}>
                               {rowEval.kien.display || ""}
                             </td>
-                            <td
-                              className={`px-2 py-1.5 text-right ${tongBg}`}
-                              title={tongTitle}
-                            >
+                            <td className={`px-2 py-1.5 text-right ${tongBg}`}>
                               {rowEval.dong.display || ""}
                             </td>
-                            <td
-                              className={`px-2 py-1.5 text-center ${tongBg}`}
-                              title={tongTitle}
-                            >
+                            <td className={`px-2 py-1.5 text-center ${tongBg}`}>
                               {KPI_BADGE[rowEval.status]}
                             </td>
                           </Fragment>
@@ -915,8 +931,6 @@ const NhanSuSoanEmployeeLookup = () => {
   const handleChangeChucVu = useCallback((e) => {
     setSelectedChucVu(e.target.value);
   }, []);
-
-
 
   // ✅ Chỉ cần MỘT trong hai (Bộ phận hoặc Chức vụ) được chọn là đã đủ để
   // tải danh sách nhân viên — không còn bắt buộc phải có Bộ phận trước.
@@ -1212,7 +1226,6 @@ const NhanSuSoanEmployeeLookup = () => {
           {/* ✅ MỚI: Select lọc theo đúng 1 Mã nhân viên — options lấy từ
               danh sách nhân viên đã tải theo Bộ phận/Chức vụ ở trên
               (dsNhanVien), không phụ thuộc searchKeyword. */}
-      
 
           {/* ✅ MỚI: nút "Hôm nay" kiểu chữ tối giản, set nhanh
               tuNgay = denNgay = ngày hiện tại. */}

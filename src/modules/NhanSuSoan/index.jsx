@@ -26,6 +26,7 @@ import {
   Pencil,
   PartyPopper,
   Shuffle,
+  Truck,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import dayjs from "dayjs";
@@ -40,8 +41,9 @@ import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 import HuyGiaoPhieu from "./huygiaophieu";
 import NhanSuSoanDashboard from "./dashboard";
 import NhanSuSoanEmployeeLookup from "./dashboard/nhansu";
-import ImportPhanBo from "./importphanbo";
+import ImportPhanBo from "./importupdate";
 import ExportExcelButton from "./exportexcel";
+import AddGiaoKhach from "./addgiaokhach";
 
 const TRANG_THAI_OPTIONS = ["Chưa soạn", "Đang soạn", "Hoàn thành"];
 const TRANG_THAI_BOOK_XE_OPTIONS = ["Chờ Book", "Chờ Xe", "Hoàn thành"];
@@ -119,6 +121,13 @@ const CHUYEN_STYLE = {
     icon: Shuffle,
     iconColor: "text-cyan-500",
   },
+  "GIAO KHÁCH": {
+    badge:
+      "text-rose-700 bg-gradient-to-r from-rose-50 to-red-50 border border-rose-300 shadow-sm",
+    dot: "bg-rose-500",
+    icon: Truck,
+    iconColor: "text-rose-500",
+  },
 };
 
 const CHUYEN_OPTIONS = [
@@ -128,6 +137,7 @@ const CHUYEN_OPTIONS = [
   "TỐI",
   "KHAI TRƯƠNG",
   "PHÂN BỔ",
+  "GIAO KHÁCH",
 ];
 
 const CHUYEN_FALLBACK_STYLE = {
@@ -522,12 +532,6 @@ const ViewTabs = memo(function ViewTabs({ view, onChange, hideNhanSu }) {
   );
 });
 
-/** 1 dòng dữ liệu trong bảng — tách riêng + memo để khi chỉ có 1-2 dòng đổi
- *  trạng thái chọn/focus, các dòng còn lại không phải render lại.
- *  Khi được chọn (isSelected), dòng "nổi lên" nhẹ bằng translateY + shadow.
- *  `index` là vị trí dòng trong sortedItems — cần thiết để hỗ trợ chọn
- *  nhanh nhiều dòng bằng Shift + click (xem toggleSelectRow ở component cha).
- *  `readOnly`: role view-only (58) — ẩn checkbox chọn dòng, tắt sửa Chuyến. */
 const TableRow = memo(function TableRow({
   item,
   index,
@@ -540,6 +544,14 @@ const TableRow = memo(function TableRow({
   onEditChuyen,
   readOnly,
 }) {
+  // ✅ Nhận diện phiếu Chuyến GIAO KHÁCH để tô nền đỏ nhạt toàn dòng —
+  // chuyến gấp cần nổi bật ngay cả khi không nhìn vào cột Chuyến.
+  const isGiaoKhach = (item.chuyen || "")
+    .toString()
+    .trim()
+    .toUpperCase()
+    .includes("GIAO KHÁCH");
+
   return (
     <tr
       ref={rowRef}
@@ -549,9 +561,11 @@ const TableRow = memo(function TableRow({
       className={`relative border-b border-slate-100 transition-all duration-200 ease-out will-change-transform hover:bg-blue-50/70 hover:shadow-[inset_3px_0_0_0_theme(colors.blue.400)] ${
         isSelected
           ? "z-10 bg-blue-50 shadow-[0_4px_14px_-2px_rgba(59,130,246,0.35)] ring-1 ring-blue-300"
-          : item.soPhieuGop
-            ? "bg-indigo-50/40 even:bg-indigo-50/60"
-            : "even:bg-slate-50/70"
+          : isGiaoKhach
+            ? "bg-rose-50/60 even:bg-rose-50/80 shadow-[inset_3px_0_0_0_theme(colors.rose.400)]"
+            : item.soPhieuGop
+              ? "bg-indigo-50/40 even:bg-indigo-50/60"
+              : "even:bg-slate-50/70"
       } ${isGroupBoundary ? "border-t-2 border-t-indigo-200" : ""} ${
         isFocused
           ? "!bg-blue-50/60 shadow-[inset_3px_0_0_0_theme(colors.blue.500)]"
@@ -774,19 +788,29 @@ const NhanSuSoanTable = forwardRef(
       [filters],
     );
 
-    // Gom các phiếu đã gộp (cùng soPhieuGop) đứng cạnh nhau và đẩy lên đầu bảng.
-    // Trong các nhóm đã gộp, nhóm nào vừa được thao tác Gộp Phiếu gần đây
-    // nhất sẽ được ưu tiên đứng lên đầu tiên — xác định bằng tgHoanThanh lớn
-    // nhất trong nhóm, vì hành động Gộp Phiếu luôn set tgHoanThanh = thời
-    // điểm gộp cho toàn bộ phiếu trong nhóm đó.
     const sortedItems = useMemo(() => {
       if (!items.length) return items;
+
+      // ✅ Phiếu Chuyến GIAO KHÁCH CHƯA Hoàn thành mới được ghim lên đầu
+      // bảng (chuyến gấp cần xử lý ngay). Khi đã Hoàn thành thì không cần
+      // ghim nữa — trả về sắp xếp theo nhóm gộp như bình thường.
+      const isGiaoKhachChuaXong = (item) => {
+        const isGiaoKhach = (item.chuyen || "")
+          .toString()
+          .trim()
+          .toUpperCase()
+          .includes("GIAO KHÁCH");
+        return isGiaoKhach && item.trangThai !== "Hoàn thành";
+      };
+
+      const giaoKhachItems = items.filter(isGiaoKhachChuaXong);
+      const restItems = items.filter((item) => !isGiaoKhachChuaXong(item));
 
       const groupMap = new Map();
       const groupOrder = [];
       const ungrouped = [];
 
-      items.forEach((item) => {
+      restItems.forEach((item) => {
         const key = (item.soPhieuGop || "").toString().trim();
         if (!key) {
           ungrouped.push(item);
@@ -812,7 +836,7 @@ const NhanSuSoanTable = forwardRef(
       );
 
       const grouped = sortedGroupOrder.flatMap((key) => groupMap.get(key));
-      return [...grouped, ...ungrouped];
+      return [...giaoKhachItems, ...grouped, ...ungrouped];
     }, [items]);
 
     // Đánh dấu ranh giới nhóm gộp 1 lần duy nhất khi sortedItems đổi,
@@ -1107,7 +1131,7 @@ const NhanSuSoanTable = forwardRef(
 
     return (
       <div className="mx-auto max-w-[1900px] space-y-4 p-4 md:p-6 bg-gradient-to-b from-slate-50 to-white min-h-screen">
-    {/* ✅ Header tách 2 hàng cố định:
+        {/* ✅ Header tách 2 hàng cố định:
             - Hàng 1: tiêu đề (trái) + Tabs (phải) — Tabs KHÔNG BAO GIỜ bị xê
               dịch, vì hàng này không chứa bất kỳ nút thao tác nào khác.
             - Hàng 2: toolbar chứa toàn bộ nút thao tác theo từng tab — tự do
@@ -1196,6 +1220,7 @@ const NhanSuSoanTable = forwardRef(
                       <>
                         <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
                         <ImportPhanBo onImported={fetchNhanSuSoan} />
+                        <AddGiaoKhach onImported={fetchNhanSuSoan} />
                       </>
                     )}
                     <ExportExcelButton
