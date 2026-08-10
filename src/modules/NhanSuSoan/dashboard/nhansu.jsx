@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /* eslint-disable react/prop-types */
 // components/phieusoan/NhanSuSoan/nhansu.jsx
 import {
@@ -24,6 +25,7 @@ import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 // NOTE: chỉnh lại đường dẫn import cho khớp với project của bạn nếu khác
 import { nhanVienService } from "@/services/nhanvien.service";
 import { StatCard, DateRangeFilter } from "./index";
+import ExportExcelButton from "./export";
 
 /* ------------------------------------------------------------------ */
 /* Hằng số Bộ phận / Chức vụ                                           */
@@ -328,7 +330,7 @@ const getRowKpiBg = (rowEval) => {
 
 const KPI_TIER = { dat: 0, case1: 1, case2: 2, "chua-dat": 3 };
 
-const evaluateKpiRow = (row, isSingleDay, kpi) => {
+export const evaluateKpiRow = (row, isSingleDay, kpi) => {
   const group = row.tong;
   const naResult = (status) => ({
     status,
@@ -1281,6 +1283,19 @@ const NhanSuSoanEmployeeLookup = () => {
           {(loading || loadingNV) && (
             <Loader2 size={18} className="animate-spin text-blue-500" />
           )}
+          <ExportExcelButton
+            rows={displayedMergedRows}
+            evaluateKpiRow={evaluateKpiRow}
+            isSingleDay={isSingleDay}
+            kpi={kpi}
+            vaiTroLabel={vaiTroLabel}
+            vaiTro={vaiTro}
+            tuNgay={tuNgay}
+            denNgay={denNgay}
+            selectedBoPhan={selectedBoPhan}
+            selectedChucVu={selectedChucVu}
+            disabled={!boPhanStatsAll}
+          />
         </div>
 
         {/* Khối cài đặt KPI/ngày */}

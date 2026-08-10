@@ -319,15 +319,53 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
     setScannedList((prev) => prev.filter((it) => it._id !== id));
   };
 
+  /** Kiểm tra 1 phiếu có đang nhập số kiện vượt quá 150% kiện dự kiến không */
+  const isKienVuotNguong = (item) => {
+    const duKien = Number(item.kien_du_kien) || 0;
+    const nhap = Number(item.kien) || 0;
+    if (duKien <= 0) return false; // không có kiện dự kiến -> không kiểm tra
+    return nhap > duKien * 1.5;
+  };
+
+  /** Nếu phiếu đang vượt ngưỡng và CHƯA được xác nhận -> hỏi người dùng.
+   *  Xác nhận (OK) -> đánh dấu đã xác nhận, trả về true.
+   *  Huỷ (Cancel) -> trả về false, không đánh dấu (lần sau vẫn hỏi lại). */
+  const confirmKienVuotNeuCan = (item) => {
+    if (!isKienVuotNguong(item) || item.kienOverConfirmed) return true;
+
+    const duKien = Number(item.kien_du_kien) || 0;
+    const nhap = Number(item.kien) || 0;
+    const confirmed = window.confirm(
+      `Phiếu "${item.soDonHang}": bạn đang nhập ${nhap} kiện, vượt quá 150% so với kiện dự kiến (${duKien}). Bạn có chắc chắn số kiện này đúng không?`,
+    );
+
+    if (confirmed) {
+      setScannedList((prev) =>
+        prev.map((it) =>
+          it._id === item._id ? { ...it, kienOverConfirmed: true } : it,
+        ),
+      );
+    }
+    return confirmed;
+  };
+
   /** Cập nhật kiện/dòng nhập tay cho từng phiếu trong danh sách đã quét */
   const handleChangeScannedField = (id, field, value) => {
     // chỉ cho phép số
     const cleaned = value.replace(/[^0-9]/g, "");
     setScannedList((prev) =>
-      prev.map((it) => (it._id === id ? { ...it, [field]: cleaned } : it)),
+      prev.map((it) =>
+        it._id === id
+          ? {
+              ...it,
+              [field]: cleaned,
+              // Sửa lại số kiện -> reset cờ đã xác nhận để kiểm tra lại từ đầu
+              ...(field === "kien" ? { kienOverConfirmed: false } : {}),
+            }
+          : it,
+      ),
     );
   };
-
   const isScannedListValid =
     scannedList.length > 0 &&
     scannedList.every((it) => it.kien !== "" && it.dong !== "");
@@ -347,9 +385,18 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
       setScanError("Vui lòng nhập đủ số kiện và số dòng cho tất cả phiếu.");
       return;
     }
+
+    for (const item of scannedList) {
+      if (!confirmKienVuotNeuCan(item)) {
+        setScanError(
+          `Số kiện của phiếu "${item.soDonHang}" đang vượt quá kiện dự kiến — vui lòng kiểm tra lại hoặc xác nhận.`,
+        );
+        return;
+      }
+    }
+
     setStep(2);
   };
-
   /** Tra cứu nhân viên theo mã, dùng nhanVienService có sẵn */
   const handleLookupNhanVien = async () => {
     const ma = maNhanVien.trim();
@@ -561,6 +608,7 @@ const ScanHoanThanh = forwardRef(({ onSuccess }, ref) => {
                                 e.target.value,
                               )
                             }
+                            onBlur={() => confirmKienVuotNeuCan(item)} // 👈 mới — hỏi ngay khi rời ô Kiện
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();

@@ -328,6 +328,8 @@ const KPI_COLORS = {
   "Đang soạn (còn hạn)": "#3b82f6",
   "Không đạt KPI": "#ef4444",
 };
+const TRANG_THAI_MIN_ANGLE = 8; // dùng chung cho <Pie minAngle> và usePieLabelRenderer
+const CHUYEN_MIN_ANGLE = 6; // 6 lát nên để nhỏ hơn chút, tránh donut bị méo tỉ lệ quá nhiều
 
 const classifyKPI = (item, now) => {
   if (!item.tgImport) return null;
@@ -353,6 +355,7 @@ const computePieLabelLayout = (
   outerRadius,
   chartHeight,
   bottomReserve = 14,
+  minAngle = 0, // phải khớp với prop minAngle đang đặt trên <Pie> tương ứng
 ) => {
   const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
   const labelRadius = outerRadius + 22;
@@ -364,9 +367,16 @@ const computePieLabelLayout = (
   // ~24-28px) để nhãn số liệu không bị rớt xuống đè lên chữ chú thích.
   const maxY = chartHeight - bottomReserve;
 
+  // ✅ Tái tạo đúng công thức góc mà Recharts dùng nội bộ khi có minAngle:
+  // mỗi lát có giá trị > 0 được đảm bảo tối thiểu `minAngle`, phần góc còn
+  // lại (360 - n*minAngle) mới được chia tiếp theo tỉ lệ giá trị thực.
+  const nonZeroCount = data.filter((d) => d.value > 0).length;
+  const realTotalAngle = Math.max(0, 360 - nonZeroCount * minAngle);
+
   let cumulated = 0;
   const positioned = data.map((d) => {
-    const sweep = (d.value / total) * 360;
+    const sweep =
+      d.value > 0 ? minAngle + (d.value / total) * realTotalAngle : 0;
     const midAngle = cumulated + sweep / 2;
     cumulated += sweep;
 
@@ -416,14 +426,19 @@ const computePieLabelLayout = (
   return positioned;
 };
 
-const usePieLabelRenderer = (data, chartHeight, bottomReserve = 14) =>
+const usePieLabelRenderer = (
+  data,
+  chartHeight,
+  bottomReserve = 14,
+  minAngle = 0, // truyền xuống computePieLabelLayout — phải khớp <Pie minAngle>
+) =>
   useMemo(() => {
     let layoutCache = null;
     let cacheKey = null;
 
     return function PieLabel(props) {
       const { cx, cy, outerRadius, index } = props;
-      const key = `${cx}-${cy}-${outerRadius}-${chartHeight}-${bottomReserve}`;
+      const key = `${cx}-${cy}-${outerRadius}-${chartHeight}-${bottomReserve}-${minAngle}`;
       if (!layoutCache || cacheKey !== key) {
         layoutCache = computePieLabelLayout(
           data,
@@ -432,6 +447,7 @@ const usePieLabelRenderer = (data, chartHeight, bottomReserve = 14) =>
           outerRadius,
           chartHeight,
           bottomReserve,
+          minAngle,
         );
         cacheKey = key;
       }
@@ -466,7 +482,7 @@ const usePieLabelRenderer = (data, chartHeight, bottomReserve = 14) =>
         </g>
       );
     };
-  }, [data, chartHeight, bottomReserve]);
+  }, [data, chartHeight, bottomReserve, minAngle]);
 
 /* ------------------------------------------------------------------ */
 /* StatCard                                                            */
@@ -1074,11 +1090,17 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
     };
   }, [stats.kpiDatRate]);
 
-  const chuyenLabel = usePieLabelRenderer(chainChartStats.chuyenData, 280, 40);
+  const chuyenLabel = usePieLabelRenderer(
+    chainChartStats.chuyenData,
+    280,
+    40,
+    CHUYEN_MIN_ANGLE, // 👈 THÊM — phải khớp minAngle trên <Pie> bên dưới
+  );
   const trangThaiLabel = usePieLabelRenderer(
     chainChartStats.trangThaiData,
     280,
     40,
+    TRANG_THAI_MIN_ANGLE, // 👈 phải khớp minAngle trên <Pie> của trạng thái
   );
   const kpiLabel = usePieLabelRenderer(stats.kpiData, 280, 20);
   // ✅ MỚI: click vào 1 lát pie -> báo lên component cha (qua onNavigate)
@@ -1188,6 +1210,7 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
                 innerRadius={44}
                 outerRadius={72}
                 paddingAngle={2}
+                minAngle={CHUYEN_MIN_ANGLE} // 👈 THÊM — khớp với chuyenLabel ở trên
                 label={chuyenLabel}
                 labelLine={false}
                 cursor="pointer"
@@ -1221,6 +1244,7 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
                 innerRadius={44}
                 outerRadius={72}
                 paddingAngle={2}
+                minAngle={TRANG_THAI_MIN_ANGLE}
                 label={trangThaiLabel}
                 labelLine={false}
                 cursor="pointer"

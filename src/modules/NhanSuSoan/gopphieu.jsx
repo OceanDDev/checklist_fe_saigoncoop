@@ -208,6 +208,7 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
   const [kienGop, setKienGop] = useState(""); // nhập 1 lần duy nhất
   const [dongGop, setDongGop] = useState(""); // nhập 1 lần duy nhất
   const [daiDienId, setDaiDienId] = useState(null); // phiếu đại diện nhận Kiện/Dòng
+  const [kienGopOverConfirmed, setKienGopOverConfirmed] = useState(false);
 
   // --- Bước 3: xác nhận nhân viên KC (giống ScanHoanThanh) ---
   const [maNhanVien, setMaNhanVien] = useState("");
@@ -262,6 +263,7 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
     setKienGop("");
     setDongGop("");
     setDaiDienId(null);
+    setKienGopOverConfirmed(false);
     setMaNhanVien("");
     setNhanVienInfo(null);
     setNvError("");
@@ -483,7 +485,36 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
       scannedList.some((it) => it._id === daiDienId),
     [soPhieuGop, kienGop, dongGop, daiDienId, scannedList],
   );
+  const tongKienDuKien = useMemo(
+    () =>
+      scannedList.reduce((sum, it) => sum + (Number(it.kien_du_kien) || 0), 0),
+    [scannedList],
+  );
+  /** Kiện gộp có đang vượt quá 150% tổng kiện dự kiến của cả nhóm không */
+  const isKienGopVuotNguong = useMemo(() => {
+    if (tongKienDuKien <= 0) return false; // nhóm không có kiện dự kiến -> không kiểm tra
+    const nhap = Number(kienGop) || 0;
+    return nhap > tongKienDuKien * 1.5;
+  }, [tongKienDuKien, kienGop]);
 
+  /** Nếu đang vượt ngưỡng và chưa xác nhận -> hỏi người dùng.
+   *  Xác nhận (OK) -> đánh dấu đã xác nhận, trả về true.
+   *  Huỷ (Cancel) -> trả về false. */
+  const confirmKienGopVuotNeuCan = useCallback(() => {
+    if (!isKienGopVuotNguong || kienGopOverConfirmed) return true;
+
+    const confirmed = window.confirm(
+      `Bạn đang nhập ${kienGop} kiện, vượt quá 150% so với tổng kiện dự kiến của ${scannedList.length} phiếu (${tongKienDuKien}). Bạn có chắc chắn số kiện này đúng không?`,
+    );
+    if (confirmed) setKienGopOverConfirmed(true);
+    return confirmed;
+  }, [
+    isKienGopVuotNguong,
+    kienGopOverConfirmed,
+    kienGop,
+    tongKienDuKien,
+    scannedList.length,
+  ]);
   // Nếu TOÀN BỘ phiếu trong nhóm là phiếu "TO" thì được phép bỏ qua
   // hẳn bước xác nhận nhân viên KC (không cần nhập mã NV KC).
   const groupIsTO = useMemo(
@@ -495,11 +526,12 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
 
   const goToNvKcStep = useCallback(() => {
     if (!isKienDongValid) return;
+    if (!confirmKienGopVuotNeuCan()) return; // 👈 mới
     setMaNhanVien("");
     setNhanVienInfo(null);
     setNvError("");
     setStep(3);
-  }, [isKienDongValid]);
+  }, [isKienDongValid, confirmKienGopVuotNeuCan]);
 
   /** Enter ở bước Kiện/Dòng (số phiếu gộp, kiện, dòng) -> tiếp tục ngay
    *  sang bước 3, không cần bấm nút "Tiếp tục". */
@@ -652,10 +684,11 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
     ],
   );
 
-  const handleKienChange = useCallback(
-    (e) => setKienGop(e.target.value.replace(/[^0-9]/g, "")),
-    [],
-  );
+  const handleKienChange = useCallback((e) => {
+    setKienGop(e.target.value.replace(/[^0-9]/g, ""));
+    setKienGopOverConfirmed(false); // 👈 mới — sửa số kiện thì hỏi lại từ đầu
+  }, []);
+
   const handleDongChange = useCallback(
     (e) => setDongGop(e.target.value.replace(/[^0-9]/g, "")),
     [],
@@ -807,20 +840,26 @@ const GopPhieu = forwardRef(({ onSuccess }, ref) => {
 
               {/* Kiện / Dòng — nhập 1 lần duy nhất cho cả nhóm */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600">
-                    Kiện
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={kienGop}
-                    onChange={handleKienChange}
-                    onKeyDown={handleKienDongKeyDown}
-                    placeholder="0"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                  />
-                </div>
+              <div className="space-y-1.5">
+  <label className="text-xs font-medium text-slate-600">
+    Kiện
+    {tongKienDuKien > 0 && (
+      <span className="ml-1 font-normal text-slate-400">
+        (dự kiến: {tongKienDuKien})
+      </span>
+    )}
+  </label>
+  <input
+    type="text"
+    inputMode="numeric"
+    value={kienGop}
+    onChange={handleKienChange}
+    onBlur={confirmKienGopVuotNeuCan} // 👈 mới
+    onKeyDown={handleKienDongKeyDown}
+    placeholder="0"
+    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+  />
+</div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-600">
                     Dòng

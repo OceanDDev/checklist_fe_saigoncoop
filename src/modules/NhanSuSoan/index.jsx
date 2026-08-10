@@ -683,6 +683,11 @@ const TableRow = memo(function TableRow({
       <td className="px-3 py-2 whitespace-nowrap text-slate-500">
         {formatDateTime(item.tgNhanPhieu)}
       </td>
+      <td className="px-3 py-2 whitespace-nowrap">
+        <span className="inline-block rounded-lg bg-gradient-to-r from-purple-100 to-fuchsia-50 px-2 py-1 font-bold text-purple-700 shadow-sm">
+          {item.kien_du_kien ?? 0}
+        </span>
+      </td>
     </tr>
   );
 });
@@ -1390,6 +1395,9 @@ const NhanSuSoanTable = forwardRef(
                     <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
                       TG nhận phiếu
                     </th>
+                    <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                      Kiện dự kiến
+                    </th>
                   </tr>
 
                   <tr className="border-b border-slate-200 bg-slate-50">
@@ -1565,6 +1573,8 @@ const NhanSuSoanTable = forwardRef(
                         }}
                       />
                     </th>
+                    <th className="px-3 py-1.5" />{" "}
+                    {/* 👈 mới — Kiện dự kiến không có filter */}
                   </tr>
                 </thead>
 
@@ -1575,7 +1585,7 @@ const NhanSuSoanTable = forwardRef(
                         key={`skeleton-${i}`}
                         className="border-b border-slate-100"
                       >
-                        {Array.from({ length: 16 }).map((__, j) => (
+                        {Array.from({ length: 17 }).map((__, j) => (
                           <td key={`sk-${i}-${j}`} className="px-3 py-3">
                             <div className="h-3 w-24 max-w-full animate-pulse rounded bg-gradient-to-r from-slate-200 to-slate-100" />
                           </td>
@@ -1586,7 +1596,7 @@ const NhanSuSoanTable = forwardRef(
                   {!loading && error && (
                     <tr>
                       <td
-                        colSpan={16}
+                        colSpan={17}
                         className="px-3 py-8 text-center text-rose-600 font-medium"
                       >
                         {error}
@@ -1596,7 +1606,7 @@ const NhanSuSoanTable = forwardRef(
 
                   {!loading && !error && items.length === 0 && (
                     <tr>
-                      <td colSpan={16} className="px-3 py-6">
+                      <td colSpan={17} className="px-3 py-6">
                         <EmptyState />
                       </td>
                     </tr>

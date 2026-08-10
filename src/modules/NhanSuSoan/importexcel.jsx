@@ -22,6 +22,7 @@ import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 const COLUMNS = [
   { key: "soDonHang", header: "Số Đơn Hàng", width: 18 },
   { key: "documentNo", header: "Document No", width: 18 },
+  { key: "kien_du_kien", header: "Kiện Dự Kiến", width: 14 }, // 👈 mới
   { key: "maNXD", header: "Mã NXĐ", width: 12 },
   { key: "noiXuatDen", header: "Nơi Xuất Đến", width: 26 },
   { key: "chuyen", header: "CHUYEN", width: 14 },
@@ -36,6 +37,7 @@ const COLUMNS = [
 const TEMPLATE_COLUMNS = [
   { key: "soDonHang", header: "Số Đơn Hàng", width: 18 },
   { key: "documentNo", header: "Document No", width: 18 },
+  { key: "kien_du_kien", header: "Kiện Dự Kiến", width: 14 }, // 👈 mới
   { key: "maNXD", header: "Mã NXĐ", width: 14 },
   { key: "chuyen", header: "CHUYEN", width: 14 },
 ];
@@ -169,30 +171,12 @@ const ImportNhanSuSoan = ({ onImported }) => {
         };
       });
 
-      const sampleRow = sheet.addRow({
-        soDonHang: "TO17493199",
-        documentNo: "TO17493199",
-        maNXD: "2034",
-        chuyen: "", // để trống -> hệ thống tự lấy theo Mã NXĐ; điền vào -> ưu tiên giá trị này (tự viết HOA)
-      });
-      TEMPLATE_COLUMNS.forEach((_, idx) => {
-        const cell = sampleRow.getCell(idx + 1);
-        cell.border = {
-          top: { style: "thin", color: { argb: "FFE2E8F0" } },
-          left: { style: "thin", color: { argb: "FFE2E8F0" } },
-          bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
-          right: { style: "thin", color: { argb: "FFE2E8F0" } },
-        };
-      });
-
       // Ghi chú hướng dẫn — gộp ô trong đúng phạm vi 3 cột, không style border
       // để không bị nhầm là ô nhập liệu.
       const noteRow = sheet.addRow({});
       const lastCol = String.fromCharCode(64 + TEMPLATE_COLUMNS.length); // A/B/C...
       sheet.mergeCells(`A${noteRow.number}:${lastCol}${noteRow.number}`);
       const noteCell = sheet.getCell(`A${noteRow.number}`);
-      noteCell.value =
-        "* Nơi Xuất Đến, Chuyến, Lịch đi hàng sẽ được hệ thống tự động điền theo Mã NXĐ khi import.";
       noteCell.font = { italic: true, size: 10, color: { argb: "FF64748B" } };
 
       const buffer = await workbook.xlsx.writeBuffer();
