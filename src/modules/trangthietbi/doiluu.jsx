@@ -27,7 +27,7 @@ const EMPTY_FORM = {
   ttb_giao: 0,
   ttb_sieu_thi_nhan: "",
   ttb_sieu_thi_tra: 0,
-  ttb_nhan: "",
+  ttb_nhan: 0,
   ttb_luu_tai_st: 0,
 };
 
@@ -151,7 +151,7 @@ export default function DoiLuuTab({ loaiList, onImported }) {
       ttb_giao: row.ttb_giao ?? 0,
       ttb_sieu_thi_nhan: row.ttb_sieu_thi_nhan || "",
       ttb_sieu_thi_tra: row.ttb_sieu_thi_tra ?? 0,
-      ttb_nhan: row.ttb_nhan || "",
+      ttb_nhan: row.ttb_nhan ?? 0,
       ttb_luu_tai_st: row.ttb_luu_tai_st ?? 0,
     });
     setModalOpen(true);
@@ -665,9 +665,13 @@ export default function DoiLuuTab({ loaiList, onImported }) {
 
               <Field label="TTB TTPP nhận">
                 <input
+                  type="number"
+                  min={0}
                   className="input"
                   value={form.ttb_nhan}
-                  onChange={(e) => handleFormChange("ttb_nhan", e.target.value)}
+                  onChange={(e) =>
+                    handleFormChange("ttb_nhan", Number(e.target.value))
+                  }
                 />
               </Field>
 
