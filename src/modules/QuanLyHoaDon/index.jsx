@@ -16,23 +16,23 @@ import {
   CalendarDays,
   X,
   FileSearch,
-    PackageX, // 👈 thêm icon riêng cho "thiếu dữ liệu WMS"
-
+  PackageX,
+  Receipt,
+  Warehouse,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import { quanlyhdService } from "@/services/quanlyhd.service";
-import ImportQuanLyHD from "./import";
 import ExportExcelButton from "./export";
-
+import ImportSingleFile from "./import"; // hoặc "./import-single-file" nếu bạn đổi tên file
 const TRANG_THAI_OPTIONS = [
   "Chưa có hóa đơn",
   "Không khớp lượng",
   "Hoàn thành",
   "Đã xử lý",
-  "No Data WMS"
+  "No Data WMS",
 ];
 
 // Trạng thái riêng: khi lọc đúng trạng thái này -> hiển thị TẤT CẢ, không phân trang
@@ -52,7 +52,8 @@ const TRANG_THAI_STYLE = {
   // 👈 thêm — dùng màu xanh dương để phân biệt với "Hoàn thành" (xanh lá)
   "Đã xử lý":
     "text-blue-700 bg-gradient-to-r from-blue-50 to-sky-50 border border-blue-300 shadow-sm",
-     "No Data WMS": // 👈 thêm
+  // 👈 thêm
+  "No Data WMS":
     "text-purple-700 bg-gradient-to-r from-purple-50 to-fuchsia-50 border border-purple-300 shadow-sm",
 };
 
@@ -61,8 +62,7 @@ const TRANG_THAI_ICON = {
   "Không khớp lượng": { icon: CircleAlert, color: "text-red-500" },
   "Hoàn thành": { icon: CheckCircle2, color: "text-emerald-500" },
   "Đã xử lý": { icon: CheckCircle2, color: "text-blue-500" }, // 👈 thêm
-    "No Data WMS": { icon: PackageX, color: "text-purple-500" }, // 👈 thêm
-
+  "No Data WMS": { icon: PackageX, color: "text-purple-500" }, // 👈 thêm
 };
 
 // value: trạng thái hiện tại. onClick: chỉ được truyền khi trạng thái là
@@ -502,14 +502,28 @@ const QuanLyHDTable = forwardRef(
             <p className="text-sm text-slate-500">{description}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <ImportQuanLyHD
-              onImport={async ({ fileHd, fileWms }) => {
-                const res = await quanlyhdService.importQuanLyHD(
-                  fileWms,
-                  fileHd,
-                );
-                fetchQuanLyHD(); // load lại danh sách sau khi import
-                return res; // BẮT BUỘC return để modal hiển thị được kết quả
+            <ImportSingleFile
+              buttonLabel="Import WMS"
+              modalTitle="Import File WMS"
+              fileLabel="File WMS"
+              fileIcon={Warehouse}
+              accentColor="blue"
+              onImport={async (file) => {
+                const res = await quanlyhdService.importWms(file);
+                fetchQuanLyHD();
+                return { durationSeconds: res.durationSeconds, stats: res.wms };
+              }}
+            />
+            <ImportSingleFile
+              buttonLabel="Import Hóa Đơn"
+              modalTitle="Import File Hóa Đơn"
+              fileLabel="File Hóa Đơn"
+              fileIcon={Receipt}
+              accentColor="amber"
+              onImport={async (file) => {
+                const res = await quanlyhdService.importHd(file);
+                fetchQuanLyHD();
+                return { durationSeconds: res.durationSeconds, stats: res.hd };
               }}
             />
             <ExportExcelButton filters={filters} /> {/* 👈 thêm */}

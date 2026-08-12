@@ -31,22 +31,39 @@ const traCuu = async (id) => {
   }
 };
 
-// 📥 Import & đối chiếu 2 file (WMS + Hóa đơn)
-// Khác với importNhanVien: gửi multipart/form-data thay vì JSON vì có file đính kèm
-const importQuanLyHD = async (fileWms, fileHd) => {
+// 📥 Import file WMS — độc lập, không cần chờ file Hóa Đơn
+const importWms = async (fileWms) => {
   try {
     const formData = new FormData();
     formData.append("file_wms", fileWms);
-    formData.append("file_hd", fileHd);
 
     return await requestService.post(
-      `${URL.quanlyhd.quanlyhd}/import`,
+      `${URL.quanlyhd.quanlyhd}/import-wms`,
       formData,
       { headers: { "Content-Type": "multipart/form-data" } },
       ApiServer,
     );
   } catch (error) {
-    console.error("Lỗi khi gọi importQuanLyHD:", error);
+    console.error("Lỗi khi gọi importWms:", error);
+    throw error;
+  }
+};
+
+// 📥 Import file Hóa Đơn — đối chiếu vào các phiếu WMS đã có sẵn trong DB
+// (có thể import trước hoặc sau file WMS, không còn ràng buộc phải đi cùng lúc)
+const importHd = async (fileHd) => {
+  try {
+    const formData = new FormData();
+    formData.append("file_hd", fileHd);
+
+    return await requestService.post(
+      `${URL.quanlyhd.quanlyhd}/import-hd`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+      ApiServer,
+    );
+  } catch (error) {
+    console.error("Lỗi khi gọi importHd:", error);
     throw error;
   }
 };
@@ -114,7 +131,8 @@ const xoa = async (id) => {
 export const quanlyhdService = {
   getDanhSach,
   traCuu,
-  importQuanLyHD,
+  importWms,
+  importHd,
   thongKe,
   capNhat,
   xacNhanHoanThanh,

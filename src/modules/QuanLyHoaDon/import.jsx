@@ -6,8 +6,6 @@ import {
   X,
   FileSpreadsheet,
   UploadCloud,
-  Receipt,
-  Warehouse,
   Trash2,
   Loader2,
   CheckCircle2,
@@ -17,7 +15,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 
-/** 1 ô upload file Excel dùng chung cho cả 2 bên Hóa Đơn / WMS */
+/** 1 ô upload file Excel — dùng chung, giờ chỉ nhận 1 file / lần import */
 const FileDropZone = ({
   label,
   icon: Icon,
@@ -61,7 +59,7 @@ const FileDropZone = ({
   };
 
   return (
-    <div className="flex-1 min-w-0">
+    <div className="min-w-0">
       <div className="mb-2 flex items-center gap-2">
         <Icon size={16} className={c.iconColor} strokeWidth={2.5} />
         <span className="text-sm font-semibold text-slate-700">{label}</span>
@@ -140,8 +138,8 @@ const FileDropZone = ({
   );
 };
 
-/** 1 khối thống kê kết quả import cho 1 bên (WMS hoặc Hóa Đơn) */
-const ResultStatBlock = ({ title, stats, accentColor }) => {
+/** 1 khối thống kê kết quả import (dùng cho cả WMS lẫn HĐ, field nào không có sẽ tự ẩn) */
+const ResultStatBlock = ({ stats, accentColor }) => {
   const colorMap = {
     blue: "border-blue-200 bg-blue-50/50",
     amber: "border-amber-200 bg-amber-50/50",
@@ -150,9 +148,6 @@ const ResultStatBlock = ({ title, stats, accentColor }) => {
     <div
       className={`rounded-xl border p-3 ${colorMap[accentColor] || colorMap.blue}`}
     >
-      <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-        {title}
-      </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
         <div className="text-slate-500">Tổng dòng đọc</div>
         <div className="text-right font-semibold text-slate-800">
@@ -199,12 +194,8 @@ const ResultStatBlock = ({ title, stats, accentColor }) => {
   );
 };
 
-/**
- * Danh sách chi tiết các dòng bị bỏ qua (skippedDetails, trước khi ghi vì thiếu field) /
- * lỗi ghi DB (errorDetails) / không tìm thấy phiếu WMS tương ứng (unmatchedDetails, chỉ có ở file HĐ)
- */
+/** Danh sách chi tiết dòng lỗi/bỏ qua/không khớp — chỉ 1 nguồn (WMS hoặc HĐ) mỗi lần */
 const IssueList = ({
-  title,
   skippedDetails = [],
   errorDetails = [],
   unmatchedDetails = [],
@@ -225,7 +216,7 @@ const IssueList = ({
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200">
       <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-        {title} ({items.length})
+        Chi tiết ({items.length})
       </div>
       <div className="max-h-52 divide-y divide-slate-100 overflow-y-auto">
         {items.map((it, idx) => (
@@ -260,20 +251,37 @@ const IssueList = ({
   );
 };
 
-const ImportQuanLyHD = ({ onImport }) => {
+/**
+ * Nút + modal import 1 file duy nhất (dùng chung cho cả WMS và Hóa Đơn — 2 luồng độc lập,
+ * import lúc nào cũng được, không cần chờ đủ cả 2 file như trước).
+ *
+ * Props:
+ * - buttonLabel: text trên nút mở modal (VD "Import WMS")
+ * - modalTitle: tiêu đề modal lúc chọn file
+ * - fileLabel: nhãn cho ô chọn file (VD "File WMS")
+ * - fileIcon: icon cho ô chọn file
+ * - accentColor: "blue" | "amber"
+ * - onImport: async (file) => { durationSeconds, stats } — gọi API + trả kết quả để hiển thị
+ */
+const ImportSingleFile = ({
+  buttonLabel,
+  modalTitle,
+  fileLabel,
+  fileIcon,
+  accentColor = "blue",
+  onImport,
+}) => {
   const [open, setOpen] = useState(false);
-  const [fileHd, setFileHd] = useState(null);
-  const [fileWms, setFileWms] = useState(null);
+  const [file, setFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState(null); // response trả về từ backend sau khi import thành công
+  const [result, setResult] = useState(null); // { durationSeconds, stats }
   const [errorMsg, setErrorMsg] = useState("");
   const [showDetails, setShowDetails] = useState(false);
 
-  const canSubmit = fileHd && fileWms && !submitting;
+  const canSubmit = !!file && !submitting;
 
   const resetState = () => {
-    setFileHd(null);
-    setFileWms(null);
+    setFile(null);
     setSubmitting(false);
     setResult(null);
     setErrorMsg("");
@@ -291,10 +299,10 @@ const ImportQuanLyHD = ({ onImport }) => {
     setSubmitting(true);
     setErrorMsg("");
     try {
-      const res = await onImport?.({ fileHd, fileWms });
+      const res = await onImport?.(file);
       setResult(res); // hiển thị màn hình kết quả thay vì đóng modal ngay
     } catch (err) {
-      console.error("Lỗi import quản lý hóa đơn:", err);
+      console.error(`Lỗi ${buttonLabel}:`, err);
       setErrorMsg(
         err?.response?.data?.message ||
           err?.message ||
@@ -305,29 +313,30 @@ const ImportQuanLyHD = ({ onImport }) => {
     }
   };
 
+  const stats = result?.stats;
   const totalIssues =
-    (result?.wms?.skippedDetails?.length ?? 0) +
-    (result?.wms?.errorDetails?.length ?? 0) +
-    (result?.hd?.skippedDetails?.length ?? 0) +
-    (result?.hd?.errorDetails?.length ?? 0) +
-    (result?.hd?.unmatchedDetails?.length ?? 0);
+    (stats?.skippedDetails?.length ?? 0) +
+    (stats?.errorDetails?.length ?? 0) +
+    (stats?.unmatchedDetails?.length ?? 0);
 
-  // invalidRows + unmatchedRows đếm TOÀN BỘ dòng cần chú ý, còn *Details có thể bị giới hạn
-  // (MAX_DETAIL_ENTRIES ở BE) nên số lượng hiển thị chi tiết có thể ít hơn số đếm thực tế
-  const totalInvalid =
-    (result?.wms?.invalidRows ?? 0) +
-    (result?.hd?.invalidRows ?? 0) +
-    (result?.hd?.unmatchedRows ?? 0);
+  // invalidRows (+ unmatchedRows nếu có) đếm TOÀN BỘ dòng cần chú ý, còn *Details có thể bị
+  // giới hạn (MAX_DETAIL_ENTRIES ở BE) nên số lượng hiển thị chi tiết có thể ít hơn số đếm thực tế
+  const totalInvalid = (stats?.invalidRows ?? 0) + (stats?.unmatchedRows ?? 0);
+
+  const colorBtn =
+    accentColor === "amber"
+      ? "from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
+      : "from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700";
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95"
+        className={`inline-flex items-center gap-2 rounded-xl bg-gradient-to-r ${colorBtn} px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md active:scale-95`}
       >
         <Upload size={16} />
-        Import đối chiếu
+        {buttonLabel}
       </button>
 
       {open &&
@@ -338,20 +347,18 @@ const ImportQuanLyHD = ({ onImport }) => {
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200"
+              className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200"
             >
               {/* Modal header */}
               <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
                 <div>
                   <h2 className="text-base font-bold text-slate-800">
-                    {result
-                      ? "Kết quả import"
-                      : "Import đối chiếu Hóa đơn - WMS"}
+                    {result ? "Kết quả import" : modalTitle}
                   </h2>
                   <p className="mt-0.5 text-xs text-slate-500">
                     {result
                       ? `Hoàn tất sau ${result.durationSeconds ?? "?"}s`
-                      : "Chọn đủ 2 file Excel để hệ thống đối chiếu số lượng"}
+                      : "Chọn 1 file Excel để import"}
                   </p>
                 </div>
                 <button
@@ -371,20 +378,10 @@ const ImportQuanLyHD = ({ onImport }) => {
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700">
                       <CheckCircle2 size={18} />
-                      Import & đối chiếu hoàn tất
+                      Import hoàn tất
                     </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <ResultStatBlock
-                        title="File WMS"
-                        stats={result.wms}
-                        accentColor="blue"
-                      />
-                      <ResultStatBlock
-                        title="File Hóa Đơn"
-                        stats={result.hd}
-                        accentColor="amber"
-                      />
-                    </div>
+
+                    <ResultStatBlock stats={stats} accentColor={accentColor} />
 
                     {totalInvalid > 0 && (
                       <button
@@ -406,19 +403,11 @@ const ImportQuanLyHD = ({ onImport }) => {
                     )}
 
                     {showDetails && (
-                      <div className="space-y-2">
-                        <IssueList
-                          title="File WMS"
-                          skippedDetails={result.wms?.skippedDetails}
-                          errorDetails={result.wms?.errorDetails}
-                        />
-                        <IssueList
-                          title="File Hóa Đơn"
-                          skippedDetails={result.hd?.skippedDetails}
-                          errorDetails={result.hd?.errorDetails}
-                          unmatchedDetails={result.hd?.unmatchedDetails}
-                        />
-                      </div>
+                      <IssueList
+                        skippedDetails={stats?.skippedDetails}
+                        errorDetails={stats?.errorDetails}
+                        unmatchedDetails={stats?.unmatchedDetails}
+                      />
                     )}
                   </div>
                 ) : (
@@ -430,30 +419,14 @@ const ImportQuanLyHD = ({ onImport }) => {
                         <span>{errorMsg}</span>
                       </div>
                     )}
-                    <div className="flex flex-col gap-4 sm:flex-row">
-                      <FileDropZone
-                        label="File Hóa Đơn"
-                        icon={Receipt}
-                        accentColor="amber"
-                        file={fileHd}
-                        onSelect={setFileHd}
-                        onRemove={() => setFileHd(null)}
-                      />
-                      <FileDropZone
-                        label="File WMS"
-                        icon={Warehouse}
-                        accentColor="blue"
-                        file={fileWms}
-                        onSelect={setFileWms}
-                        onRemove={() => setFileWms(null)}
-                      />
-                    </div>
-
-                    {!fileHd || !fileWms ? (
-                      <p className="mt-4 text-center text-xs text-slate-400">
-                        Cần chọn đủ cả 2 file để có thể import
-                      </p>
-                    ) : null}
+                    <FileDropZone
+                      label={fileLabel}
+                      icon={fileIcon}
+                      accentColor={accentColor}
+                      file={file}
+                      onSelect={setFile}
+                      onRemove={() => setFile(null)}
+                    />
                   </>
                 )}
               </div>
@@ -473,7 +446,7 @@ const ImportQuanLyHD = ({ onImport }) => {
                     <button
                       type="button"
                       onClick={handleClose}
-                      className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700"
+                      className={`rounded-xl bg-gradient-to-r ${colorBtn} px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all`}
                     >
                       Đóng
                     </button>
@@ -492,7 +465,7 @@ const ImportQuanLyHD = ({ onImport }) => {
                       type="button"
                       onClick={handleSubmit}
                       disabled={!canSubmit}
-                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
+                      className={`inline-flex items-center gap-2 rounded-xl bg-gradient-to-r ${colorBtn} px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md active:scale-95 disabled:opacity-40`}
                     >
                       {submitting ? (
                         <>
@@ -517,4 +490,4 @@ const ImportQuanLyHD = ({ onImport }) => {
   );
 };
 
-export default ImportQuanLyHD;
+export default ImportSingleFile;

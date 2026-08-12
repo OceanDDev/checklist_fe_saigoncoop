@@ -3,6 +3,7 @@
 import { nhanVienService } from "@/services/nhanvien.service";
 import { useState, useEffect, useCallback } from "react";
 import ImportNhanVien from "./importNhanVien";
+import XuatExcelButton from "./export";
 
 const ROLE_FULL = 28;
 
@@ -378,6 +379,7 @@ export default function NhanVienTable() {
 
           {isFullAccess && (
             <div className="flex items-center gap-2">
+              <XuatExcelButton data={filtered} fileName="DanhSachNhanVien" />
               <button
                 onClick={() => setModal("import")}
                 className="flex items-center gap-2 px-4 py-2.5 border border-border bg-card hover:bg-muted/60 text-foreground text-sm font-semibold rounded-xl transition-colors"
