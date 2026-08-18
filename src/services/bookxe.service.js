@@ -262,6 +262,27 @@ const deleteManyHistoryBookXe = async (ids) => {
 };
 
 // ==========================
+// 💡 SUGGEST — gợi ý ghép chuyến (GET /bookxe/suggest)
+// Trả về danh sách nhóm gợi ý: gồm kiện mới (từ NhanSuSoan đã Hoàn thành)
+// và kiện rớt (từ BookXe đang "Có kiện rớt"), đã ghép theo ngưỡng CS/CF
+// và các tín hiệu (chung lệnh điều động / chung NVC / chung lịch đi hàng).
+// ==========================
+const suggestBookXe = async (params = {}) => {
+  try {
+    const results = await requestService.get(
+      `${URL.bookxe.bookxe}/suggest`,
+      params,
+      undefined,
+      ApiServer,
+    );
+    return results;
+  } catch (error) {
+    console.error("Lỗi khi gọi suggestBookXe:", error);
+    throw error;
+  }
+};
+
+// ==========================
 export const bookXeService = {
   // BookXe
   getAllBookXe,
@@ -271,6 +292,7 @@ export const bookXeService = {
   updateTrangThaiBookXe,
   deleteBookXeById,
   deleteManyBookXe,
+  suggestBookXe,
 
   // HistoryBookXe
   getAllHistoryBookXe,

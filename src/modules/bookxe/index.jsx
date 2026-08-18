@@ -17,7 +17,7 @@ const HomeBookXe = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 p-3 md:p-5">
-      <div className="mx-auto w-full max-w-[1600px]">
+      <div className="mx-auto w-full max-w-none">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-xl font-semibold text-slate-800 md:text-2xl">

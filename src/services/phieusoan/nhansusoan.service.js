@@ -211,6 +211,18 @@ const addGiaoKhach = async (data) => {
     throw error;
   }
 };
+const getTopNangSuatCongKhai = async (ngay = "") => {
+  try {
+    const query = ngay ? `?ngay=${ngay}` : "";
+    const response = await ApiServer.get(
+      `${URL.phieusoan.nhansusoan}/top-nang-suat-cong-khai${query}`,
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi getTopNangSuatCongKhai:", error);
+    throw error;
+  }
+};
 export const nhanSuSoanService = {
   getAllNhanSuSoan, // GET    /api/saigoncoop/nhansusoan?page=1&limit=50&...
   getNhanSuSoanById, // GET    /api/saigoncoop/nhansusoan/:id
@@ -223,5 +235,6 @@ export const nhanSuSoanService = {
   deleteManyNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/many
   deleteAllNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/delete-all
   importUpdateNhanSuSoan,
-  addGiaoKhach
+  addGiaoKhach,
+  getTopNangSuatCongKhai
 };
