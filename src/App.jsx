@@ -48,7 +48,7 @@ import NhanSuSoanTable from "./modules/NhanSuSoan";
 import QuanLyHDTable from "./modules/QuanLyHoaDon";
 import TrangThietBiTable from "./modules/trangthietbi";
 import HomeBookXe from "./modules/bookxe";
-import SoKhopKhuyenMaiTable from "./modules/khuyenmai";
+import SoKhopKhuyenMaiTable from "./modules/DoiChieuTonKho";
 
 function App() {
   return (

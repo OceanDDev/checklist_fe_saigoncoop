@@ -348,7 +348,7 @@ const FilterSummary = memo(function FilterSummary({ filters }) {
 /* ------------------------------------------------------------------ */
 /* Component chính                                                     */
 /* ------------------------------------------------------------------ */
-const SoKhopKhuyenMaiTable = ({
+const DoiChieuTonKho = ({
   title = "SO KHỚP TỒN KHO",
   description = "So khớp số lượng On Hand giữa tồn kho thực tế và MMS",
 }) => {
@@ -819,4 +819,4 @@ const SoKhopKhuyenMaiTable = ({
   );
 };
 
-export default SoKhopKhuyenMaiTable;
+export default DoiChieuTonKho;
