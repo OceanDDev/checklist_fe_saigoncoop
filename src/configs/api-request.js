@@ -120,6 +120,12 @@ const URL = {
   khuyenmai: {
     khuyenmai: ENDPOINT_PREFIX + "/khuyenmai",
   },
+    nhaphang: {
+    nhaphang: ENDPOINT_PREFIX + "/nhaphang",
+  },
+   qcdacthu: {
+    qcdacthu: ENDPOINT_PREFIX + "/qcdacthu",
+  },
 };
 
 export { URL, ApiServer, DEF_HEADERS };

@@ -49,6 +49,7 @@ import QuanLyHDTable from "./modules/QuanLyHoaDon";
 import TrangThietBiTable from "./modules/trangthietbi";
 import HomeBookXe from "./modules/bookxe";
 import SoKhopKhuyenMaiTable from "./modules/DoiChieuTonKho";
+import HomeNhapHangDash from "./modules/nhaphang";
 
 function App() {
   return (
@@ -382,6 +383,18 @@ function App() {
             <PrivateRoute allowRoles={[71]}>
               <MainLayout>
                 <SoKhopKhuyenMaiTable />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+         {/* NHAP HANG */}
+        <Route
+          path="/nhaphang"
+          element={
+            <PrivateRoute allowRoles={[72]}>
+              <MainLayout>
+                <HomeNhapHangDash/>
               </MainLayout>
             </PrivateRoute>
           }
