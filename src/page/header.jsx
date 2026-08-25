@@ -74,11 +74,12 @@ const Header = () => {
       55: "SO KHỚP HÓA ĐƠN",
       56: "QUẢN LÝ TTB",
       57: "QUẢN LÝ PHIẾU SOẠN ",
-       58: "QUẢN LÝ PHIẾU SOẠN ",
+      58: "QUẢN LÝ PHIẾU SOẠN ",
       70: "BOOK XE ",
-            71: "SO KHỚP DATA",
-
-
+      71: "SO KHỚP DATA",
+      72: "NHẬP HÀNG",
+      73: "BÁO TÀI ĐIỀU VẬN",
+      74: "BÁO TÀI BẢO VỆ",
     };
     return roles[role] || "CHECKLIST";
   };

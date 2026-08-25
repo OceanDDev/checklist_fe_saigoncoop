@@ -44,6 +44,7 @@ import NhanSuSoanEmployeeLookup from "./dashboard/nhansu";
 import ImportPhanBo from "./importupdate";
 import ExportExcelButton from "./exportexcel";
 import AddGiaoKhach from "./addgiaokhach";
+import NgungNangSuat from "./ngungnangsuat";
 
 const TRANG_THAI_OPTIONS = ["Chưa soạn", "Đang soạn", "Hoàn thành"];
 const TRANG_THAI_BOOK_XE_OPTIONS = ["Chờ Book", "Chờ Xe", "Hoàn thành"];
@@ -1226,6 +1227,7 @@ const NhanSuSoanTable = forwardRef(
                         <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
                         <ImportPhanBo onImported={fetchNhanSuSoan} />
                         <AddGiaoKhach onImported={fetchNhanSuSoan} />
+                        <NgungNangSuat />
                       </>
                     )}
                     <ExportExcelButton

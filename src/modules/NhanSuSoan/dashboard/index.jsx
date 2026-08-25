@@ -838,7 +838,7 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       try {
         const res = await nhanSuSoanService.getAllNhanSuSoan({
           page: 1,
-          limit: 10000,
+          limit: 50000,
           tuNgay,
           denNgay,
         });
@@ -874,7 +874,7 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       try {
         const res = await nhanSuSoanService.getAllNhanSuSoan({
           page: 1,
-          limit: 10000,
+          limit: 50000,
           // Lọc theo TG NHẬN PHIẾU — không liên quan gì đến TG import.
           tuNgayNP: tuNgay,
           denNgayNP: denNgay,

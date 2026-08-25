@@ -50,6 +50,7 @@ import TrangThietBiTable from "./modules/trangthietbi";
 import HomeBookXe from "./modules/bookxe";
 import SoKhopKhuyenMaiTable from "./modules/DoiChieuTonKho";
 import HomeNhapHangDash from "./modules/nhaphang";
+import BaoTaiDieuVan from "./modules/baotai/dieuvan";
 
 function App() {
   return (
@@ -388,18 +389,33 @@ function App() {
           }
         />
 
-         {/* NHAP HANG */}
+        {/* NHAP HANG */}
         <Route
           path="/nhaphang"
           element={
             <PrivateRoute allowRoles={[72]}>
               <MainLayout>
-                <HomeNhapHangDash/>
+                <HomeNhapHangDash />
               </MainLayout>
             </PrivateRoute>
           }
         />
-        
+
+        {/* BÁO TÀI */}
+        <Route
+          path="/baotai"
+          element={
+            <PrivateRoute allowRoles={[73,74]}>
+              <MainLayout>
+                <BaoTaiDieuVan />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+
+
+
         {/* PHIEU SOAN */}
         <Route
           path="/nhansusoan"

@@ -27,6 +27,61 @@ import { nhanVienService } from "@/services/nhanvien.service";
 import { chamCongService } from "@/services/chamcong.service";
 import { StatCard, DateRangeFilter } from "./index";
 import ExportExcelButton from "./export";
+import { ngungNangSuatService } from "@/services/phieusoan/ngungnangsuat.service";
+
+/* ------------------------------------------------------------------ */
+/* Ngưng năng suất — chỉ áp dụng cho vai trò Soạn.                    */
+/* Với mỗi NV: chỉ trừ phần khoảng ngưng KHÔNG trùng với khoảng thời  */
+/* gian NV đó đang xử lý phiếu (tgNhanPhieu -> tgHoanThanh).          */
+/* ------------------------------------------------------------------ */
+const buildSoanActivityIntervals = (items) => {
+  const map = new Map(); // code -> [{start, end}]
+  items.forEach((item) => {
+    if (!item.tgNhanPhieu) return;
+    const start = new Date(item.tgNhanPhieu).getTime();
+    if (!Number.isFinite(start)) return;
+    const endRaw = item.tgHoanThanh
+      ? new Date(item.tgHoanThanh).getTime()
+      : Date.now();
+    const end = Number.isFinite(endRaw) ? Math.max(endRaw, start) : start;
+
+    const list = extractMaNVList(item.nvSoanChiTiet, item.nvSoan);
+    const seen = new Set();
+    list.forEach(({ code }) => {
+      if (!code || seen.has(code)) return;
+      seen.add(code);
+      if (!map.has(code)) map.set(code, []);
+      map.get(code).push({ start, end });
+    });
+  });
+  return map;
+};
+
+const mergeIntervals = (intervals) => {
+  if (!intervals.length) return [];
+  const sorted = [...intervals].sort((a, b) => a.start - b.start);
+  const merged = [{ ...sorted[0] }];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = merged[merged.length - 1];
+    const cur = sorted[i];
+    if (cur.start <= last.end) {
+      last.end = Math.max(last.end, cur.end);
+    } else {
+      merged.push({ ...cur });
+    }
+  }
+  return merged;
+};
+
+const overlapDurationMs = (pauseStart, pauseEnd, mergedIntervals) => {
+  let total = 0;
+  mergedIntervals.forEach(({ start, end }) => {
+    const s = Math.max(pauseStart, start);
+    const e = Math.min(pauseEnd, end);
+    if (e > s) total += e - s;
+  });
+  return total;
+};
 
 /* ------------------------------------------------------------------ */
 /* Hằng số Bộ phận / Chức vụ                                           */
@@ -1071,6 +1126,7 @@ const NhanSuSoanEmployeeLookup = () => {
   const [gioLamMap, setGioLamMap] = useState(new Map());
   const [loadingGioLam, setLoadingGioLam] = useState(false);
   const [errorGioLam, setErrorGioLam] = useState("");
+  const [ngungList, setNgungList] = useState([]); // [{ _id, batDau, ketThuc }]
 
   useEffect(() => {
     try {
@@ -1153,6 +1209,30 @@ const NhanSuSoanEmployeeLookup = () => {
     };
   }, [selectedBoPhan, selectedChucVu]);
 
+  // nhansu.jsx — thay thế effect đang fetch items cho tab Năng suất NV
+
+  const PAGE_SIZE = 5000; // kích thước mỗi trang, tránh 1 request quá nặng
+
+  const fetchAllPages = useCallback(async (baseParams) => {
+    let page = 1;
+    let all = [];
+    let total = Infinity;
+
+    while (all.length < total) {
+      const res = await nhanSuSoanService.getAllNhanSuSoan({
+        ...baseParams,
+        page,
+        limit: PAGE_SIZE,
+      });
+      const data = res.data || res.items || [];
+      total = Number(res.total ?? data.length);
+      all = all.concat(data);
+      if (data.length === 0) break; // an toàn, tránh loop vô hạn nếu total sai lệch
+      page += 1;
+    }
+    return all;
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1160,15 +1240,13 @@ const NhanSuSoanEmployeeLookup = () => {
       setLoading(true);
       setError("");
       try {
-        const res = await nhanSuSoanService.getAllNhanSuSoan({
-          page: 1,
-          limit: 10000,
+        const data = await fetchAllPages({
           tuNgayNP: tuNgay,
           denNgayNP: denNgay,
           tuNgayHT: tuNgay,
           denNgayHT: denNgay,
         });
-        if (!cancelled) setItems(res.data || res.items || []);
+        if (!cancelled) setItems(data);
       } catch (err) {
         console.error("Lỗi tải dữ liệu tra cứu nhân viên:", err);
         if (!cancelled) setError("Không tải được dữ liệu tra cứu.");
@@ -1180,7 +1258,7 @@ const NhanSuSoanEmployeeLookup = () => {
     return () => {
       cancelled = true;
     };
-  }, [tuNgay, denNgay]);
+  }, [tuNgay, denNgay, fetchAllPages]);
 
   // ✅ Tải dữ liệu chấm công (giờ làm) chỉ khi bật chế độ "theo giờ".
   // Bỏ filter bo_phan khi gọi API — collection chấm công không có field
@@ -1213,6 +1291,28 @@ const NhanSuSoanEmployeeLookup = () => {
       cancelled = true;
     };
   }, [theoGio, tuNgay, denNgay]);
+
+  // ✅ Tải danh sách khoảng ngưng năng suất — chỉ khi đang xem tab Soạn +
+  // đang bật "theo giờ" (ngưng năng suất chỉ áp dụng cho vai trò Soạn).
+  useEffect(() => {
+    if (!theoGio || vaiTro !== "soan") {
+      setNgungList([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ngungNangSuatService.getAll({ tuNgay, denNgay });
+        if (!cancelled) setNgungList(res.data || []);
+      } catch (err) {
+        console.error("Lỗi tải danh sách ngưng năng suất:", err);
+        if (!cancelled) setNgungList([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [theoGio, vaiTro, tuNgay, denNgay]);
 
   const filteredDsNhanVien = useMemo(() => {
     let result = dsNhanVien;
@@ -1282,6 +1382,43 @@ const NhanSuSoanEmployeeLookup = () => {
       return ma.includes(kw) || ten.includes(kw);
     });
   }, [mergedRows, searchKeyword]);
+
+  // ✅ Giờ làm sau khi trừ các khoảng ngưng năng suất — chỉ áp dụng cho
+  // vai trò Soạn. Với mỗi NV: chỉ trừ phần khoảng ngưng KHÔNG trùng với
+  // khoảng thời gian NV đó đang xử lý phiếu (đã có phiếu tgNhanPhieu ->
+  // tgHoanThanh chồng lấn), tính overlap theo từng phút chính xác.
+  const adjustedGioLamMap = useMemo(() => {
+    if (vaiTro !== "soan" || !theoGio || ngungList.length === 0) {
+      return gioLamMap;
+    }
+
+    const activityMap = buildSoanActivityIntervals(items);
+    const mergedByEmployee = new Map();
+    activityMap.forEach((intervals, code) => {
+      mergedByEmployee.set(code, mergeIntervals(intervals));
+    });
+
+    const next = new Map(gioLamMap);
+    gioLamMap.forEach((gio, code) => {
+      const mergedIntervals = mergedByEmployee.get(code) || [];
+      let deductMs = 0;
+      ngungList.forEach((p) => {
+        if (!p.ketThuc) return; // đang ngưng dở, chưa xác định khoảng -> bỏ qua
+        const pStart = new Date(p.batDau).getTime();
+        const pEnd = new Date(p.ketThuc).getTime();
+        if (
+          !Number.isFinite(pStart) ||
+          !Number.isFinite(pEnd) ||
+          pEnd <= pStart
+        )
+          return;
+        const overlap = overlapDurationMs(pStart, pEnd, mergedIntervals);
+        deductMs += Math.max(0, pEnd - pStart - overlap);
+      });
+      next.set(code, Math.max(0, gio - deductMs / 3600000));
+    });
+    return next;
+  }, [gioLamMap, ngungList, items, vaiTro, theoGio]);
 
   const handleCapture = useCallback(async () => {
     if (!captureRef.current || !boPhanStatsAll || capturing) return;
@@ -1486,7 +1623,7 @@ const NhanSuSoanEmployeeLookup = () => {
             selectedBoPhan={selectedBoPhan}
             selectedChucVu={selectedChucVu}
             theoGio={theoGio}
-            gioLamMap={gioLamMap}
+            gioLamMap={adjustedGioLamMap}
             disabled={!boPhanStatsAll}
           />
         </div>
@@ -1539,6 +1676,23 @@ const NhanSuSoanEmployeeLookup = () => {
           )}
         </div>
 
+        {theoGio && vaiTro === "soan" && ngungList.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-2.5">
+            <span className="text-xs font-semibold text-rose-700">
+              Đã ngưng năng suất:
+            </span>
+            {ngungList.map((p) => (
+              <span
+                key={p._id}
+                className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-rose-600 ring-1 ring-rose-200"
+              >
+                {dayjs(p.batDau).format("DD/MM HH:mm")} –{" "}
+                {p.ketThuc ? dayjs(p.ketThuc).format("HH:mm") : "đang ngưng..."}
+              </span>
+            ))}
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600 ring-1 ring-rose-200">
             {error}
@@ -1588,7 +1742,7 @@ const NhanSuSoanEmployeeLookup = () => {
                 tuNgay={tuNgay}
                 denNgay={denNgay}
                 theoGio={theoGio}
-                gioLamMap={gioLamMap}
+                gioLamMap={adjustedGioLamMap}
               />
             </div>
           )}

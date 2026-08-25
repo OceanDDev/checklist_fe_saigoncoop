@@ -150,10 +150,6 @@ const fetchQuyCachMap = async (skus) => {
   return map;
 };
 
-// Áp logic kiện = tổng SL lên 1 danh sách item đã map (mapRow) —
-// trả về { items: [...], missingSkus: [...] }.
-// missingSkus: SKU bị cảnh báo (kiện = tổng SL) nhưng chưa có quy cách
-// bên QC Đặc Thù -> chặn import.
 const resolveKienForItems = async (items) => {
   const flaggedSkus = [
     ...new Set(items.filter(isKienBangTongSl).map((it) => it.sku)),
@@ -175,7 +171,9 @@ const resolveKienForItems = async (items) => {
       return item; // giữ nguyên số kiện cũ (sai) — sẽ bị chặn import
     }
 
-    return { ...item, kien: Number(item.tong_sl) / quyCach };
+    // Làm tròn chuẩn: phần dư >= 0.5 thì lên 1, < 0.5 thì xuống 0
+    // (Math.round đúng theo quy tắc này: 0.5 -> 1, 0.4 -> 0)
+    return { ...item, kien: Math.round(Number(item.tong_sl) / quyCach) };
   });
 
   return { items: nextItems, missingSkus };
