@@ -80,6 +80,7 @@ const Header = () => {
       72: "NHẬP HÀNG",
       73: "BÁO TÀI ĐIỀU VẬN",
       74: "BÁO TÀI BẢO VỆ",
+      75: "CHẤM CÔNG",
     };
     return roles[role] || "CHECKLIST";
   };

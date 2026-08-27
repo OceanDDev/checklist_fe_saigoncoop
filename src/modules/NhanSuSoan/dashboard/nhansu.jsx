@@ -127,20 +127,24 @@ const TRANG_THAI_HOAN_THANH = "Hoàn thành";
 
 const EMPTY_STATS = { phieu: 0, kien: 0, dong: 0 };
 
-const KPI_STORAGE_KEY = "nhansusoan_kpi_target_v1";
-const KPI_DEFAULT = { kien: 280, dong: 240 };
+// ✅ KPI target riêng cho từng vai trò — Soạn và Kiểm chéo (KC) có mục tiêu
+// khác nhau, lưu trữ riêng trong localStorage để không ghi đè lẫn nhau.
+const KPI_STORAGE_KEY_SOAN = "nhansusoan_kpi_target_v1";
+const KPI_STORAGE_KEY_KC = "nhansusoan_kpi_target_kc_v1";
+const KPI_DEFAULT_SOAN = { kien: 280, dong: 240 };
+const KPI_DEFAULT_KC = { kien: 560, dong: 420 };
 
-const loadKpiFromStorage = () => {
+const loadKpiFromStorage = (storageKey, defaultValue) => {
   try {
-    const raw = localStorage.getItem(KPI_STORAGE_KEY);
-    if (!raw) return { ...KPI_DEFAULT };
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return { ...defaultValue };
     const parsed = JSON.parse(raw);
     return {
-      kien: Number(parsed.kien) || KPI_DEFAULT.kien,
-      dong: Number(parsed.dong) || KPI_DEFAULT.dong,
+      kien: Number(parsed.kien) || defaultValue.kien,
+      dong: Number(parsed.dong) || defaultValue.dong,
     };
   } catch {
-    return { ...KPI_DEFAULT };
+    return { ...defaultValue };
   }
 };
 
@@ -487,6 +491,16 @@ const getKpiSortPriority = (rowEval) => {
   return 60;
 };
 
+// ✅ Tuỳ chọn cho bộ lọc "Lọc theo KPI" — theo trạng thái KPI NGÀY.
+const KPI_FILTER_OPTIONS_NGAY = [
+  { value: "", label: "Tất cả" },
+  { value: "dat", label: "✅ Đạt KPI" },
+  { value: "chua-dat", label: "⚠️ Chưa đạt KPI" },
+  { value: "khong-tinh-kpi", label: "🔵 Mã phụ (không tính)" },
+  { value: "chua-hoan-tat", label: "— Chưa hoàn tất" },
+  { value: "chua-bat-dau", label: "— Chưa bắt đầu" },
+];
+
 const KPI_BADGE = {
   "khong-ap-dung": <span className="text-slate-300">—</span>,
   "khong-tinh-kpi": (
@@ -526,11 +540,21 @@ const KPI_BADGE = {
 /* KPI theo GIỜ (dùng khi bật "Năng suất theo giờ") — KHÔNG phụ thuộc  */
 /* isSingleDay, luôn đánh giá được kể cả khi filter nhiều ngày.        */
 /* ------------------------------------------------------------------ */
-const KPI_GIO_TARGET = { kien: 35, dong: 30 };
+const KPI_GIO_TARGET_SOAN = { kien: 35, dong: 30 };
+const KPI_GIO_TARGET_KC = { kien: 70, dong: 60 };
+
+// ✅ Tuỳ chọn cho bộ lọc "Lọc theo KPI" — theo trạng thái KPI THEO GIỜ.
+const KPI_FILTER_OPTIONS_GIO = [
+  { value: "", label: "Tất cả" },
+  { value: "dat-ca-2", label: "✅ Đạt cả 2" },
+  { value: "dat-1", label: "🔵 Đạt 1 trong 2" },
+  { value: "chua-dat", label: "⚠️ Chưa đạt" },
+  { value: "chua-co-gio", label: "— Chưa có giờ" },
+];
 
 // status: "dat-ca-2" (xanh lá) | "dat-1" (xanh dương) | "chua-dat" (đỏ)
 // | "chua-co-gio" (chưa có dữ liệu giờ làm -> không đánh giá)
-export const evaluateKpiGioRow = (row, gio) => {
+export const evaluateKpiGioRow = (row, gio, target = KPI_GIO_TARGET_SOAN) => {
   if (!gio || gio <= 0) {
     return {
       status: "chua-co-gio",
@@ -543,8 +567,8 @@ export const evaluateKpiGioRow = (row, gio) => {
 
   const kienPerGio = row.tong.totalKien / gio;
   const dongPerGio = row.tong.totalDong / gio;
-  const datKien = kienPerGio >= KPI_GIO_TARGET.kien;
-  const datDong = dongPerGio >= KPI_GIO_TARGET.dong;
+  const datKien = kienPerGio >= target.kien;
+  const datDong = dongPerGio >= target.dong;
 
   let status;
   if (datKien && datDong) status = "dat-ca-2";
@@ -561,32 +585,38 @@ const KPI_GIO_TIER_BG = {
   "chua-co-gio": "",
 };
 
-const KPI_GIO_BADGE = {
-  "dat-ca-2": (
-    <span
-      className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
-      title={`Đạt cả 2: ≥${KPI_GIO_TARGET.kien} kiện/h VÀ ≥${KPI_GIO_TARGET.dong} dòng/h`}
-    >
-      ✅
-    </span>
-  ),
-  "dat-1": (
-    <span
-      className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700"
-      title={`Chỉ đạt 1 trong 2: ≥${KPI_GIO_TARGET.kien} kiện/h HOẶC ≥${KPI_GIO_TARGET.dong} dòng/h`}
-    >
-      🔵
-    </span>
-  ),
-  "chua-dat": (
-    <span
-      className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
-      title="Không đạt cả kiện/h lẫn dòng/h"
-    >
-      ⚠️
-    </span>
-  ),
-  "chua-co-gio": <span className="text-slate-300">—</span>,
+const getKpiGioBadge = (status, target) => {
+  switch (status) {
+    case "dat-ca-2":
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+          title={`Đạt cả 2: ≥${target.kien} kiện/h VÀ ≥${target.dong} dòng/h`}
+        >
+          ✅
+        </span>
+      );
+    case "dat-1":
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700"
+          title={`Chỉ đạt 1 trong 2: ≥${target.kien} kiện/h HOẶC ≥${target.dong} dòng/h`}
+        >
+          🔵
+        </span>
+      );
+    case "chua-dat":
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
+          title="Không đạt cả kiện/h lẫn dòng/h"
+        >
+          ⚠️
+        </span>
+      );
+    default:
+      return <span className="text-slate-300">—</span>;
+  }
 };
 
 const getKpiGioSortPriority = (evalGio) => {
@@ -712,6 +742,8 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
   denNgay,
   theoGio,
   gioLamMap,
+  gioTarget,
+  kpiFilter,
 }) {
   // ✅ Khối TỔNG luôn có KPI (dù theo ngày hay theo giờ) — chỉ khác cách
   // đánh giá bên trong. CF/CS không có KPI ở cả 2 chế độ.
@@ -734,9 +766,9 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
       let sortMetricValue = 0;
 
       if (theoGio) {
-        const evalGio = evaluateKpiGioRow(r, gio);
+        const evalGio = evaluateKpiGioRow(r, gio, gioTarget);
         tongBg = KPI_GIO_TIER_BG[evalGio.status] || "";
-        tongBadge = KPI_GIO_BADGE[evalGio.status];
+        tongBadge = getKpiGioBadge(evalGio.status, gioTarget);
         tongKienDisplay =
           evalGio.kienPerGio != null ? evalGio.kienPerGio.toFixed(2) : "—";
         tongDongDisplay =
@@ -800,7 +832,7 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
         isZero: isZeroRow(r.tong),
       };
     });
-  }, [mergedRows, theoGio, isSingleDay, kpi, gioLamMap]);
+  }, [mergedRows, theoGio, isSingleDay, kpi, gioLamMap, gioTarget]);
 
   // ✅ Sort hiển thị: theo giờ -> ưu tiên theo KPI giờ; theo ngày -> ưu
   // tiên theo KPI ngày (giữ hành vi cũ). Dựa hoàn toàn vào rowsData đã
@@ -848,12 +880,17 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
     return { dat, tong };
   }, [rowsData, theoGio, kpiApplicable]);
 
+  const kpiFilteredRowsData = useMemo(() => {
+    if (!kpiFilter) return sortedRowsData;
+    return sortedRowsData.filter((rd) => rd.sortEvalStatus === kpiFilter);
+  }, [sortedRowsData, kpiFilter]);
+
   const captureRowsData = useMemo(
-    () => sortedRowsData.filter((rd) => !rd.isZero),
-    [sortedRowsData],
+    () => kpiFilteredRowsData.filter((rd) => !rd.isZero),
+    [kpiFilteredRowsData],
   );
 
-  const displayRowsData = capturing ? captureRowsData : sortedRowsData;
+  const displayRowsData = capturing ? captureRowsData : kpiFilteredRowsData;
   const colSpanTotal =
     3 +
     (theoGio ? 1 : 0) +
@@ -1031,7 +1068,9 @@ const MergedProductivityTable = memo(function MergedProductivityTable({
                 >
                   {capturing
                     ? "Không có nhân viên nào phát sinh số liệu trong khoảng ngày này."
-                    : "Không có dữ liệu."}
+                    : kpiFilter
+                      ? "Không có nhân viên nào khớp bộ lọc KPI đã chọn."
+                      : "Không có dữ liệu."}
                 </td>
               </tr>
             ) : (
@@ -1120,7 +1159,20 @@ const NhanSuSoanEmployeeLookup = () => {
 
   const [searchKeyword, setSearchKeyword] = useState("");
 
-  const [kpi, setKpi] = useState(loadKpiFromStorage);
+  const [kpiSoan, setKpiSoan] = useState(() =>
+    loadKpiFromStorage(KPI_STORAGE_KEY_SOAN, KPI_DEFAULT_SOAN),
+  );
+  const [kpiKC, setKpiKC] = useState(() =>
+    loadKpiFromStorage(KPI_STORAGE_KEY_KC, KPI_DEFAULT_KC),
+  );
+
+  // ✅ KPI đang áp dụng/hiển thị phụ thuộc vai trò đang xem (Soạn hay KC) —
+  // mỗi vai trò có target riêng, lưu trữ riêng.
+  const kpi = vaiTro === "kc" ? kpiKC : kpiSoan;
+  const setKpi = vaiTro === "kc" ? setKpiKC : setKpiSoan;
+  const kpiDefault = vaiTro === "kc" ? KPI_DEFAULT_KC : KPI_DEFAULT_SOAN;
+  const kpiGioTarget =
+    vaiTro === "kc" ? KPI_GIO_TARGET_KC : KPI_GIO_TARGET_SOAN;
 
   const [theoGio, setTheoGio] = useState(false);
   const [gioLamMap, setGioLamMap] = useState(new Map());
@@ -1128,13 +1180,29 @@ const NhanSuSoanEmployeeLookup = () => {
   const [errorGioLam, setErrorGioLam] = useState("");
   const [ngungList, setNgungList] = useState([]); // [{ _id, batDau, ketThuc }]
 
+  // ✅ Bộ lọc theo trạng thái KPI (Đạt / Chưa đạt / ...). Danh sách tuỳ chọn
+  // khác nhau giữa chế độ theo ngày và theo giờ nên reset khi đổi chế độ.
+  const [kpiFilter, setKpiFilter] = useState("");
+
+  useEffect(() => {
+    setKpiFilter("");
+  }, [theoGio]);
+
   useEffect(() => {
     try {
-      localStorage.setItem(KPI_STORAGE_KEY, JSON.stringify(kpi));
+      localStorage.setItem(KPI_STORAGE_KEY_SOAN, JSON.stringify(kpiSoan));
     } catch {
       // bỏ qua nếu localStorage bị chặn
     }
-  }, [kpi]);
+  }, [kpiSoan]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(KPI_STORAGE_KEY_KC, JSON.stringify(kpiKC));
+    } catch {
+      // bỏ qua nếu localStorage bị chặn
+    }
+  }, [kpiKC]);
 
   const handleChangeKpi = useCallback(
     (field) => (e) => {
@@ -1482,6 +1550,10 @@ const NhanSuSoanEmployeeLookup = () => {
   const vaiTroLabel = vaiTro === "kc" ? "Kiểm chéo (KC)" : "Soạn";
   const daChonBoLoc = Boolean(selectedBoPhan || selectedChucVu);
   const isToday = tuNgay === getToday() && denNgay === getToday();
+  const kpiApplicable = theoGio || isSingleDay;
+  const kpiFilterOptions = theoGio
+    ? KPI_FILTER_OPTIONS_GIO
+    : KPI_FILTER_OPTIONS_NGAY;
 
   return (
     <div className="space-y-4">
@@ -1592,6 +1664,24 @@ const NhanSuSoanEmployeeLookup = () => {
             className="h-[42px] w-52 rounded-xl border border-slate-300 bg-white px-3 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
           />
 
+          <select
+            value={kpiApplicable ? kpiFilter : ""}
+            onChange={(e) => setKpiFilter(e.target.value)}
+            disabled={!kpiApplicable}
+            title={
+              kpiApplicable
+                ? "Lọc danh sách theo trạng thái KPI"
+                : "Chỉ lọc được khi có thể đánh giá KPI (chọn 1 ngày, hoặc bật Theo giờ)"
+            }
+            className="h-[42px] rounded-xl border border-slate-300 bg-white px-3 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {kpiFilterOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
           <button
             type="button"
             onClick={handleCapture}
@@ -1624,6 +1714,7 @@ const NhanSuSoanEmployeeLookup = () => {
             selectedChucVu={selectedChucVu}
             theoGio={theoGio}
             gioLamMap={adjustedGioLamMap}
+            gioTarget={kpiGioTarget}
             disabled={!boPhanStatsAll}
           />
         </div>
@@ -1631,7 +1722,7 @@ const NhanSuSoanEmployeeLookup = () => {
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
             <Target size={16} />
-            KPI/ngày (Hoàn thành):
+            {`KPI/ngày (Hoàn thành) — ${vaiTroLabel}:`}
           </div>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
             Kiện
@@ -1656,8 +1747,8 @@ const NhanSuSoanEmployeeLookup = () => {
 
           <button
             type="button"
-            onClick={() => setKpi({ ...KPI_DEFAULT })}
-            title={`Đặt lại KPI mặc định: ${KPI_DEFAULT.kien} kiện / ${KPI_DEFAULT.dong} dòng`}
+            onClick={() => setKpi({ ...kpiDefault })}
+            title={`Đặt lại KPI mặc định: ${kpiDefault.kien} kiện / ${kpiDefault.dong} dòng`}
             className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-700 shadow-sm hover:bg-amber-100"
           >
             Đặt lại mặc định
@@ -1670,8 +1761,8 @@ const NhanSuSoanEmployeeLookup = () => {
           )}
           {theoGio && (
             <span className="ml-auto text-xs font-medium text-purple-600">
-              🎯 Đang áp dụng KPI theo giờ: ≥{KPI_GIO_TARGET.kien} kiện/h hoặc ≥
-              {KPI_GIO_TARGET.dong} dòng/h
+              🎯 Đang áp dụng KPI theo giờ ({vaiTroLabel}): ≥{kpiGioTarget.kien}{" "}
+              kiện/h hoặc ≥{kpiGioTarget.dong} dòng/h
             </span>
           )}
         </div>
@@ -1743,6 +1834,8 @@ const NhanSuSoanEmployeeLookup = () => {
                 denNgay={denNgay}
                 theoGio={theoGio}
                 gioLamMap={adjustedGioLamMap}
+                gioTarget={kpiGioTarget}
+                kpiFilter={kpiApplicable ? kpiFilter : ""}
               />
             </div>
           )}

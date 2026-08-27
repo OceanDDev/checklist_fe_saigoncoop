@@ -711,6 +711,8 @@ const NhanSuSoanTable = forwardRef(
     const [deleting, setDeleting] = useState(false);
     const [editingChuyenItem, setEditingChuyenItem] = useState(null);
     const [savingChuyen, setSavingChuyen] = useState(false);
+    const [dangNgungNangSuat, setDangNgungNangSuat] = useState(null); // { _id, batDau } | null
+    const isGiaoPhieuDisabled = !!dangNgungNangSuat;
     const [filters, setFilters] = useState(() => ({
       ...DEFAULT_FILTERS,
       tuNgay: getDefaultTuNgay(),
@@ -1072,6 +1074,7 @@ const NhanSuSoanTable = forwardRef(
           gopPhieuRef.current?.open(selectedItems);
         } else if (key === "x") {
           e.preventDefault();
+          if (isGiaoPhieuDisabled) return; // đang Ngưng năng suất -> không cho Giao phiếu
           scanGiaoPhieuRef.current?.open(selectedItems);
         } else if (key === "c") {
           e.preventDefault();
@@ -1090,6 +1093,7 @@ const NhanSuSoanTable = forwardRef(
       view,
       toggleSelectRow,
       isViewerRole,
+      isGiaoPhieuDisabled,
     ]);
 
     useEffect(() => {
@@ -1200,10 +1204,28 @@ const NhanSuSoanTable = forwardRef(
                           ref={gopPhieuRef}
                           onSuccess={handleActionSuccess}
                         />
-                        <ScanGiaoPhieu
-                          ref={scanGiaoPhieuRef}
-                          onSuccess={handleActionSuccess}
-                        />
+                        <span
+                          className="relative inline-flex"
+                          title={
+                            isGiaoPhieuDisabled
+                              ? "Đang Ngưng năng suất — tạm khoá Giao phiếu"
+                              : undefined
+                          }
+                        >
+                          <div
+                            className={
+                              isGiaoPhieuDisabled
+                                ? "pointer-events-none opacity-40 grayscale"
+                                : ""
+                            }
+                            aria-disabled={isGiaoPhieuDisabled}
+                          >
+                            <ScanGiaoPhieu
+                              ref={scanGiaoPhieuRef}
+                              onSuccess={handleActionSuccess}
+                            />
+                          </div>
+                        </span>
                         <HuyGiaoPhieu
                           ref={huyGiaoPhieuRef}
                           onSuccess={handleActionSuccess}
@@ -1227,7 +1249,9 @@ const NhanSuSoanTable = forwardRef(
                         <ImportNhanSuSoan onImported={fetchNhanSuSoan} />
                         <ImportPhanBo onImported={fetchNhanSuSoan} />
                         <AddGiaoKhach onImported={fetchNhanSuSoan} />
-                        <NgungNangSuat />
+                        <NgungNangSuat
+                          onStatusChange={setDangNgungNangSuat}
+                        />{" "}
                       </>
                     )}
                     <ExportExcelButton

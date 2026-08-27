@@ -6,7 +6,8 @@ import ChamCongTable from "./Table";
 
 const ROLE_FULL = 28; // thấy cả 2 tab
 const ROLE_NV = 27; // chỉ thấy dữ liệu chấm công
-const ROLE_NGOC_PHU = 30; // như 27 nhưng chỉ thấy bộ phận Ngọc Phú
+const ROLE_NGOC_PHU = 30; // chỉ thấy nhân viên trong Whitelist
+const ROLE_VIEW_ONLY = 75; // chỉ xem, giới hạn cột, gộp giờ phụ vào chính
 
 function getRoleFromStorage() {
   try {
@@ -22,9 +23,10 @@ function getRoleFromStorage() {
 export default function ChamCongPage() {
   const role = getRoleFromStorage();
 
+  // SAU
   const canSeeChamCong =
-    role === ROLE_FULL || role === ROLE_NV || role === ROLE_NGOC_PHU;
-  const canSeeNhanVien = role === ROLE_FULL;
+    role === ROLE_FULL || role === ROLE_NV || role === ROLE_VIEW_ONLY;
+  const canSeeNhanVien = role === ROLE_FULL || role === ROLE_NGOC_PHU;
 
   const [tab, setTab] = useState(canSeeChamCong ? "chamcong" : "nhanvien");
 

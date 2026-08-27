@@ -366,7 +366,7 @@ function App() {
         <Route
           path="/chamcong"
           element={
-            <PrivateRoute allowRoles={[27, 28, 30]}>
+            <PrivateRoute allowRoles={[27, 28, 30, 75]}>
               <MainLayout>
                 <ChamCongPage />
               </MainLayout>
