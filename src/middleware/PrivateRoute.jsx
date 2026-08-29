@@ -42,6 +42,7 @@ const PrivateRoute = ({ children, allowRoles = [] }) => {
     if (user.role === 52) return <Navigate to="/nhansusoan" replace />;
     if (user.role === 57) return <Navigate to="/nhansusoan" replace />;
     if (user.role === 58) return <Navigate to="/nhansusoan" replace />;
+    if (user.role === 76) return <Navigate to="/nhansusoan" replace />;
 
     if (user.role === 21) return <Navigate to="/phuxe" replace />;
     if (user.role === 22) return <Navigate to="/phuxe" replace />;

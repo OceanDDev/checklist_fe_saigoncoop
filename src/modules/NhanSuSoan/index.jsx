@@ -499,11 +499,16 @@ const DateRangeFilter = memo(function DateRangeFilter({
   );
 });
 
-/** Tab chuyển đổi giữa Bảng dữ liệu / Dashboard / Năng suất nhân viên.
- *  hideNhanSu: role view-only (58) không được thấy tab Năng suất NV. */
-const ViewTabs = memo(function ViewTabs({ view, onChange, hideNhanSu }) {
+const ViewTabs = memo(function ViewTabs({
+  view,
+  onChange,
+  hideNhanSu,
+  hideTable,
+}) {
   const tabs = [
-    { key: "table", label: "Bảng dữ liệu", icon: Table2 },
+    ...(hideTable
+      ? []
+      : [{ key: "table", label: "Bảng dữ liệu", icon: Table2 }]),
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     ...(hideNhanSu
       ? []
@@ -701,7 +706,10 @@ const NhanSuSoanTable = forwardRef(
     },
     ref,
   ) => {
-    const [view, setView] = useState("table"); // "table" | "dashboard" | "nhansu"
+    const isRole76 = useMemo(() => getCurrentUserRole() === 76, []);
+    const [view, setView] = useState(() =>
+      getCurrentUserRole() === 76 ? "dashboard" : "table",
+    );
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -967,11 +975,20 @@ const NhanSuSoanTable = forwardRef(
     // bằng cách set thẳng cả filters lẫn textFilterDrafts + appliedTextFiltersRef
     // để useEffect debounce không ghi đè lại giá trị vừa set.
     const handleDashboardNavigate = useCallback(
-      ({ type, value, chain, tuNgay: navTuNgay, denNgay: navDenNgay }) => {
+      ({
+        type,
+        value,
+        chain,
+        chuyen: navChuyen,
+        tuNgay: navTuNgay,
+        denNgay: navDenNgay,
+      }) => {
+        if (isRole76) return; // 👈 THÊM LẠI — role 76 không được điều hướng qua Bảng dữ liệu
+
         const soDonHangPrefix = chain
           ? CHAIN_SODONHANG_PREFIX[chain] || ""
           : "";
-        const chuyenValue = type === "chuyen" ? value : "";
+        const chuyenValue = type === "chuyen" ? value : navChuyen || "";
 
         setFilters((prev) => ({
           ...prev,
@@ -996,7 +1013,7 @@ const NhanSuSoanTable = forwardRef(
         setPage(1);
         setView("table");
       },
-      [],
+      [isRole76], // 👈 thêm lại vào dependency array
     );
     const handleOpenEditChuyen = useCallback((item) => {
       setEditingChuyenItem(item);
@@ -1179,6 +1196,7 @@ const NhanSuSoanTable = forwardRef(
                 view={view}
                 onChange={setView}
                 hideNhanSu={isViewerRole}
+                hideTable={isRole76}
               />
             </div>
           </div>
@@ -1332,23 +1350,29 @@ const NhanSuSoanTable = forwardRef(
         {view === "table" && (
           <>
             <div className="flex flex-wrap items-center gap-3">
-              <DateRangeFilter
-                label="Lọc theo TG import"
-                startValue={filters.tuNgay}
-                endValue={filters.denNgay}
-                onChange={(start, end) => {
-                  setFilters((prev) => ({
-                    ...prev,
-                    tuNgay: start,
-                    denNgay: end,
-                  }));
-                  setPage(1);
-                }}
-                onClear={() => {
-                  setFilters((prev) => ({ ...prev, tuNgay: "", denNgay: "" }));
-                  setPage(1);
-                }}
-              />
+              {!isRole76 && ( // 👈 THÊM — role 76 không thấy ô lọc ngày này nữa
+                <DateRangeFilter
+                  label="Lọc theo TG import"
+                  startValue={filters.tuNgay}
+                  endValue={filters.denNgay}
+                  onChange={(start, end) => {
+                    setFilters((prev) => ({
+                      ...prev,
+                      tuNgay: start,
+                      denNgay: end,
+                    }));
+                    setPage(1);
+                  }}
+                  onClear={() => {
+                    setFilters((prev) => ({
+                      ...prev,
+                      tuNgay: "",
+                      denNgay: "",
+                    }));
+                    setPage(1);
+                  }}
+                />
+              )}
               {!isViewerRole && selectedIds.size > 0 && (
                 <span className="text-xs text-slate-400">
                   Mẹo: giữ <b className="text-slate-600">Shift</b> rồi tick 1

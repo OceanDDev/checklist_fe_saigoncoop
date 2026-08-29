@@ -369,12 +369,36 @@ const LiveQrBox = memo(function LiveQrBox() {
   }, [applyToken]);
 
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ["websocket"] });
+    const socket = io(SOCKET_URL, {
+      transports: ["websocket", "polling"], // 🛠️ Cho phép fallback về polling khi WebSocket gặp sự cố
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
+
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
     socket.on("qr:updated", ({ token: t, expiry: e }) => applyToken(t, e));
+
     return () => socket.disconnect();
   }, [applyToken]);
+
+  // 🛠️ THÊM MỚI: cơ chế dự phòng — nếu QR hết hạn quá lâu mà socket
+  // chưa gửi token mới (do mất kết nối tạm thời), tự gọi lại REST API
+  // để lấy QR mới, tránh hiển thị QR đã hết hạn vô thời hạn.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const secondsPastExpiry = (Date.now() - expiry) / 1000;
+      if (expiry && secondsPastExpiry > 3) {
+        chamCongService
+          .getCurrentQr()
+          .then((res) => applyToken(res.token, res.expiry))
+          .catch(console.error);
+      }
+    }, 2000); // kiểm tra mỗi 2 giây
+    return () => clearInterval(id);
+  }, [expiry, applyToken]);
 
   useEffect(() => {
     const id = setInterval(() => {

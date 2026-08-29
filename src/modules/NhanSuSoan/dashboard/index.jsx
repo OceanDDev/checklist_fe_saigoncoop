@@ -34,6 +34,7 @@ import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
+import OrderTimelineCharts from "./OrderTimelineCharts";
 
 /* ------------------------------------------------------------------ */
 /* Visual identity — clean, international SaaS dashboard              */
@@ -673,13 +674,15 @@ export const ChartCard = memo(function ChartCard({
 });
 
 /* ------------------------------------------------------------------ */
-/* ChainProgressBar                                                    */
+/* ChainProgressBar — dùng chung cho tiến độ theo CHUYẾN (sáng/trưa/    */
+/* chiều/tối/...). Nhận dotColor để tô chấm tròn khi không có logo.    */
 /* ------------------------------------------------------------------ */
 const ChainProgressBar = memo(function ChainProgressBar({
   label,
   counts,
   total,
   logo,
+  dotColor,
 }) {
   const segments = TRANG_THAI_ORDER.map((key) => ({
     key,
@@ -707,7 +710,10 @@ const ChainProgressBar = memo(function ChainProgressBar({
               }}
             />
           ) : (
-            <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: dotColor || "#94a3b8" }}
+            />
           )}
           {label}
         </span>
@@ -919,7 +925,34 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       CS: { "Chưa soạn": 0, "Đang soạn": 0, "Hoàn thành": 0 },
       Khác: { "Chưa soạn": 0, "Đang soạn": 0, "Hoàn thành": 0 },
     };
-    const dayCount = {};
+    // ✅ MỚI: tiến độ xử lý theo TỪNG CHUYẾN (sáng/trưa/chiều/tối/...),
+    // tách RIÊNG cho từng chuỗi CF / CS / Khác (không gộp chung).
+    const makeEmptyChuyenCount = () => {
+      const obj = { Khác: 0 };
+      CHUYEN_ORDER.forEach((c) => {
+        obj[c] = 0;
+      });
+      return obj;
+    };
+    const makeEmptyChuyenTrangThai = () => {
+      const obj = {
+        Khác: { "Chưa soạn": 0, "Đang soạn": 0, "Hoàn thành": 0 },
+      };
+      CHUYEN_ORDER.forEach((c) => {
+        obj[c] = { "Chưa soạn": 0, "Đang soạn": 0, "Hoàn thành": 0 };
+      });
+      return obj;
+    };
+    const chainChuyenCount = {
+      CF: makeEmptyChuyenCount(),
+      CS: makeEmptyChuyenCount(),
+      Khác: makeEmptyChuyenCount(),
+    };
+    const chainChuyenTrangThai = {
+      CF: makeEmptyChuyenTrangThai(),
+      CS: makeEmptyChuyenTrangThai(),
+      Khác: makeEmptyChuyenTrangThai(),
+    };
     const kpiCount = {};
 
     items.forEach((item) => {
@@ -934,21 +967,13 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       if (tt === "Hoàn thành") chainDone[chain] += 1;
       chainTrangThai[chain][tt] = (chainTrangThai[chain][tt] || 0) + 1;
 
+      const ck = chuyenKey(item.chuyen);
+      chainChuyenCount[chain][ck] += 1;
+      chainChuyenTrangThai[chain][ck][tt] =
+        (chainChuyenTrangThai[chain][ck][tt] || 0) + 1;
+
       const kpi = classifyKPI(item, now);
       if (kpi) kpiCount[kpi] = (kpiCount[kpi] || 0) + 1;
-
-      if (item.tgImport) {
-        const d = dayjs(item.tgImport);
-        const dayKey = d.format("YYYY-MM-DD");
-        if (!dayCount[dayKey]) {
-          dayCount[dayKey] = {
-            "Chưa soạn": 0,
-            "Đang soạn": 0,
-            "Hoàn thành": 0,
-          };
-        }
-        dayCount[dayKey][tt] = (dayCount[dayKey][tt] || 0) + 1;
-      }
     });
 
     const kpiData = KPI_ORDER.filter((k) => kpiCount[k]).map((k) => ({
@@ -961,28 +986,14 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
     const kpiDatRate =
       kpiTotal > 0 ? Math.round((kpiDatCount / kpiTotal) * 100) : 0;
 
-    const dayData = Object.keys(dayCount)
-      .sort()
-      .map((d) => {
-        const c = dayCount[d];
-        return {
-          date: dayjs(d).format("DD/MM"),
-          "Chưa soạn": c["Chưa soạn"] || 0,
-          "Đang soạn": c["Đang soạn"] || 0,
-          "Hoàn thành": c["Hoàn thành"] || 0,
-          soLuong:
-            (c["Chưa soạn"] || 0) +
-            (c["Đang soạn"] || 0) +
-            (c["Hoàn thành"] || 0),
-        };
-      });
-
     return {
       totalOrders,
       totalStores: storeSet.size,
       chainCount,
       chainDone,
       chainTrangThai,
+      chainChuyenCount,
+      chainChuyenTrangThai,
       chainStoreCount: {
         CF: chainStoreSet.CF.size,
         CS: chainStoreSet.CS.size,
@@ -990,9 +1001,8 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
       kpiData,
       kpiTotal,
       kpiDatRate,
-      dayData,
     };
-  }, [rawItems, tuNgay, denNgay]);
+  }, [rawItems]);
 
   // ─── Số liệu riêng cho biểu đồ "theo giờ" — tính từ hourItems (đã lọc
   // theo TG nhận phiếu ở trên), không liên quan đến `stats`/`rawItems`.
@@ -1190,8 +1200,8 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
         />
       </div>
 
-      {/* Chuyến + trạng thái + progress */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {/* Chuyến + trạng thái */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartCard
           title={`Đơn hàng theo chuyến${selectedChain ? ` — ${CHAIN_LABEL[selectedChain]}` : ""}`}
           eyebrow={
@@ -1259,31 +1269,73 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
-
-        <ChartCard title="Tiến độ xử lý theo chuỗi">
-          <div className="flex h-[280px] flex-col justify-center gap-6 px-1">
-            <ChainProgressBar
-              label={CHAIN_LABEL.CF}
-              counts={stats.chainTrangThai.CF}
-              total={stats.chainCount.CF}
-              logo={CHAIN_LOGOS.CF}
-            />
-            <ChainProgressBar
-              label={CHAIN_LABEL.CS}
-              counts={stats.chainTrangThai.CS}
-              total={stats.chainCount.CS}
-              logo={CHAIN_LOGOS.CS}
-            />
-            {stats.chainCount["Khác"] > 0 && (
-              <ChainProgressBar
-                label="Khác"
-                counts={stats.chainTrangThai["Khác"]}
-                total={stats.chainCount["Khác"]}
-              />
-            )}
-          </div>
-        </ChartCard>
       </div>
+
+      {/* ✅ ĐỔI: tiến độ xử lý theo TỪNG CHUYẾN (sáng/trưa/chiều/tối/...),
+          tách RIÊNG 2 cột CF và CS — hiển thị đầy đủ, không cuộn. */}
+      <ChartCard title="Tiến độ xử lý theo chuyến">
+        <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+          {["CF", "CS"].map((chain) => {
+            const chuyenList = CHUYEN_ORDER.filter(
+              (c) => stats.chainChuyenCount[chain][c] > 0,
+            );
+            const hasKhac = stats.chainChuyenCount[chain]["Khác"] > 0;
+            const isEmpty = chuyenList.length === 0 && !hasKhac;
+
+            return (
+              <div key={chain}>
+                <div className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                  <img
+                    src={CHAIN_LOGOS[chain]}
+                    alt={chain}
+                    className="h-5 w-5 rounded-[4px] object-contain ring-1 ring-slate-100"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                  <span
+                    className="text-[12.5px] font-semibold text-slate-600"
+                    style={{ fontFamily: FONT_SANS }}
+                  >
+                    {CHAIN_LABEL[chain]}
+                  </span>
+                  <span
+                    className="ml-auto text-[11px] text-slate-400"
+                    style={{ fontFamily: FONT_MONO }}
+                  >
+                    {formatNumber(stats.chainCount[chain])} đơn
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {isEmpty && (
+                    <div className="py-6 text-center text-sm text-slate-400">
+                      Không có dữ liệu.
+                    </div>
+                  )}
+                  {chuyenList.map((c) => (
+                    <ChainProgressBar
+                      key={c}
+                      label={c}
+                      counts={stats.chainChuyenTrangThai[chain][c]}
+                      total={stats.chainChuyenCount[chain][c]}
+                      dotColor={CHUYEN_COLORS[c]}
+                    />
+                  ))}
+                  {hasKhac && (
+                    <ChainProgressBar
+                      label="Khác"
+                      counts={stats.chainChuyenTrangThai[chain]["Khác"]}
+                      total={stats.chainChuyenCount[chain]["Khác"]}
+                      dotColor={CHUYEN_COLORS["Khác"]}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </ChartCard>
 
       {/* Thẻ SLA / KPI */}
       <div className="relative overflow-hidden rounded-2xl bg-white p-5 ring-1 ring-slate-200/70 md:p-6">
@@ -1446,76 +1498,8 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* Đơn theo ngày gần nhất */}
-      <ChartCard title="Số lượng đơn hàng theo ngày (trong khoảng đã chọn)">
-        <ResponsiveContainer width="100%" height={280} debounce={150}>
-          <BarChart
-            data={stats.dayData}
-            margin={{ top: 20, right: 10, left: 0, bottom: 0 }}
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="#eef2f6"
-            />
-            <XAxis
-              dataKey="date"
-              tick={{ fontSize: 11, fontFamily: FONT_MONO, fill: "#94a3b8" }}
-              axisLine={{ stroke: "#e2e8f0" }}
-              tickLine={false}
-            />
-            <YAxis
-              allowDecimals={false}
-              tick={{ fontSize: 11, fontFamily: FONT_MONO, fill: "#94a3b8" }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip
-              contentStyle={{
-                borderRadius: 10,
-                border: "1px solid #e2e8f0",
-                fontSize: 12,
-                fontFamily: FONT_SANS,
-              }}
-            />
-            <Legend
-              verticalAlign="top"
-              align="right"
-              height={28}
-              wrapperStyle={{ fontSize: 12, fontFamily: FONT_SANS }}
-            />
-            <Bar
-              dataKey="Chưa soạn"
-              name="Chưa soạn"
-              stackId="trangThai"
-              fill={TRANG_THAI_COLORS["Chưa soạn"]}
-              maxBarSize={36}
-            />
-            <Bar
-              dataKey="Đang soạn"
-              name="Đang soạn"
-              stackId="trangThai"
-              fill={TRANG_THAI_COLORS["Đang soạn"]}
-              maxBarSize={36}
-            />
-            <Bar
-              dataKey="Hoàn thành"
-              name="Hoàn thành"
-              stackId="trangThai"
-              fill={TRANG_THAI_COLORS["Hoàn thành"]}
-              radius={[4, 4, 0, 0]}
-              maxBarSize={36}
-            >
-              <LabelList
-                dataKey="soLuong"
-                position="top"
-                fontSize={11}
-                fill="#475569"
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
+      {/* Đơn hàng theo thời gian — chia CF/CS riêng, đổi mốc & chỉ số được */}
+      <OrderTimelineCharts />
     </div>
   );
 });

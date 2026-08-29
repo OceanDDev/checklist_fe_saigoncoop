@@ -16,7 +16,7 @@ const LoginPage = () => {
     setError("");
 
     try {
-      setLoading(true); // ✅ Bắt đầu loading
+      setLoading(true);
       const payload = { username, password };
       const res = await loginService.login(payload);
 
@@ -29,24 +29,20 @@ const LoginPage = () => {
 
       toast.success("Đăng nhập thành công", { position: "top-right" });
 
-      console.log("✅ [LOGIN] Response:", res);
-      console.log("✅ [LOGIN] User:", res.user);
-      console.log("✅ [LOGIN] Token:", res.token);
-
       localStorage.setItem("user", JSON.stringify(res.user));
       localStorage.setItem("name", res.user.name);
       localStorage.setItem("token", res.token);
 
-      console.log("✅ [LOGIN] localStorage đã lưu:");
-      console.log("   user →", localStorage.getItem("user"));
-      console.log("   name →", localStorage.getItem("name"));
-      console.log("   token →", localStorage.getItem("token"));
-
       const role = res.user.role;
       console.log("✅ [LOGIN] Role:", role, "| Type:", typeof role);
 
-      const target =
-        role === 20 || role === 26 || role === 19 ? "/phieusoan" : "/";
+      let target = "/";
+      if (role === 20 || role === 26 || role === 19) {
+        target = "/phieusoan";
+      } else if (role === 52 || role === 57 || role === 58 || role === 76) {
+        target = "/nhansusoan";
+      }
+
       console.log("✅ [LOGIN] Redirect đến:", target);
 
       window.location.href = target;
@@ -57,7 +53,7 @@ const LoginPage = () => {
         position: "top-right",
       });
     } finally {
-      setLoading(false); // ✅ Kết thúc loading dù thành công hay lỗi
+      setLoading(false);
     }
   };
 
@@ -94,7 +90,7 @@ const LoginPage = () => {
                 placeholder="abcd"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                disabled={loading} // ✅ Disable input khi đang load
+                disabled={loading}
                 className="w-full px-4 py-2 mt-1 rounded-lg border border-zinc-300 bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-60"
               />
             </div>
@@ -113,7 +109,7 @@ const LoginPage = () => {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading} // ✅ Disable input khi đang load
+                  disabled={loading}
                   className="w-full px-4 py-2 mt-1 rounded-lg border border-zinc-300 bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-400 pr-10 disabled:opacity-60"
                 />
                 <span
@@ -131,7 +127,6 @@ const LoginPage = () => {
 
             {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
 
-            {/* ✅ Nút disabled + spinner khi đang loading */}
             <button
               type="submit"
               disabled={loading}
