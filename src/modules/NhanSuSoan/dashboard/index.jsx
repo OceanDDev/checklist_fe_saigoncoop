@@ -683,6 +683,8 @@ const ChainProgressBar = memo(function ChainProgressBar({
   total,
   logo,
   dotColor,
+  onClick, // bấm vào tên chuyến -> lọc theo chuyến, TẤT CẢ trạng thái
+  onSegmentClick, // bấm vào 1 đoạn màu -> lọc theo chuyến + ĐÚNG trạng thái đó
 }) {
   const segments = TRANG_THAI_ORDER.map((key) => ({
     key,
@@ -692,12 +694,18 @@ const ChainProgressBar = memo(function ChainProgressBar({
   }));
   const doneCount = counts["Hoàn thành"] || 0;
   const donePct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+  const clickable = typeof onClick === "function";
+  const segmentClickable = typeof onSegmentClick === "function";
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between text-[13px] font-medium text-slate-600">
         <span
-          className="flex items-center gap-2"
+          onClick={clickable ? onClick : undefined}
+          title={clickable ? `Xem tất cả đơn thuộc chuyến ${label}` : undefined}
+          className={`flex items-center gap-2 ${
+            clickable ? "cursor-pointer rounded hover:text-blue-600" : ""
+          }`}
           style={{ fontFamily: FONT_SANS }}
         >
           {logo ? (
@@ -729,8 +737,17 @@ const ChainProgressBar = memo(function ChainProgressBar({
             s.value > 0 && (
               <div
                 key={s.key}
-                title={`${s.key}: ${s.value}`}
-                className="h-full transition-all duration-500"
+                title={
+                  segmentClickable
+                    ? `${s.key}: ${s.value} — bấm để lọc riêng chuyến ${label}, trạng thái ${s.key}`
+                    : `${s.key}: ${s.value}`
+                }
+                onClick={
+                  segmentClickable ? () => onSegmentClick(s.key) : undefined
+                }
+                className={`h-full transition-all duration-500 ${
+                  segmentClickable ? "cursor-pointer hover:opacity-80" : ""
+                }`}
                 style={{ width: `${s.pct}%`, backgroundColor: s.color }}
               />
             ),
@@ -742,7 +759,13 @@ const ChainProgressBar = memo(function ChainProgressBar({
         style={{ fontFamily: FONT_SANS }}
       >
         {segments.map((s) => (
-          <span key={s.key} className="flex items-center gap-1">
+          <span
+            key={s.key}
+            onClick={segmentClickable ? () => onSegmentClick(s.key) : undefined}
+            className={`flex items-center gap-1 ${
+              segmentClickable ? "cursor-pointer hover:text-slate-600" : ""
+            }`}
+          >
             <span
               className="h-1.5 w-1.5 rounded-full"
               style={{ backgroundColor: s.color }}
@@ -1113,15 +1136,20 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
     TRANG_THAI_MIN_ANGLE, // 👈 phải khớp minAngle trên <Pie> của trạng thái
   );
   const kpiLabel = usePieLabelRenderer(stats.kpiData, 280, 20);
-  // ✅ MỚI: click vào 1 lát pie -> báo lên component cha (qua onNavigate)
-  // để nhảy qua tab Bảng dữ liệu, áp đúng bộ lọc: chuỗi (nếu đang chọn
-  // logo CF/CS) + chuyến/trạng thái vừa click + khoảng ngày đang xem.
-  const handleSliceClick = (type, value) => {
+  // ✅ MỚI: điều hướng lên component cha (qua onNavigate) để nhảy qua tab
+  // Bảng dữ liệu, áp bộ lọc. Nhận riêng `chuyen` và `trangThai` (có thể
+  // truyền CẢ HAI cùng lúc — dùng khi bấm vào 1 đoạn màu cụ thể trong
+  // thanh "Tiến độ xử lý theo chuyến", vừa lọc đúng chuyến vừa lọc đúng
+  // trạng thái của đoạn đó); bỏ trống field nào thì field đó = "Tất cả".
+  // `chainOverride` dùng khi đã biết sẵn CF/CS (cột đang bấm) — không
+  // truyền thì fallback về `selectedChain` (dùng cho 2 pie ở trên, vốn
+  // lọc theo logo CF/CS đang chọn).
+  const handleNavigate = ({ chuyen, trangThai, chainOverride }) => {
     if (!onNavigate) return;
     onNavigate({
-      type, // "chuyen" | "trangThai"
-      value,
-      chain: selectedChain, // null | "CF" | "CS"
+      chuyen: chuyen || "",
+      trangThai: trangThai || "",
+      chain: chainOverride !== undefined ? chainOverride : selectedChain, // null | "CF" | "CS"
       tuNgay,
       denNgay,
     });
@@ -1224,7 +1252,7 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
                 label={chuyenLabel}
                 labelLine={false}
                 cursor="pointer"
-                onClick={(data) => handleSliceClick("chuyen", data.name)}
+                onClick={(data) => handleNavigate({ chuyen: data.name })}
               >
                 {chainChartStats.chuyenData.map((d, i) => (
                   <Cell key={i} fill={d.fill} />
@@ -1258,7 +1286,7 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
                 label={trangThaiLabel}
                 labelLine={false}
                 cursor="pointer"
-                onClick={(data) => handleSliceClick("trangThai", data.name)}
+                onClick={(data) => handleNavigate({ trangThai: data.name })}
               >
                 {chainChartStats.trangThaiData.map((d, i) => (
                   <Cell key={i} fill={d.fill} />
@@ -1320,6 +1348,16 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
                       counts={stats.chainChuyenTrangThai[chain][c]}
                       total={stats.chainChuyenCount[chain][c]}
                       dotColor={CHUYEN_COLORS[c]}
+                      onClick={() =>
+                        handleNavigate({ chuyen: c, chainOverride: chain })
+                      }
+                      onSegmentClick={(tt) =>
+                        handleNavigate({
+                          chuyen: c,
+                          trangThai: tt,
+                          chainOverride: chain,
+                        })
+                      }
                     />
                   ))}
                   {hasKhac && (
@@ -1328,6 +1366,19 @@ const NhanSuSoanDashboard = memo(function NhanSuSoanDashboard({
                       counts={stats.chainChuyenTrangThai[chain]["Khác"]}
                       total={stats.chainChuyenCount[chain]["Khác"]}
                       dotColor={CHUYEN_COLORS["Khác"]}
+                      onClick={() =>
+                        handleNavigate({
+                          chuyen: "Khác",
+                          chainOverride: chain,
+                        })
+                      }
+                      onSegmentClick={(tt) =>
+                        handleNavigate({
+                          chuyen: "Khác",
+                          trangThai: tt,
+                          chainOverride: chain,
+                        })
+                      }
                     />
                   )}
                 </div>

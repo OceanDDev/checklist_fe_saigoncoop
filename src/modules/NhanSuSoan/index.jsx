@@ -942,6 +942,12 @@ const NhanSuSoanTable = forwardRef(
       if (isViewerRole && view === "nhansu") setView("table");
     }, [isViewerRole, view]);
 
+    // Role 76 lỡ đang ở tab "table" (VD: đổi role giữa chừng phiên làm việc)
+    // -> tự chuyển về tab Dashboard vì tab đó đã bị ẩn khỏi họ.
+    useEffect(() => {
+      if (isRole76 && view === "table") setView("dashboard");
+    }, [isRole76, view]);
+
     const fetchNhanSuSoan = useCallback(async () => {
       setLoading(true);
       setError("");
@@ -969,32 +975,36 @@ const NhanSuSoanTable = forwardRef(
       setSelectedMap(new Map()); // ✅
       lastCheckedIndexRef.current = null;
     }, [fetchNhanSuSoan]);
-    // ✅ MỚI: nhận payload từ Dashboard khi click 1 lát pie ("theo chuyến" /
-    // "theo trạng thái") -> áp filter tương ứng lên bảng dữ liệu rồi chuyển
-    // view sang "table". Bỏ qua debounce của ô lọc text (soDonHang/chuyen)
-    // bằng cách set thẳng cả filters lẫn textFilterDrafts + appliedTextFiltersRef
-    // để useEffect debounce không ghi đè lại giá trị vừa set.
+
+    // ✅ Nhận payload từ Dashboard khi click 1 lát pie ("theo chuyến" /
+    // "theo trạng thái") HOẶC 1 đoạn màu trong thanh "Tiến độ xử lý theo
+    // chuyến" -> áp filter tương ứng lên bảng dữ liệu rồi chuyển view sang
+    // "table". Payload gửi thẳng { chain, chuyen, trangThai, tuNgay, denNgay }
+    // — có thể có CẢ HAI chuyen + trangThai cùng lúc (khi bấm 1 đoạn màu cụ
+    // thể trong thanh tiến độ). Bỏ qua debounce của ô lọc text (soDonHang/
+    // chuyen) bằng cách set thẳng cả filters lẫn textFilterDrafts +
+    // appliedTextFiltersRef để useEffect debounce không ghi đè lại giá trị
+    // vừa set.
     const handleDashboardNavigate = useCallback(
       ({
-        type,
-        value,
         chain,
         chuyen: navChuyen,
+        trangThai: navTrangThai,
         tuNgay: navTuNgay,
         denNgay: navDenNgay,
       }) => {
-        if (isRole76) return; // 👈 THÊM LẠI — role 76 không được điều hướng qua Bảng dữ liệu
+        if (isRole76) return; // role 76 không được điều hướng qua Bảng dữ liệu
 
         const soDonHangPrefix = chain
           ? CHAIN_SODONHANG_PREFIX[chain] || ""
           : "";
-        const chuyenValue = type === "chuyen" ? value : navChuyen || "";
+        const chuyenValue = navChuyen || "";
 
         setFilters((prev) => ({
           ...prev,
           soDonHang: soDonHangPrefix,
           chuyen: chuyenValue,
-          trangThai: type === "trangThai" ? value : "",
+          trangThai: navTrangThai || "",
           tuNgay: navTuNgay || prev.tuNgay,
           denNgay: navDenNgay || prev.denNgay,
         }));
@@ -1013,7 +1023,7 @@ const NhanSuSoanTable = forwardRef(
         setPage(1);
         setView("table");
       },
-      [isRole76], // 👈 thêm lại vào dependency array
+      [isRole76],
     );
     const handleOpenEditChuyen = useCallback((item) => {
       setEditingChuyenItem(item);
@@ -1312,19 +1322,21 @@ const NhanSuSoanTable = forwardRef(
                   {dashMeta.loading && (
                     <Loader2 size={18} className="animate-spin text-blue-500" />
                   )}
-                  <DateRangeFilter
-                    label="Lọc theo TG import"
-                    startValue={dashTuNgay}
-                    endValue={dashDenNgay}
-                    onChange={(s, e) => {
-                      setDashTuNgay(s);
-                      setDashDenNgay(e);
-                    }}
-                    onClear={() => {
-                      setDashTuNgay(getDefaultTuNgay());
-                      setDashDenNgay(getDefaultDenNgay());
-                    }}
-                  />
+                  {!isRole76 && (
+                    <DateRangeFilter
+                      label="Lọc theo TG import"
+                      startValue={dashTuNgay}
+                      endValue={dashDenNgay}
+                      onChange={(s, e) => {
+                        setDashTuNgay(s);
+                        setDashDenNgay(e);
+                      }}
+                      onClear={() => {
+                        setDashTuNgay(getDefaultTuNgay());
+                        setDashDenNgay(getDefaultDenNgay());
+                      }}
+                    />
+                  )}
                 </>
               )}
             </div>
@@ -1350,7 +1362,7 @@ const NhanSuSoanTable = forwardRef(
         {view === "table" && (
           <>
             <div className="flex flex-wrap items-center gap-3">
-              {!isRole76 && ( // 👈 THÊM — role 76 không thấy ô lọc ngày này nữa
+              {!isRole76 && (
                 <DateRangeFilter
                   label="Lọc theo TG import"
                   startValue={filters.tuNgay}

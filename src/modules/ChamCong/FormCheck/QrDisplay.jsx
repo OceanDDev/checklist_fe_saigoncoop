@@ -27,6 +27,7 @@ import {
   useCallback,
   useContext,
   createContext,
+  useRef,
   memo,
 } from "react";
 import { io } from "socket.io-client";
@@ -350,6 +351,7 @@ const LiveQrBox = memo(function LiveQrBox() {
   const [timeLeft, setTimeLeft] = useState(TOKEN_TTL);
   const [flash, setFlash] = useState(false);
   const [connected, setConnected] = useState(false);
+  const connectedRef = useRef(false);
   const qrSize = useQrSize();
 
   const qrUrl = token ? `${BASE_URL}/chamcongform/${token}` : null;
@@ -377,26 +379,38 @@ const LiveQrBox = memo(function LiveQrBox() {
       reconnectionDelayMax: 5000,
     });
 
-    socket.on("connect", () => setConnected(true));
-    socket.on("disconnect", () => setConnected(false));
+  socket.on("connect", () => {
+      setConnected(true);
+      connectedRef.current = true;
+    });
+    socket.on("disconnect", () => {
+      setConnected(false);
+      connectedRef.current = false;
+    });
     socket.on("qr:updated", ({ token: t, expiry: e }) => applyToken(t, e));
 
     return () => socket.disconnect();
   }, [applyToken]);
 
-  // 🛠️ THÊM MỚI: cơ chế dự phòng — nếu QR hết hạn quá lâu mà socket
-  // chưa gửi token mới (do mất kết nối tạm thời), tự gọi lại REST API
-  // để lấy QR mới, tránh hiển thị QR đã hết hạn vô thời hạn.
+  // 🛠️ SỬA: chỉ tự gọi REST khi socket ĐANG THỰC SỰ mất kết nối
+  // (connectedRef.current === false), không can thiệp khi socket vẫn
+  // hoạt động bình thường — tránh gọi API tràn lan mỗi 2s như bản trước.
   useEffect(() => {
+    let fetching = false;
     const id = setInterval(() => {
-      const secondsPastExpiry = (Date.now() - expiry) / 1000;
-      if (expiry && secondsPastExpiry > 3) {
+      if (fetching || connectedRef.current) return;
+      const secondsPastExpiry = expiry ? (Date.now() - expiry) / 1000 : 0;
+      if (expiry && secondsPastExpiry > 8) {
+        fetching = true;
         chamCongService
           .getCurrentQr()
           .then((res) => applyToken(res.token, res.expiry))
-          .catch(console.error);
+          .catch(console.error)
+          .finally(() => {
+            fetching = false;
+          });
       }
-    }, 2000); // kiểm tra mỗi 2 giây
+    }, 5000);
     return () => clearInterval(id);
   }, [expiry, applyToken]);
 
