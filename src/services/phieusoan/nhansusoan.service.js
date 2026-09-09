@@ -9,6 +9,7 @@ const buildQueryString = (params = {}) => {
     soDonHang = "",
     soPhieuGop = "",
     trangThai = "",
+    trangThaiBookXe = "",
     maNXD = "",
     noiXuatDen = "",
     chuyen = "",
@@ -30,6 +31,7 @@ const buildQueryString = (params = {}) => {
   if (soDonHang) qs.set("soDonHang", soDonHang);
   if (soPhieuGop) qs.set("soPhieuGop", soPhieuGop);
   if (trangThai) qs.set("trangThai", trangThai);
+  if (trangThaiBookXe) qs.set("trangThaiBookXe", trangThaiBookXe);
   if (maNXD) qs.set("maNXD", maNXD);
   if (noiXuatDen) qs.set("noiXuatDen", noiXuatDen);
   if (chuyen) qs.set("chuyen", chuyen);
@@ -223,6 +225,18 @@ const getTopNangSuatCongKhai = async (ngay = "") => {
     throw error;
   }
 };
+const updateManyKienDuKien = async (data) => {
+  try {
+    const response = await ApiServer.put(
+      `${URL.phieusoan.nhansusoan}/update-many-kien-du-kien`,
+      { data },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi updateManyKienDuKien:", error);
+    throw error;
+  }
+};
 export const nhanSuSoanService = {
   getAllNhanSuSoan, // GET    /api/saigoncoop/nhansusoan?page=1&limit=50&...
   getNhanSuSoanById, // GET    /api/saigoncoop/nhansusoan/:id
@@ -236,5 +250,6 @@ export const nhanSuSoanService = {
   deleteAllNhanSuSoan, // DELETE /api/saigoncoop/nhansusoan/delete-all
   importUpdateNhanSuSoan,
   addGiaoKhach,
-  getTopNangSuatCongKhai
+  getTopNangSuatCongKhai,
+  updateManyKienDuKien,
 };

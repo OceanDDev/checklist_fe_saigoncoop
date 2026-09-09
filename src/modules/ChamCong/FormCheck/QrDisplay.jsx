@@ -21,6 +21,12 @@
 // chí nào, để so sánh nhanh giữa các bảng. Top 3 vẫn có huy hiệu màu
 // vàng/bạc/đồng ở số thứ tự để dễ nhận diện, nhưng không còn tách bậc
 // cao-thấp — toàn bộ nằm chung 1 danh sách để tối đa số người hiển thị.
+//
+// 🔻 UPDATE (09/09/2026): Đổi bảng vinh danh từ "cao nhất" sang
+// "thấp nhất" theo yêu cầu — giờ đây danh sách hiển thị những người có
+// số DÒNG/KIỆN thấp nhất trong ngày (sort tăng dần), để dễ nhận diện và
+// nhắc nhở năng suất thấp. Toàn bộ UI (chip, huy hiệu top 3, màu sắc)
+// giữ nguyên, chỉ đổi tiêu đề bảng + logic sắp xếp.
 import {
   useState,
   useEffect,
@@ -40,6 +46,77 @@ const SOCKET_URL = import.meta.env.VITE_API || "http://localhost:5173";
 const TOKEN_TTL = 5;
 const TOP_POLL_INTERVAL = 5 * 60 * 1000; // 5 phút — không cần realtime
 const TOP_LIMIT = 5; // số người hiển thị mỗi bảng vinh danh
+
+// 🔴 Hiệu ứng nhấp nháy cho biển cảnh báo — giống đèn/biển báo giao thông:
+// nền + viền đỏ chớp tắt liên tục (không dùng opacity mờ dần kiểu pulse
+// thông thường, mà nhảy cứng giữa 2 trạng thái sáng/tối cho giống đèn
+// báo hiệu thật).
+const WARNING_BLINK_STYLE = `
+@keyframes warningBlink {
+  0%, 49% {
+    background-color: #7f1d1d;
+    border-color: #ef4444;
+    box-shadow: 0 0 18px 2px rgba(239,68,68,0.55);
+  }
+  50%, 100% {
+    background-color: #2a0a0a;
+    border-color: #7f1d1d;
+    box-shadow: none;
+  }
+}
+.warning-blink-box {
+  animation: warningBlink 1s steps(1, end) infinite;
+}
+.warning-blink-icon {
+  animation: warningBlink 1s steps(1, end) infinite;
+  animation-name: warningBlinkIcon;
+}
+@keyframes warningBlinkIcon {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.35; }
+}
+.warning-blink-row {
+  animation: warningBlinkRow 1s steps(1, end) infinite;
+}
+@keyframes warningBlinkRow {
+  0%, 49% {
+    background: rgba(239,68,68,0.22);
+    border: 1px solid #ef4444;
+    box-shadow: 0 0 12px 1px rgba(239,68,68,0.5);
+  }
+  50%, 100% {
+    background: rgba(127,29,29,0.18);
+    border: 1px solid rgba(239,68,68,0.35);
+    box-shadow: none;
+  }
+}
+.warning-blink-badge {
+  animation: warningBlinkBadge 1s steps(1, end) infinite;
+}
+@keyframes warningBlinkBadge {
+  0%, 49% {
+    background-color: #ef4444;
+    box-shadow: 0 0 8px 1px rgba(239,68,68,0.85);
+  }
+  50%, 100% {
+    background-color: #7f1d1d;
+    box-shadow: none;
+  }
+}
+.warning-blink-banner {
+  animation: warningBlinkBanner 1s steps(1, end) infinite;
+}
+@keyframes warningBlinkBanner {
+  0%, 49% {
+    background: rgba(239,68,68,0.22);
+    border-color: #ef4444;
+  }
+  50%, 100% {
+    background: rgba(127,29,29,0.12);
+    border-color: rgba(239,68,68,0.35);
+  }
+}
+`;
 
 function accentColor(progress) {
   if (progress > 60) return "#3d9e6e";
@@ -124,9 +201,10 @@ function useIsOpenGate() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HOOK: Top Dòng/Kiện — lấy từ endpoint public (không cần token), backend
-// đã tổng hợp sẵn kien/dong + ten/chucVu theo từng NV soạn.
-// Poll mỗi 5 phút, tick ngày mỗi 60s (đủ để phát hiện đổi ngày reset).
+// HOOK: Bảng Dòng/Kiện THẤP NHẤT — lấy từ endpoint public (không cần
+// token), backend đã tổng hợp sẵn kien/dong + ten/chucVu theo từng NV
+// soạn. Poll mỗi 5 phút, tick ngày mỗi 60s (đủ để phát hiện đổi ngày
+// reset).
 // ═══════════════════════════════════════════════════════════
 function useTopNangSuat() {
   const now = useHanoiNow(60 * 1000);
@@ -151,14 +229,16 @@ function useTopNangSuat() {
         });
         setProfileMap(map);
 
+        // 🔻 Sắp xếp TĂNG DẦN (a - b) để lấy những người có số
+        // dòng/kiện THẤP NHẤT trong ngày, thay vì cao nhất.
         setTopDong(
           [...data]
-            .sort((a, b) => b.dong - a.dong || b.kien - a.kien)
+            .sort((a, b) => a.dong - b.dong || a.kien - b.kien)
             .slice(0, TOP_LIMIT),
         );
         setTopKien(
           [...data]
-            .sort((a, b) => b.kien - a.kien || b.dong - a.dong)
+            .sort((a, b) => a.kien - b.kien || a.dong - b.dong)
             .slice(0, TOP_LIMIT),
         );
         setLoaded(true);
@@ -379,7 +459,7 @@ const LiveQrBox = memo(function LiveQrBox() {
       reconnectionDelayMax: 5000,
     });
 
-  socket.on("connect", () => {
+    socket.on("connect", () => {
       setConnected(true);
       connectedRef.current = true;
     });
@@ -469,6 +549,7 @@ const LiveQrBox = memo(function LiveQrBox() {
         </div>
       </div>
 
+      {/* Biển cảnh báo — giữ nguyên như bản gốc, không thay đổi */}
       <div className="flex max-w-xs items-start gap-2 rounded-lg border border-yellow-950 bg-[#110f0a] px-3 py-2">
         <span className="shrink-0 text-[clamp(0.6rem,0.95vw,0.85rem)]">⚠️</span>
         <span className="text-[clamp(0.5rem,0.72vw,0.66rem)] leading-relaxed text-yellow-800">
@@ -480,17 +561,13 @@ const LiveQrBox = memo(function LiveQrBox() {
 });
 
 // ═══════════════════════════════════════════════════════════
-// BẢNG VINH DANH — danh sách phẳng, mỗi người 1 dòng, top TOP_LIMIT.
+// BẢNG VINH DANH — danh sách phẳng, mỗi người 1 dòng, hiển thị TOP_LIMIT
+// người có số DÒNG/KIỆN THẤP NHẤT trong ngày.
 // Mỗi dòng luôn hiện đủ 2 chip DÒNG + KIỆN (màu cố định, không đổi theo
 // bảng) để so sánh nhanh, thứ hạng chỉ quyết định thứ tự sắp xếp.
 // ═══════════════════════════════════════════════════════════
 const DONG_ACCENT = "#facc15"; // vàng — luôn đại diện cho số DÒNG
 const KIEN_ACCENT = "#38bdf8"; // xanh — luôn đại diện cho số KIỆN
-
-// Huy hiệu số thứ tự cho top 3 (vàng/bạc/đồng), từ hạng 4 trở đi dùng
-// khung viền trung tính — vẫn phân biệt được ai đang dẫn đầu mà không
-// cần tách hẳn thành bục riêng.
-const TOP_RANK_COLOR = { 0: "#eab308", 1: "#94a3b8", 2: "#ea8022" };
 
 function MetricChip({ value, label, accent, glow }) {
   return (
@@ -523,37 +600,33 @@ const ListRow = memo(function ListRow({ rank, row, profile }) {
   const chucVu = profile?.chucVu || row.code;
   const isTop3 = rank < 3;
   const isFirst = rank === 0;
-  const rankColor = TOP_RANK_COLOR[rank];
 
   // 💡 Mỗi dòng giờ là 1 "thẻ sáng" thay vì chỉ có gạch phân cách mỏng:
-  // nền hơi bừng sáng (rgba trắng nhạt), top 3 có thêm viền + glow màu
-  // theo huy hiệu để nổi bật hẳn so với hạng dưới. Hạng #1 sáng nhất.
+  // nền hơi bừng sáng (rgba trắng nhạt). Top 3 (năng suất thấp nhất,
+  // đáng báo động nhất) có viền đỏ NHẤP NHÁY kiểu biển báo giao thông
+  // thay vì viền + glow tĩnh như bản "vinh danh" trước đây.
   return (
     <div
-      className="mb-1 flex min-w-0 shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 transition-all duration-300 last:mb-0"
+      className={`mb-1 flex min-w-0 shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 transition-all duration-300 last:mb-0 ${
+        isTop3 ? "warning-blink-row" : ""
+      }`}
       style={{
-        background: isTop3
-          ? `linear-gradient(90deg, ${rankColor}20, rgba(255,255,255,0.035))`
-          : "rgba(255,255,255,0.035)",
-        border: `1px solid ${isTop3 ? `${rankColor}55` : "rgba(255,255,255,0.06)"}`,
-        boxShadow: isFirst
-          ? `0 0 18px ${rankColor}40, inset 0 0 0 1px ${rankColor}25`
-          : isTop3
-            ? `0 0 10px ${rankColor}22`
-            : "none",
+        background: isTop3 ? undefined : "rgba(255,255,255,0.035)",
+        border: isTop3 ? undefined : "1px solid rgba(255,255,255,0.06)",
       }}
     >
       <span
-        className="flex shrink-0 items-center justify-center rounded font-mono text-[clamp(0.5rem,0.66vw,0.6rem)] font-bold"
+        className={`flex shrink-0 items-center justify-center rounded font-mono text-[clamp(0.5rem,0.66vw,0.6rem)] font-bold ${
+          isTop3 ? "warning-blink-badge" : ""
+        }`}
         style={{
           width: "clamp(1.1rem,1.6vw,1.4rem)",
           height: "clamp(1.1rem,1.6vw,1.4rem)",
-          color: isTop3 ? "#1a1a1a" : "#a3a3a3",
-          background: isTop3 ? rankColor : "rgba(255,255,255,0.06)",
-          boxShadow: isTop3 ? `0 0 8px ${rankColor}90` : "none",
+          color: isTop3 ? "#fff" : "#a3a3a3",
+          background: isTop3 ? undefined : "rgba(255,255,255,0.06)",
         }}
       >
-        {rank + 1}
+        {isTop3 ? "⚠" : rank + 1}
       </span>
 
       <span className="shrink-0 whitespace-nowrap rounded border border-neutral-700 bg-neutral-900/60 px-1 py-0.5 font-mono text-[clamp(0.4rem,0.5vw,0.46rem)] text-neutral-400">
@@ -641,19 +714,32 @@ const TopNangSuatPanel = memo(function TopNangSuatPanel() {
   const { now, topDong, topKien, profileMap, loaded } = useTopNangSuat();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_1fr_1fr] gap-1.5 overflow-hidden pl-[1.5vw]">
+    <div className="grid h-full min-h-0 grid-rows-[auto_auto_1fr_1fr] gap-1.5 overflow-hidden pl-[1.5vw]">
+      <style>{WARNING_BLINK_STYLE}</style>
+
       <div className="flex shrink-0 items-baseline justify-between">
         <div className="whitespace-nowrap font-mono text-[clamp(0.52rem,0.76vw,0.72rem)] tracking-[0.26em] uppercase text-neutral-700">
-          🏆 TOP NĂNG SUẤT HÔM NAY
+          📉 THẤP NHẤT NĂNG SUẤT HÔM NAY
         </div>
         <div className="whitespace-nowrap font-mono text-[clamp(0.44rem,0.62vw,0.58rem)] text-neutral-700">
           {now.toLocaleDateString("vi-VN")}
         </div>
       </div>
 
-      {/* ── Hàng 1: TOP DÒNG — sắp theo dòng, vẫn hiện đủ dòng + kiện ── */}
+      {/* 🔴 Banner cảnh báo — nhấp nháy đỏ kiểu biển báo giao thông, vì
+          những người trong danh sách dưới đây đang có năng suất thấp */}
+      <div className="warning-blink-banner flex shrink-0 items-center gap-2 rounded-md border px-2 py-1">
+        <span className="warning-blink-icon shrink-0 text-[clamp(0.62rem,0.9vw,0.8rem)]">
+          ⚠️
+        </span>
+        <span className="text-[clamp(0.44rem,0.6vw,0.56rem)] font-bold uppercase tracking-wide text-red-100">
+          Cảnh báo: năng suất thấp — cần nhắc nhở
+        </span>
+      </div>
+
+      {/* ── Hàng 1: THẤP NHẤT DÒNG — sắp theo dòng, vẫn hiện đủ dòng + kiện ── */}
       <RankBoard
-        title="TOP DÒNG"
+        title="THẤP NHẤT DÒNG"
         icon="📄"
         accentColor={DONG_ACCENT}
         list={topDong}
@@ -661,9 +747,9 @@ const TopNangSuatPanel = memo(function TopNangSuatPanel() {
         loaded={loaded}
       />
 
-      {/* ── Hàng 2: TOP KIỆN — sắp theo kiện, vẫn hiện đủ dòng + kiện ── */}
+      {/* ── Hàng 2: THẤP NHẤT KIỆN — sắp theo kiện, vẫn hiện đủ dòng + kiện ── */}
       <RankBoard
-        title="TOP KIỆN"
+        title="THẤP NHẤT KIỆN"
         icon="📦"
         accentColor={KIEN_ACCENT}
         list={topKien}
@@ -724,7 +810,7 @@ const QrDisplayInner = memo(function QrDisplayInner() {
           <LiveQrBox />
         </div>
 
-        {/* ── PHẢI: 2 bảng vinh danh — Top Dòng & Top Kiện ── */}
+        {/* ── PHẢI: 2 bảng vinh danh — Thấp Nhất Dòng & Thấp Nhất Kiện ── */}
         <div className="min-h-0 min-w-0">
           <TopNangSuatPanel />
         </div>
