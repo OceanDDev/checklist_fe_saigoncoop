@@ -1,32 +1,23 @@
 /* eslint-disable react/prop-types */
-import { useState, useEffect, useCallback, useMemo } from "react";
-import {
-  Search,
-  Trash2,
-  RefreshCw,
-  X,
-  Truck,
-  Pencil,
-  UserRound,
-} from "lucide-react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
+import dayjs from "dayjs";
+import { DateRange } from "react-date-range";
+import "react-date-range/dist/styles.css";
+import "react-date-range/dist/theme/default.css";
+import { Trash2, RefreshCw, X, Truck, Pencil, UserRound } from "lucide-react";
 import { bookXeService } from "@/services/bookxe.service";
 import EditBookXeModal from "./editbookxemodal";
 import ExportExcelButton from "./export";
 import BookChuyenModal from "./bookchuyenmodal";
 
 const PAGE_SIZE = 20;
-// Limit lớn dùng khi xuất Excel để lấy toàn bộ dữ liệu khớp bộ lọc,
-// không chỉ riêng trang đang xem.
 const EXPORT_LIMIT = 100000;
 
-// ─── Hằng số & helpers (gói luôn trong file, không tách utils riêng) ────────
-
-const STATUS_OPTIONS = ["Chưa Book", "Chờ xe", "Có kiện rớt", "Hoàn thành"];
+const STATUS_OPTIONS = ["Chờ xe", "Hoàn thành"];
 
 const STATUS_STYLE = {
-  "Chưa Book": "bg-slate-100 text-slate-600",
   "Chờ xe": "bg-amber-50 text-amber-600",
-  "Có kiện rớt": "bg-red-50 text-red-600",
   "Hoàn thành": "bg-emerald-50 text-emerald-600",
 };
 
@@ -103,8 +94,6 @@ const formatDateTime = (value) => {
   });
 };
 
-// Chỉ hiện ngày (bỏ giờ) — dùng cho "Ngày Tạo" / "Ngày Hoàn Thành" để cột
-// gọn hơn, đỡ tốn bề rộng bảng.
 const formatNgayOnly = (value) => {
   if (!value) return "—";
   const d = new Date(value);
@@ -146,10 +135,30 @@ const cleanTenCH = (tenCh, maCh) => {
   result = result.replace(/^[A-Za-z]{1,4}\d{3,6}-\s*/, "");
   return result.trim();
 };
+// Gộp các mã CH trùng nhau (giữ lần xuất hiện đầu tiên), đồng thời gộp tên CH tương ứng
+const dedupeCHPair = (maCh, tenCh) => {
+  const maChArr = String(maCh || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const tenChArr = String(tenCh || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-// Lấy số phút trong ngày (0-1439) theo giờ VN từ 1 mốc thời gian, dùng để
-// sort thuần theo "giờ:phút" — bỏ qua phần ngày, nên cột Giờ Xuất luôn đọc
-// tăng dần từ trên xuống bất kể các dòng thuộc ngày khác nhau.
+  const seen = new Set();
+  const resultMa = [];
+  const resultTen = [];
+
+  maChArr.forEach((ma, idx) => {
+    if (seen.has(ma)) return; // đã có mã này rồi, bỏ qua
+    seen.add(ma);
+    resultMa.push(ma);
+    resultTen.push(tenChArr[idx] || "");
+  });
+
+  return { maChArr: resultMa, tenChArr: resultTen };
+};
 const getMinutesOfDayVN = (value) => {
   if (!value) return Infinity;
   const d = new Date(value);
@@ -164,38 +173,194 @@ const getMinutesOfDayVN = (value) => {
   return h * 60 + m;
 };
 
-// Sort thuần theo Giờ Xuất (giờ:phút) tăng dần, không quan tâm ngày.
 const sortByGioXuatAsc = (rows) =>
   [...rows].sort(
     (a, b) =>
       getMinutesOfDayVN(a.thoi_gian_xuat) - getMinutesOfDayVN(b.thoi_gian_xuat),
   );
 
-// Ngày hiện tại theo giờ VN, format yyyy-MM-dd — dùng làm giá trị mặc định
-// cho input type="date".
+// ─── Filter row input styles + DateRangeFilter (giống style ô "Lọc...") ─────
+
+const filterInputCls =
+  "w-full h-7 px-2 text-xs rounded-md border border-slate-300 bg-white/70 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-shadow";
+
+const DateRangeFilter = ({
+  label,
+  startValue,
+  endValue,
+  onChange,
+  onClear,
+}) => {
+  const [range, setRange] = useState([
+    {
+      startDate: startValue ? new Date(startValue) : null,
+      endDate: endValue ? new Date(endValue) : null,
+      key: "selection",
+    },
+  ]);
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const wrapRef = useRef(null);
+  const popupRef = useRef(null);
+
+  useEffect(() => {
+    setRange([
+      {
+        startDate: startValue ? new Date(startValue) : null,
+        endDate: endValue ? new Date(endValue) : null,
+        key: "selection",
+      },
+    ]);
+  }, [startValue, endValue]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      const clickedInput = wrapRef.current?.contains(e.target);
+      const clickedPopup = popupRef.current?.contains(e.target);
+      if (!clickedInput && !clickedPopup) setShow(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!show) return;
+    const close = () => setShow(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [show]);
+
+  const openPopup = () => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (rect) {
+      const popupWidth = 320;
+      let left = rect.left;
+      const maxLeft = window.innerWidth - popupWidth - 8;
+      if (left > maxLeft) left = maxLeft;
+      if (left < 8) left = 8;
+      setPos({ top: rect.bottom + 6, left });
+    }
+    setShow((v) => !v);
+  };
+
+  const handleRangeChange = (item) => {
+    const { startDate, endDate } = item.selection;
+    setRange([item.selection]);
+    onChange(
+      startDate ? dayjs(startDate).format("YYYY-MM-DD") : "",
+      endDate ? dayjs(endDate).format("YYYY-MM-DD") : "",
+    );
+  };
+
+  const handleClear = () => {
+    setRange([{ startDate: null, endDate: null, key: "selection" }]);
+    onClear();
+    setShow(false);
+  };
+
+  const hasValue = range[0].startDate && range[0].endDate;
+
+  const popup = show && (
+    <div
+      ref={popupRef}
+      style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999 }}
+      className="overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-slate-200"
+    >
+      <DateRange
+        ranges={range}
+        onChange={handleRangeChange}
+        showDateDisplay={false}
+        moveRangeOnFirstSelection={false}
+        maxDate={new Date()}
+      />
+    </div>
+  );
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <input
+        type="text"
+        readOnly
+        onClick={openPopup}
+        value={
+          hasValue
+            ? `${dayjs(range[0].startDate).format("DD/MM/YY")} - ${dayjs(range[0].endDate).format("DD/MM/YY")}`
+            : ""
+        }
+        placeholder={label}
+        title={label}
+        className={`${filterInputCls} cursor-pointer pr-5`}
+      />
+      {hasValue && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleClear();
+          }}
+          title="Xoá lọc ngày"
+          className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
+        >
+          <X size={12} />
+        </button>
+      )}
+      {show &&
+        typeof document !== "undefined" &&
+        createPortal(popup, document.body)}
+    </div>
+  );
+};
+
+// ─── Filter mặc định + các field text cần debounce trước khi gọi API ────────
+
+const DEFAULT_FILTERS = {
+  quan: "",
+  maCh: "",
+  tenCh: "",
+  maNcv: "",
+  tenNvc: "",
+  lichDiHang: "",
+  ghiChu: "",
+  trangThai: "",
+};
+
+const TEXT_FILTER_KEYS = [
+  "quan",
+  "maCh",
+  "tenCh",
+  "maNcv",
+  "tenNvc",
+  "lichDiHang",
+  "ghiChu",
+];
+
 const getTodayVN = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
 
 // ─── Sub components ─────────────────────────────────────────────────────────
 
-const StatusBadge = ({ value }) => (
-  <span
+const StatusBadge = ({ value, onClick, updating }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={updating}
+    title="Nhấp để chuyển trạng thái"
     className={[
-      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-opacity",
       STATUS_STYLE[value] || "bg-slate-100 text-slate-500",
+      updating ? "cursor-wait opacity-50" : "cursor-pointer hover:opacity-80",
     ].join(" ")}
   >
     {value || "—"}
-  </span>
+  </button>
 );
 
-const TagList = ({ value, tone = "slate" }) => {
-  if (!value) return <span className="text-slate-400">—</span>;
-  const items = String(value)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (items.length === 0) return <span className="text-slate-400">—</span>;
+const TagList = ({ items = [], tone = "slate" }) => {
+  if (!items.length) return <span className="text-slate-400">—</span>;
 
   const toneClass =
     tone === "blue"
@@ -219,16 +384,7 @@ const TagList = ({ value, tone = "slate" }) => {
   );
 };
 
-const TenCHList = ({ maCh, tenCh }) => {
-  const maChArr = String(maCh || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const tenChArr = String(tenCh || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
+const TenCHList = ({ maChArr = [], tenChArr = [] }) => {
   if (tenChArr.length === 0) return <span className="text-slate-400">—</span>;
 
   return (
@@ -251,42 +407,68 @@ const BookXeTable = () => {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [trangThai, setTrangThai] = useState("");
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+
+  // Ngày Đi Hàng
   const [tuNgay, setTuNgay] = useState("");
   const [denNgay, setDenNgay] = useState("");
-  // Bộ lọc theo Ngày Tạo (thoi_gian_tao), tách riêng với bộ lọc Ngày Xuất ở
-  // trên. Mặc định là ngày hiện tại khi mới vào trang.
+  // Ngày Tạo — mặc định hôm nay
   const [tuNgayTao, setTuNgayTao] = useState(getTodayVN());
   const [denNgayTao, setDenNgayTao] = useState(getTodayVN());
+  // Ngày HT
+  const [tuNgayHT, setTuNgayHT] = useState("");
+  const [denNgayHT, setDenNgayHT] = useState("");
+
+  // Bản nháp filter text — cập nhật UI ngay, chỉ gọi API sau khi ngừng gõ
+  const [textFilterDrafts, setTextFilterDrafts] = useState(() => {
+    const draft = {};
+    TEXT_FILTER_KEYS.forEach((k) => (draft[k] = ""));
+    return draft;
+  });
+  const appliedTextFiltersRef = useRef(textFilterDrafts);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const changed = TEXT_FILTER_KEYS.some(
+        (k) => appliedTextFiltersRef.current[k] !== textFilterDrafts[k],
+      );
+      if (changed) {
+        appliedTextFiltersRef.current = textFilterDrafts;
+        setFilters((prev) => ({ ...prev, ...textFilterDrafts }));
+        setPage(1);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [textFilterDrafts]);
+
+  const handleTextFilterChange = useCallback((key, value) => {
+    setTextFilterDrafts((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
   const [selectedIds, setSelectedIds] = useState([]);
   const [bookChuyenOpen, setBookChuyenOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [updatingIds, setUpdatingIds] = useState(() => new Set());
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 400);
-    return () => clearTimeout(t);
-  }, [searchInput]);
-
-  // Tham số lọc dùng chung cho cả tải bảng (phân trang) lẫn xuất Excel
-  // (không phân trang), để 2 luồng luôn khớp cùng bộ lọc.
   const buildQueryParams = useCallback(
     () => ({
-      search: search || undefined,
-      trangThai: trangThai || undefined,
+      quan: filters.quan || undefined,
+      ma_ch: filters.maCh || undefined,
+      ten_ch: filters.tenCh || undefined,
+      ma_ncv: filters.maNcv || undefined,
+      ten_nvc: filters.tenNvc || undefined,
+      lich_di_hang: filters.lichDiHang || undefined,
+      ghi_chu: filters.ghiChu || undefined,
+      trangThai: filters.trangThai || undefined,
       tu_ngay: tuNgay || undefined,
       den_ngay: denNgay || undefined,
-      // Lưu ý: backend cần hỗ trợ 2 param này để lọc theo Ngày Tạo.
       tu_ngay_tao: tuNgayTao || undefined,
       den_ngay_tao: denNgayTao || undefined,
+      tu_ngay_ht: tuNgayHT || undefined,
+      den_ngay_ht: denNgayHT || undefined,
     }),
-    [search, trangThai, tuNgay, denNgay, tuNgayTao, denNgayTao],
+    [filters, tuNgay, denNgay, tuNgayTao, denNgayTao, tuNgayHT, denNgayHT],
   );
 
   const fetchData = useCallback(async () => {
@@ -319,8 +501,6 @@ const BookXeTable = () => {
     fetchData();
   }, [fetchData]);
 
-  // Giờ Xuất luôn được sắp tăng dần (nhỏ -> lớn) trong mỗi nhóm; chuyến
-  // đang giao khách vẫn được ưu tiên hiển thị lên đầu bảng.
   const sortedData = useMemo(() => sortByGioXuatAsc(data), [data]);
 
   const soLuongGiaoKhach = useMemo(
@@ -328,7 +508,6 @@ const BookXeTable = () => {
     [data],
   );
 
-  // Lấy toàn bộ dữ liệu khớp bộ lọc hiện tại (không phân trang) để xuất Excel.
   const fetchExportRows = useCallback(async () => {
     const res = await bookXeService.getAllBookXe({
       page: 1,
@@ -339,18 +518,34 @@ const BookXeTable = () => {
   }, [buildQueryParams]);
 
   const handleClearFilters = () => {
-    setSearchInput("");
-    setSearch("");
-    setTrangThai("");
+    setTextFilterDrafts(() => {
+      const draft = {};
+      TEXT_FILTER_KEYS.forEach((k) => (draft[k] = ""));
+      return draft;
+    });
+    appliedTextFiltersRef.current = TEXT_FILTER_KEYS.reduce((acc, k) => {
+      acc[k] = "";
+      return acc;
+    }, {});
+    setFilters(DEFAULT_FILTERS);
     setTuNgay("");
     setDenNgay("");
     setTuNgayTao("");
     setDenNgayTao("");
+    setTuNgayHT("");
+    setDenNgayHT("");
     setPage(1);
   };
 
   const hasActiveFilters =
-    searchInput || trangThai || tuNgay || denNgay || tuNgayTao || denNgayTao;
+    TEXT_FILTER_KEYS.some((k) => filters[k]) ||
+    filters.trangThai ||
+    tuNgay ||
+    denNgay ||
+    tuNgayTao ||
+    denNgayTao ||
+    tuNgayHT ||
+    denNgayHT;
 
   const toggleSelectAll = () => {
     if (selectedIds.length === data.length) {
@@ -392,7 +587,44 @@ const BookXeTable = () => {
     fetchData();
   };
 
-  const COLUMN_COUNT = 18;
+  const handleToggleTrangThai = async (item) => {
+    if (updatingIds.has(item._id)) return;
+
+    const isHoanThanh = item.trangThai === "Hoàn thành";
+    const nextTrangThai = isHoanThanh ? "Chờ xe" : "Hoàn thành";
+    const nextThoiGianHT = isHoanThanh ? null : new Date().toISOString();
+
+    setUpdatingIds((prev) => new Set(prev).add(item._id));
+    setData((prev) =>
+      prev.map((d) =>
+        d._id === item._id
+          ? {
+              ...d,
+              trangThai: nextTrangThai,
+              thoi_gian_hoan_thanh: nextThoiGianHT,
+            }
+          : d,
+      ),
+    );
+
+    try {
+      await bookXeService.updateBookXe(item._id, {
+        trangThai: nextTrangThai,
+        thoi_gian_hoan_thanh: nextThoiGianHT,
+      });
+    } catch (error) {
+      console.error("Cập nhật trạng thái thất bại:", error);
+      setData((prev) => prev.map((d) => (d._id === item._id ? item : d)));
+    } finally {
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item._id);
+        return next;
+      });
+    }
+  };
+
+  const COLUMN_COUNT = 16;
 
   return (
     <div className="p-3 md:p-4">
@@ -403,132 +635,49 @@ const BookXeTable = () => {
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-1 flex-wrap items-center gap-2">
-            <div className="relative min-w-[220px] flex-1 max-w-sm">
-              <Search
-                size={15}
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Tìm mã CH, tên CH, tên NVC..."
-                className="w-full rounded-lg border border-slate-300 py-2 pl-8 pr-2 text-sm text-slate-700 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-
-            <select
-              value={trangThai}
-              onChange={(e) => {
-                setTrangThai(e.target.value);
-                setPage(1);
-              }}
-              className="rounded-lg border border-slate-300 px-2.5 py-2 text-sm text-slate-600 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">Tất cả trạng thái</option>
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-
-            <div className="flex items-center gap-1.5 text-sm text-slate-500">
-              <span className="hidden shrink-0 sm:inline">Ngày xuất:</span>
-              <input
-                type="date"
-                value={tuNgay}
-                onChange={(e) => {
-                  setTuNgay(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-600 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-              <span className="text-slate-400">→</span>
-              <input
-                type="date"
-                value={denNgay}
-                onChange={(e) => {
-                  setDenNgay(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-600 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-1.5 text-sm text-slate-500">
-              <span className="hidden shrink-0 sm:inline">Ngày tạo:</span>
-              <input
-                type="date"
-                value={tuNgayTao}
-                onChange={(e) => {
-                  setTuNgayTao(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-600 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-              <span className="text-slate-400">→</span>
-              <input
-                type="date"
-                value={denNgayTao}
-                onChange={(e) => {
-                  setDenNgayTao(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-600 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="flex items-center gap-1 rounded-lg px-2 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100"
-              >
-                <X size={14} />
-                Xóa lọc
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {selectedIds.length > 0 && (
-              <button
-                type="button"
-                onClick={handleDeleteSelected}
-                className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-100"
-              >
-                <Trash2 size={14} />
-                Xóa ({selectedIds.length})
-              </button>
-            )}
-            <ExportExcelButton
-              fetchExportRows={fetchExportRows}
-              fileName="danh-sach-book-xe"
-              disabled={loading && total === 0}
-            />
-            <button
-              type="button"
-              onClick={fetchData}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3.5 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-100"
-            >
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-              Tải lại
-            </button>
-            <button
-              type="button"
-              onClick={() => setBookChuyenOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
-            >
-              <Truck size={14} />
-              Thêm Chuyến
-            </button>
-          </div>
-        </div>
+      {/* Toolbar — chỉ còn nút thao tác, không còn ô lọc */}
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={handleClearFilters}
+            className="mr-auto flex items-center gap-1 rounded-lg px-2 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100"
+          >
+            <X size={14} />
+            Xóa lọc
+          </button>
+        )}
+        {selectedIds.length > 0 && (
+          <button
+            type="button"
+            onClick={handleDeleteSelected}
+            className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-100"
+          >
+            <Trash2 size={14} />
+            Xóa ({selectedIds.length})
+          </button>
+        )}
+        <ExportExcelButton
+          fetchExportRows={fetchExportRows}
+          fileName="danh-sach-book-xe"
+          disabled={loading && total === 0}
+        />
+        <button
+          type="button"
+          onClick={fetchData}
+          className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3.5 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-100"
+        >
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          Tải lại
+        </button>
+        <button
+          type="button"
+          onClick={() => setBookChuyenOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+        >
+          <Truck size={14} />
+          Thêm Chuyến
+        </button>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
@@ -561,7 +710,7 @@ const BookXeTable = () => {
                 <th className="w-[7%] px-2.5 py-2.5 text-left align-middle text-xs font-semibold text-slate-600">
                   Mã CH
                 </th>
-                <th className="w-[19%] px-2.5 py-2.5 text-left align-middle text-xs font-semibold text-slate-600">
+                <th className="w-[16%] px-2.5 py-2.5 text-left align-middle text-xs font-semibold text-slate-600">
                   Tên CH
                 </th>
                 <th className="w-[6%] px-2.5 py-2.5 text-left align-middle text-xs font-semibold text-slate-600">
@@ -576,10 +725,7 @@ const BookXeTable = () => {
                 <th className="w-[4%] px-2.5 py-2.5 text-right align-middle text-xs font-semibold text-slate-600">
                   Kiện
                 </th>
-                <th className="w-[4%] px-2.5 py-2.5 text-right align-middle text-xs font-semibold text-slate-600">
-                  Rớt
-                </th>
-                <th className="w-[6%] px-2.5 py-2.5 text-left align-middle text-xs font-semibold text-slate-600">
+                <th className="w-[7%] px-2.5 py-2.5 text-left align-middle text-xs font-semibold text-slate-600">
                   Ghi Chú
                 </th>
                 <th className="w-[6%] px-2.5 py-2.5 text-left align-middle text-xs font-semibold text-slate-600">
@@ -594,6 +740,163 @@ const BookXeTable = () => {
                 <th className="w-[5%] px-2.5 py-2.5 text-right align-middle text-xs font-semibold text-slate-600">
                   Thao Tác
                 </th>
+              </tr>
+
+              {/* Hàng lọc — mỗi cột 1 ô "Lọc..." riêng, khớp style ảnh mẫu */}
+              <tr className="divide-x divide-slate-200 border-t border-slate-200 bg-slate-50">
+                <th className="px-2 py-1.5" />
+                <th className="px-2 py-1.5">
+                  <DateRangeFilter
+                    label="Lọc ngày..."
+                    startValue={tuNgay}
+                    endValue={denNgay}
+                    onChange={(s, e) => {
+                      setTuNgay(s);
+                      setDenNgay(e);
+                      setPage(1);
+                    }}
+                    onClear={() => {
+                      setTuNgay("");
+                      setDenNgay("");
+                      setPage(1);
+                    }}
+                  />
+                </th>
+                <th className="px-2 py-1.5" />
+                <th className="px-2 py-1.5" />
+                <th className="px-2 py-1.5">
+                  <input
+                    type="text"
+                    value={textFilterDrafts.quan}
+                    onChange={(e) =>
+                      handleTextFilterChange("quan", e.target.value)
+                    }
+                    placeholder="Lọc..."
+                    className={filterInputCls}
+                  />
+                </th>
+                <th className="px-2 py-1.5">
+                  <input
+                    type="text"
+                    value={textFilterDrafts.maCh}
+                    onChange={(e) =>
+                      handleTextFilterChange("maCh", e.target.value)
+                    }
+                    placeholder="Lọc..."
+                    className={filterInputCls}
+                  />
+                </th>
+                <th className="px-2 py-1.5">
+                  <input
+                    type="text"
+                    value={textFilterDrafts.tenCh}
+                    onChange={(e) =>
+                      handleTextFilterChange("tenCh", e.target.value)
+                    }
+                    placeholder="Lọc..."
+                    className={filterInputCls}
+                  />
+                </th>
+                <th className="px-2 py-1.5">
+                  <input
+                    type="text"
+                    value={textFilterDrafts.maNcv}
+                    onChange={(e) =>
+                      handleTextFilterChange("maNcv", e.target.value)
+                    }
+                    placeholder="Lọc..."
+                    className={filterInputCls}
+                  />
+                </th>
+                <th className="px-2 py-1.5">
+                  <input
+                    type="text"
+                    value={textFilterDrafts.tenNvc}
+                    onChange={(e) =>
+                      handleTextFilterChange("tenNvc", e.target.value)
+                    }
+                    placeholder="Lọc..."
+                    className={filterInputCls}
+                  />
+                </th>
+                <th className="px-2 py-1.5">
+                  <input
+                    type="text"
+                    value={textFilterDrafts.lichDiHang}
+                    onChange={(e) =>
+                      handleTextFilterChange("lichDiHang", e.target.value)
+                    }
+                    placeholder="Lọc..."
+                    className={filterInputCls}
+                  />
+                </th>
+                <th className="px-2 py-1.5" />
+                <th className="px-2 py-1.5">
+                  <input
+                    type="text"
+                    value={textFilterDrafts.ghiChu}
+                    onChange={(e) =>
+                      handleTextFilterChange("ghiChu", e.target.value)
+                    }
+                    placeholder="Lọc..."
+                    className={filterInputCls}
+                  />
+                </th>
+                <th className="px-2 py-1.5">
+                  <select
+                    value={filters.trangThai}
+                    onChange={(e) => {
+                      setFilters((prev) => ({
+                        ...prev,
+                        trangThai: e.target.value,
+                      }));
+                      setPage(1);
+                    }}
+                    className={filterInputCls}
+                  >
+                    <option value="">Tất cả</option>
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-2 py-1.5">
+                  <DateRangeFilter
+                    label="Lọc ngày..."
+                    startValue={tuNgayTao}
+                    endValue={denNgayTao}
+                    onChange={(s, e) => {
+                      setTuNgayTao(s);
+                      setDenNgayTao(e);
+                      setPage(1);
+                    }}
+                    onClear={() => {
+                      setTuNgayTao("");
+                      setDenNgayTao("");
+                      setPage(1);
+                    }}
+                  />
+                </th>
+                <th className="px-2 py-1.5">
+                  <DateRangeFilter
+                    label="Lọc ngày..."
+                    startValue={tuNgayHT}
+                    endValue={denNgayHT}
+                    onChange={(s, e) => {
+                      setTuNgayHT(s);
+                      setDenNgayHT(e);
+                      setPage(1);
+                    }}
+                    onClear={() => {
+                      setTuNgayHT("");
+                      setDenNgayHT("");
+                      setPage(1);
+                    }}
+                  />
+                </th>
+                <th className="px-2 py-1.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -620,6 +923,10 @@ const BookXeTable = () => {
                   const isGiaoKhach = !!item.co_giao_khach;
                   const slot = getSlotInfo(item);
                   const slotColor = slot?.color;
+                  const { maChArr, tenChArr } = dedupeCHPair(
+                    item.ma_ch,
+                    item.ten_ch,
+                  );
 
                   return (
                     <tr
@@ -673,10 +980,10 @@ const BookXeTable = () => {
                         {item.quan || "—"}
                       </td>
                       <td className="px-2.5 py-2">
-                        <TagList value={item.ma_ch} tone="blue" />
+                        <TagList items={maChArr} tone="blue" />
                       </td>
                       <td className="px-2.5 py-2">
-                        <TenCHList maCh={item.ma_ch} tenCh={item.ten_ch} />
+                        <TenCHList maChArr={maChArr} tenChArr={tenChArr} />
                       </td>
                       <td className="px-2.5 py-2 text-[13px] text-slate-600">
                         {item.ma_ncv || "—"}
@@ -690,14 +997,15 @@ const BookXeTable = () => {
                       <td className="px-2.5 py-2 text-right text-[13px] font-medium text-slate-700">
                         {item.kien ?? 0}
                       </td>
-                      <td className="px-2.5 py-2 text-right text-[13px] text-slate-600">
-                        {item.kien_rot ?? 0}
-                      </td>
                       <td className="px-2.5 py-2 text-[13px] text-slate-600">
                         {item.ghi_chu || "—"}
                       </td>
                       <td className="px-2.5 py-2">
-                        <StatusBadge value={item.trangThai} />
+                        <StatusBadge
+                          value={item.trangThai}
+                          onClick={() => handleToggleTrangThai(item)}
+                          updating={updatingIds.has(item._id)}
+                        />
                       </td>
                       <td className="px-2.5 py-2 text-[13px] text-slate-500">
                         {formatNgayOnly(item.thoi_gian_tao)}
@@ -734,7 +1042,6 @@ const BookXeTable = () => {
         </div>
       </div>
 
-      {/* Pagination */}
       <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
         <span>
           Tổng <span className="font-medium text-slate-700">{total}</span>{" "}

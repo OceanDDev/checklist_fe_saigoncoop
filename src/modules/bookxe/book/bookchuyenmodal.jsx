@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -19,7 +19,21 @@ import { bookXeService } from "@/services/bookxe.service";
 
 const NGUONG = { CS: 120, CF: 180 };
 
-const MATCH_PRIORITY = ["quan", "lenh_dieu_dong", "ncv", "lich_di_hang"];
+const MATCH_PRIORITY = [
+  "tung_ghep_chung",
+  "quan",
+  "lenh_dieu_dong",
+  "ncv",
+  "lich_di_hang",
+];
+
+const MATCH_LABEL = {
+  tung_ghep_chung: "Từng ghép chung chuyến",
+  quan: "Chung quận",
+  lenh_dieu_dong: "Từng đi chung LĐD",
+  ncv: "Chung NVC",
+  lich_di_hang: "Chung lịch đi hàng",
+};
 
 const SLOT_PRESETS = [
   { xuat: "07:30", toi: "09:00", label: "9:00 - 16:00", color: "#3B82F6" },
@@ -32,11 +46,28 @@ const SLOT_PRESETS = [
   { xuat: "17:30", toi: "20:30", label: "20:30 - 22:00", color: "#A855F7" },
 ];
 
+const QUICK_FILTERS = [
+  { key: "all", label: "Tất cả" },
+  { key: "giaokhach", label: "Giao khách" },
+  { key: "kienrot", label: "Kiện rớt" },
+  { key: "ghepchung", label: "Từng ghép chung" },
+];
+
+// ─── Helpers thuần (không phụ thuộc state, an toàn để định nghĩa ngoài component) ──
+
 const getMatchReasons = (item, selectedItems) => {
   if (selectedItems.length === 0) return [];
   const reasons = new Set();
-  selectedItems.forEach((sel) => {
-    if (sel.key === item.key) return;
+  for (const sel of selectedItems) {
+    if (sel.key === item.key) continue;
+
+    if (
+      item.tungGhepChungVoi?.length &&
+      sel.ma_ch &&
+      item.tungGhepChungVoi.includes(sel.ma_ch)
+    ) {
+      reasons.add("tung_ghep_chung");
+    }
     if (item.quan && sel.quan && item.quan === sel.quan) {
       reasons.add("quan");
     }
@@ -56,7 +87,9 @@ const getMatchReasons = (item, selectedItems) => {
     ) {
       reasons.add("lich_di_hang");
     }
-  });
+    // Đủ reasons rồi thì không cần duyệt tiếp các sel khác
+    if (reasons.size === MATCH_PRIORITY.length) break;
+  }
   return MATCH_PRIORITY.filter((r) => reasons.has(r));
 };
 
@@ -66,12 +99,7 @@ const getMatchScore = (reasons) =>
     return score + 10 ** weight;
   }, 0);
 
-const MATCH_LABEL = {
-  quan: "Chung quận",
-  lenh_dieu_dong: "Từng đi chung LĐD",
-  ncv: "Chung NVC",
-  lich_di_hang: "Chung lịch đi hàng",
-};
+
 
 const formatNgayVN = (ngayStr) => {
   if (!ngayStr) return "";
@@ -93,9 +121,17 @@ const tomorrowStr = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-const ItemRow = ({ item, checked, onToggle, matchReasons }) => {
+// ─── Sub components (memo hoá để tránh re-render toàn danh sách) ───────────
+
+const ItemRow = memo(function ItemRow({
+  item,
+  checked,
+  onToggle,
+  matchReasons,
+}) {
   const isSuggested = !checked && matchReasons.length > 0;
   const isGiaoKhach = !!item.coGiaoKhach;
+  const isKienRot = item.nguon === "kien_rot";
 
   return (
     <label
@@ -105,9 +141,11 @@ const ItemRow = ({ item, checked, onToggle, matchReasons }) => {
           ? "border-blue-400 bg-blue-50 ring-1 ring-blue-200"
           : isGiaoKhach
             ? "border-rose-300 bg-rose-50/70 hover:border-rose-400 hover:shadow-sm"
-            : isSuggested
-              ? "border-emerald-300 bg-emerald-50/60 hover:border-emerald-400"
-              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+            : isKienRot
+              ? "border-amber-300 bg-amber-50/70 hover:border-amber-400 hover:shadow-sm"
+              : isSuggested
+                ? "border-emerald-300 bg-emerald-50/60 hover:border-emerald-400"
+                : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
       ].join(" ")}
     >
       <input
@@ -126,8 +164,18 @@ const ItemRow = ({ item, checked, onToggle, matchReasons }) => {
             </span>
           </div>
         )}
+        {isKienRot && (
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+            <RotateCcw size={13} />
+            Kiện rớt
+            {item.ngayRotKien
+              ? ` — ngày ${formatNgayVN(item.ngayRotKien)}`
+              : ""}
+            <span className="font-normal text-amber-600">(cần rebook lại)</span>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
-          {isSuggested && !isGiaoKhach && (
+          {isSuggested && !isGiaoKhach && !isKienRot && (
             <Sparkles size={14} className="shrink-0 text-emerald-500" />
           )}
           <span className="text-[15px] font-semibold text-slate-800">
@@ -167,6 +215,11 @@ const ItemRow = ({ item, checked, onToggle, matchReasons }) => {
           {item.lich_di_hang && <span>Lịch: {item.lich_di_hang}</span>}
           {item.quan && <span>{item.quan}</span>}
         </div>
+        {isKienRot && item.ghiChuRotKien && (
+          <div className="mt-1.5 text-[13px] italic text-amber-600">
+            Ghi chú: {item.ghiChuRotKien}
+          </div>
+        )}
         {matchReasons.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {matchReasons.map((r) => (
@@ -182,90 +235,109 @@ const ItemRow = ({ item, checked, onToggle, matchReasons }) => {
       </div>
     </label>
   );
-};
+});
 
-const SelectionSummary = ({
+const SelectionSummary = memo(function SelectionSummary({
   selectedItems,
   nguong,
   tongKien,
   vuotNguong,
   coLoaiKhacNhau,
   coGiaoKhachChon,
-}) => (
-  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="mb-2 flex items-center justify-between">
-      <span className="text-sm text-slate-500">
-        Đã chọn{" "}
+  onRemove,
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm text-slate-500">
+          Đã chọn{" "}
+          <span className="text-base font-semibold text-slate-800">
+            {selectedItems.length}
+          </span>{" "}
+          cửa hàng
+        </span>
         <span className="text-base font-semibold text-slate-800">
-          {selectedItems.length}
-        </span>{" "}
-        cửa hàng
-      </span>
-      <span className="text-base font-semibold text-slate-800">
-        {tongKien} kiện{nguong > 0 ? ` / ${nguong}` : ""}
-      </span>
-    </div>
-
-    {nguong > 0 && (
-      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-        <div
-          className={[
-            "h-full rounded-full transition-all",
-            vuotNguong ? "bg-red-500" : "bg-blue-500",
-          ].join(" ")}
-          style={{ width: `${Math.min((tongKien / nguong) * 100, 100)}%` }}
-        />
+          {tongKien} kiện{nguong > 0 ? ` / ${nguong}` : ""}
+        </span>
       </div>
-    )}
 
-    <div className="mt-2.5 space-y-1.5">
-      {coGiaoKhachChon && (
-        <p className="flex items-center gap-1.5 text-xs font-medium text-rose-600">
-          <UserRound size={13} />
-          Có chuyến giao khách trong lựa chọn — ưu tiên book đúng ngày.
-        </p>
-      )}
-      {vuotNguong && (
-        <p className="flex items-center gap-1.5 text-xs text-red-600">
-          <AlertTriangle size={13} />
-          Đã vượt ngưỡng gợi ý ({nguong} kiện) — vẫn có thể book.
-        </p>
-      )}
-      {coLoaiKhacNhau && (
-        <p className="flex items-center gap-1.5 text-xs text-amber-600">
-          <AlertTriangle size={13} />
-          Đang ghép lẫn cả CS và CF trong cùng chuyến.
-        </p>
-      )}
-    </div>
-
-    {selectedItems.length > 0 && (
-      <div className="mt-3 max-h-64 space-y-1.5 overflow-y-auto border-t border-slate-100 pt-3">
-        {selectedItems.map((s) => (
+      {nguong > 0 && (
+        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
           <div
-            key={s.key}
             className={[
-              "flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs",
-              s.coGiaoKhach
-                ? "bg-rose-50 text-rose-700"
-                : "bg-slate-50 text-slate-600",
+              "h-full rounded-full transition-all",
+              vuotNguong ? "bg-red-500" : "bg-blue-500",
             ].join(" ")}
-          >
-            <span className="truncate pr-2">
-              {s.coGiaoKhach && <UserRound size={11} className="mr-1 inline" />}
-              <span className="font-medium text-slate-800">
-                {s.ma_ch}
-              </span> - {s.ten_ch}
-            </span>
-            <span className="shrink-0 text-slate-400">{s.kien} kiện</span>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-);
+            style={{ width: `${Math.min((tongKien / nguong) * 100, 100)}%` }}
+          />
+        </div>
+      )}
 
-const BookForm = ({ selectedItems, onCancel, onConfirm, submitting }) => {
+      <div className="mt-2.5 space-y-1.5">
+        {coGiaoKhachChon && (
+          <p className="flex items-center gap-1.5 text-xs font-medium text-rose-600">
+            <UserRound size={13} />
+            Có chuyến giao khách trong lựa chọn — ưu tiên book đúng ngày.
+          </p>
+        )}
+        {vuotNguong && (
+          <p className="flex items-center gap-1.5 text-xs text-red-600">
+            <AlertTriangle size={13} />
+            Đã vượt ngưỡng gợi ý ({nguong} kiện) — vẫn có thể book.
+          </p>
+        )}
+        {coLoaiKhacNhau && (
+          <p className="flex items-center gap-1.5 text-xs text-amber-600">
+            <AlertTriangle size={13} />
+            Đang ghép lẫn cả CS và CF trong cùng chuyến.
+          </p>
+        )}
+      </div>
+
+      {selectedItems.length > 0 && (
+        <div className="mt-3 max-h-64 space-y-1.5 overflow-y-auto border-t border-slate-100 pt-3">
+          {selectedItems.map((s) => (
+            <div
+              key={s.key}
+              className={[
+                "flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs",
+                s.coGiaoKhach
+                  ? "bg-rose-50 text-rose-700"
+                  : "bg-slate-50 text-slate-600",
+              ].join(" ")}
+            >
+              <span className="truncate pr-2">
+                {s.coGiaoKhach && (
+                  <UserRound size={11} className="mr-1 inline" />
+                )}
+                <span className="font-medium text-slate-800">{s.ma_ch}</span> -{" "}
+                {s.ten_ch}
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="text-slate-400">{s.kien} kiện</span>
+                <button
+                  type="button"
+                  onClick={() => onRemove(s)}
+                  title="Bỏ chọn"
+                  className="rounded-full p-0.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
+const BookForm = memo(function BookForm({
+  selectedItems,
+  onCancel,
+  onConfirm,
+  submitting,
+}) {
   const ncvGoiY = selectedItems.find((s) => s.ma_ncv)?.ma_ncv || "";
   const tenNvcGoiY = selectedItems.find((s) => s.ten_nvc)?.ten_nvc || "";
   const quanGoiY = selectedItems.every((s) => s.quan === selectedItems[0]?.quan)
@@ -536,27 +608,42 @@ const BookForm = ({ selectedItems, onCancel, onConfirm, submitting }) => {
       </div>
     </div>
   );
-};
+});
+
+// ─── Component chính ────────────────────────────────────────────────────────
 
 const BookChuyenModal = ({ open, onClose, onBooked }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [items, setItems] = useState([]);
   const [selectedKeys, setSelectedKeys] = useState([]);
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState(""); // giá trị đã debounce, dùng để lọc thật
+  const [quickFilter, setQuickFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Debounce ô search 200ms — tránh lọc lại toàn danh sách mỗi ký tự gõ.
+  useEffect(() => {
+    const t = setTimeout(
+      () => setSearch(searchInput.trim().toLowerCase()),
+      200,
+    );
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   useEffect(() => {
     if (!open) return;
     setSelectedKeys([]);
     setShowForm(false);
+    setSearchInput("");
     setSearch("");
-    fetchItems(); // fetch ngay khi mở, không phụ thuộc ngày
+    setQuickFilter("all");
+    fetchItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -573,21 +660,30 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const filteredItems = useMemo(() => {
-    if (!search.trim()) return items;
-    const q = search.trim().toLowerCase();
-    return items.filter(
-      (it) =>
-        it.ma_ch?.toLowerCase().includes(q) ||
-        it.ten_ch?.toLowerCase().includes(q),
-    );
-  }, [items, search]);
+    let list = items;
+    if (search) {
+      list = list.filter(
+        (it) =>
+          it.ma_ch?.toLowerCase().includes(search) ||
+          it.ten_ch?.toLowerCase().includes(search),
+      );
+    }
+    if (quickFilter === "giaokhach") list = list.filter((it) => it.coGiaoKhach);
+    else if (quickFilter === "kienrot")
+      list = list.filter((it) => it.nguon === "kien_rot");
+    else if (quickFilter === "ghepchung")
+      list = list.filter((it) => it.tungGhepChungVoi?.length);
+    return list;
+  }, [items, search, quickFilter]);
+
+  const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
 
   const selectedItems = useMemo(
-    () => items.filter((it) => selectedKeys.includes(it.key)),
-    [items, selectedKeys],
+    () => items.filter((it) => selectedKeySet.has(it.key)),
+    [items, selectedKeySet],
   );
 
   const soLuongGiaoKhach = useMemo(
@@ -595,14 +691,21 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
     [filteredItems],
   );
 
+  const soLuongKienRot = useMemo(
+    () => filteredItems.filter((it) => it.nguon === "kien_rot").length,
+    [filteredItems],
+  );
+
   const sortedItems = useMemo(() => {
-    const selectedKeySet = new Set(selectedKeys);
     return filteredItems
       .map((item) => {
-        const matchReasons = getMatchReasons(item, selectedItems);
+        const checked = selectedKeySet.has(item.key);
+        const matchReasons = checked
+          ? []
+          : getMatchReasons(item, selectedItems);
         return {
           item,
-          checked: selectedKeySet.has(item.key),
+          checked,
           matchReasons,
           matchScore: getMatchScore(matchReasons),
         };
@@ -614,67 +717,86 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
           const gkB = b.item.coGiaoKhach ? 1 : 0;
           if (gkA !== gkB) return gkB - gkA;
 
+          const rotA = a.item.nguon === "kien_rot" ? 1 : 0;
+          const rotB = b.item.nguon === "kien_rot" ? 1 : 0;
+          if (rotA !== rotB) return rotB - rotA;
+
           const diff = b.matchScore - a.matchScore;
           if (diff !== 0) return diff;
         }
         return 0;
       });
-  }, [filteredItems, selectedKeys, selectedItems]);
+  }, [filteredItems, selectedKeySet, selectedItems]);
 
-  const toggleItem = (item) => {
+  const toggleItem = useCallback((item) => {
     setSelectedKeys((prev) =>
       prev.includes(item.key)
         ? prev.filter((k) => k !== item.key)
         : [...prev, item.key],
     );
-  };
+  }, []);
 
-  const tongKien = selectedItems.reduce((sum, s) => sum + (s.kien || 0), 0);
+
+  const tongKien = useMemo(
+    () => selectedItems.reduce((sum, s) => sum + (s.kien || 0), 0),
+    [selectedItems],
+  );
   const loaiChon = selectedItems[0]?.loaiCuaHang;
-  const coLoaiKhacNhau = selectedItems.some((s) => s.loaiCuaHang !== loaiChon);
+  const coLoaiKhacNhau = useMemo(
+    () => selectedItems.some((s) => s.loaiCuaHang !== loaiChon),
+    [selectedItems, loaiChon],
+  );
   const nguong = NGUONG[loaiChon] || 0;
   const vuotNguong = nguong > 0 && tongKien > nguong;
-  const coGiaoKhachChon = selectedItems.some((s) => s.coGiaoKhach);
+  const coGiaoKhachChon = useMemo(
+    () => selectedItems.some((s) => s.coGiaoKhach),
+    [selectedItems],
+  );
 
-  const handleConfirmBook = async (form) => {
-    setSubmitting(true);
-    try {
-      const payload = {
-        thoi_gian_xuat: new Date(form.thoi_gian_xuat).toISOString(),
-        thoi_gian_dk_toi_ch: new Date(form.thoi_gian_dk_toi_ch).toISOString(),
-        // Ngày đi hàng lấy từ ngày book, giữ mốc 00:00 giờ VN để tránh lệch
-        // ngày do convert UTC.
-        ngay_di_hang: new Date(`${form.ngayBook}T00:00:00+07:00`).toISOString(),
-        quan: form.quan || undefined,
-        ma_ncv: form.ma_ncv || undefined,
-        ten_nvc: form.ten_nvc || undefined,
-        ghi_chu: form.ghi_chu || undefined, // thêm dòng này
+  const handleConfirmBook = useCallback(
+    async (form) => {
+      setSubmitting(true);
+      try {
+        const payload = {
+          thoi_gian_xuat: new Date(form.thoi_gian_xuat).toISOString(),
+          thoi_gian_dk_toi_ch: new Date(form.thoi_gian_dk_toi_ch).toISOString(),
+          ngay_di_hang: new Date(
+            `${form.ngayBook}T00:00:00+07:00`,
+          ).toISOString(),
+          quan: form.quan || undefined,
+          ma_ncv: form.ma_ncv || undefined,
+          ten_nvc: form.ten_nvc || undefined,
+          ghi_chu: form.ghi_chu || undefined,
 
-        ma_ch: selectedItems.map((s) => s.ma_ch).join(", "),
-        ten_ch: selectedItems.map((s) => s.ten_ch).join(", "),
-        so_luong_ch: String(selectedItems.length),
-        kien: tongKien,
-        lich_di_hang: selectedItems[0]?.lich_di_hang || undefined,
-        trangThai: "Chờ xe",
-        co_giao_khach: coGiaoKhachChon || undefined,
-        ngay_giao_khach: coGiaoKhachChon
-          ? selectedItems.find((s) => s.coGiaoKhach)?.ngayGiaoKhach
-          : undefined, // Gửi kèm _id các phiếu NhanSuSoan (chỉ có ở item "kien_moi") để BE
-        // đánh dấu "Đã Book" — item "kien_rot" không có nhanSuSoanIds nên
-        // flatMap tự bỏ qua, không lỗi.
-        nhan_su_soan_ids: selectedItems.flatMap((s) => s.nhanSuSoanIds || []),
-      };
+          ma_ch: selectedItems.map((s) => s.ma_ch).join(", "),
+          ten_ch: selectedItems.map((s) => s.ten_ch).join(", "),
+          so_luong_ch: String(selectedItems.length),
+          kien: tongKien,
+          lich_di_hang: selectedItems[0]?.lich_di_hang || undefined,
+          trangThai: "Chờ xe",
+          co_giao_khach: coGiaoKhachChon || undefined,
+          ngay_giao_khach: coGiaoKhachChon
+            ? selectedItems.find((s) => s.coGiaoKhach)?.ngayGiaoKhach
+            : undefined,
+          nhan_su_soan_ids: selectedItems.flatMap((s) => s.nhanSuSoanIds || []),
+          rot_kien_ids: selectedItems.flatMap((s) => s.rotKienIds || []),
+        };
 
-      await bookXeService.createBookXe(payload);
-      onBooked?.();
-      onClose?.();
-    } catch (err) {
-      console.error("Lỗi khi tạo chuyến book xe:", err);
-      setError("Tạo chuyến thất bại, thử lại.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+        await bookXeService.createBookXe(payload);
+        onBooked?.();
+        onClose?.();
+      } catch (err) {
+        console.error("Lỗi khi tạo chuyến book xe:", err);
+        setError("Tạo chuyến thất bại, thử lại.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [selectedItems, tongKien, coGiaoKhachChon, onBooked, onClose],
+  );
+
+  const handleShowForm = useCallback(() => setShowForm(true), []);
+  const handleCancelForm = useCallback(() => setShowForm(false), []);
 
   if (!open) return null;
 
@@ -708,7 +830,7 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
           {showForm ? (
             <BookForm
               selectedItems={selectedItems}
-              onCancel={() => setShowForm(false)}
+              onCancel={handleCancelForm}
               onConfirm={handleConfirmBook}
               submitting={submitting}
             />
@@ -733,13 +855,32 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
                     />
                     <input
                       type="text"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
                       placeholder="Tìm mã CH, tên CH..."
                       className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
                 </div>
+
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {QUICK_FILTERS.map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setQuickFilter(f.key)}
+                      className={[
+                        "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                        quickFilter === f.key
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                      ].join(" ")}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
                 {soLuongGiaoKhach > 0 && (
                   <div className="mb-3 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700">
                     <UserRound size={14} className="shrink-0" />
@@ -747,10 +888,16 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
                     tiên book trước.
                   </div>
                 )}
+                {soLuongKienRot > 0 && (
+                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-medium text-amber-700">
+                    <RotateCcw size={14} className="shrink-0" />
+                    Có {soLuongKienRot} cửa hàng có kiện rớt cần rebook lại.
+                  </div>
+                )}
 
                 {sortedItems.length === 0 ? (
                   <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white text-center text-sm text-slate-400">
-                    Không có cửa hàng nào sẵn sàng để book trong ngày này.
+                    Không có cửa hàng nào khớp bộ lọc hiện tại.
                   </div>
                 ) : (
                   <div className="max-h-[56vh] space-y-2.5 overflow-y-auto pr-1">
@@ -776,17 +923,19 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
                     vuotNguong={vuotNguong}
                     coLoaiKhacNhau={coLoaiKhacNhau}
                     coGiaoKhachChon={coGiaoKhachChon}
+                    onRemove={toggleItem}
                   />
                 ) : (
                   <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-4 text-center text-sm text-slate-400">
-                    Chọn cửa hàng bên trái để xem tổng kết chuyến
+                    Chọn cửa hàng bên trái, hoặc bấm &quot;Tự động ghép
+                    chuyến&quot; để hệ thống chọn sẵn.
                   </div>
                 )}
 
                 <button
                   type="button"
                   disabled={selectedItems.length === 0}
-                  onClick={() => setShowForm(true)}
+                  onClick={handleShowForm}
                   className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <CalendarClock size={15} />

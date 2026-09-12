@@ -62,24 +62,20 @@ const ToolRotKien = () => {
 
   // Fetch (chặn double-fetch ở Strict Mode)
   const loadedRef = useRef(false);
-  useEffect(() => {
-    if (loadedRef.current) return;
-    loadedRef.current = true;
 
-    (async () => {
-      try {
-        const [rotkien, ch] = await Promise.all([
-          rotKienService.getAllRotKien(),
-          cuaHangService.getAllCuaHang(),
-        ]);
-        setData(rotkien || []);
-        setCuahangs(ch || []);
-      } catch (err) {
-        console.error("Fetch error:", err);
-      }
-    })();
-  }, []);
+useEffect(() => {
+  if (loadedRef.current) return;
+  loadedRef.current = true;
 
+  (async () => {
+    try {
+      const rotkien = await rotKienService.getAllRotKien();
+      setData(rotkien || []);
+    } catch (err) {
+      console.error("Fetch error:", err);
+    }
+  })();
+}, []);
   // Lọc dữ liệu
   const filteredDataChuaHT = useMemo(() => {
     const q = (debouncedSearch || "").toLowerCase();
@@ -90,7 +86,7 @@ const ToolRotKien = () => {
           (item.maCH || "").toLowerCase().includes(q) &&
           (!filterNgayRotKien ||
             item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
-          (!filterBoPhan || item.boPhan === filterBoPhan) // <— NEW
+          (!filterBoPhan || item.boPhan === filterBoPhan), // <— NEW
       );
   }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan]);
 
@@ -103,7 +99,7 @@ const ToolRotKien = () => {
           (item.maCH || "").toLowerCase().includes(q) &&
           (!filterNgayRotKien ||
             item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
-          (!filterBoPhan || item.boPhan === filterBoPhan) // <— NEW
+          (!filterBoPhan || item.boPhan === filterBoPhan), // <— NEW
       );
   }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan]);
 
@@ -116,11 +112,11 @@ const ToolRotKien = () => {
   // Tính toán phân trang
   const pageCountChua = Math.max(
     0,
-    Math.ceil(filteredDataChuaHT.length / pageSize)
+    Math.ceil(filteredDataChuaHT.length / pageSize),
   );
   const pageCountDa = Math.max(
     0,
-    Math.ceil(filteredDataDaHT.length / pageSize)
+    Math.ceil(filteredDataDaHT.length / pageSize),
   );
 
   const currentSliceChua = useMemo(() => {
@@ -150,7 +146,7 @@ const ToolRotKien = () => {
       try {
         // Kiểm tra trùng mã CH trước khi gọi service (client-side validation)
         const existingCH = cuahangs.find(
-          (ch) => ch.maCH?.toLowerCase() === payload.maCH?.toLowerCase()
+          (ch) => ch.maCH?.toLowerCase() === payload.maCH?.toLowerCase(),
         );
         if (existingCH) {
           toast.error(`❌ Mã cửa hàng "${payload.maCH}" đã tồn tại!`);
@@ -187,7 +183,7 @@ const ToolRotKien = () => {
         throw err; // Ném lại error để component con xử lý
       }
     },
-    [cuahangs]
+    [cuahangs],
   );
 
   const handleUncomplete = useCallback(async (id) => {
@@ -224,7 +220,7 @@ const ToolRotKien = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-      d.getDate()
+      d.getDate(),
     )}_${pad(d.getHours())}${pad(d.getMinutes())}`;
   };
 

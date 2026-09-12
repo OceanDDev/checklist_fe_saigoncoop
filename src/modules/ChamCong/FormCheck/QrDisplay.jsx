@@ -221,7 +221,14 @@ function useTopNangSuat() {
       try {
         const res = await nhanSuSoanService.getTopNangSuatCongKhai(todayStr);
         if (cancelled) return;
-        const data = res.data || [];
+        const rawData = res.data || [];
+
+        // 🚫 Loại các nhân sự có mã bắt đầu bằng DT hoặc SV — không tính
+        // vào bảng xếp hạng năng suất (cả DÒNG lẫn KIỆN).
+        const data = rawData.filter((row) => {
+          const code = (row.code || "").toUpperCase();
+          return !code.startsWith("DT") && !code.startsWith("SV");
+        });
 
         const map = {};
         data.forEach((row) => {

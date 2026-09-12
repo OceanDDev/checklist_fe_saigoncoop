@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Dialog,
   DialogTrigger,
@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { dataCHService } from "@/services/phieusoan/dataCH.service";
 
 // Helpers VN time (UTC+7)
 const toVNDate = (d = new Date()) => {
@@ -38,7 +39,7 @@ const mapNameToBoPhan = (name) => {
   return name; // mặc định giữ nguyên
 };
 
-const AddKienDialog = ({ cuahangs = [], onSubmit }) => {
+const AddKienDialog = ({ onSubmit }) => {
   const [open, setOpen] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -54,42 +55,56 @@ const AddKienDialog = ({ cuahangs = [], onSubmit }) => {
   const [showSuggest, setShowSuggest] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
 
-  const cuahangByCode = useMemo(() => {
-    const map = new Map();
-    cuahangs.forEach((ch) => map.set((ch.maCH || "").trim(), ch));
-    return map;
-  }, [cuahangs]);
+  // Danh sách gợi ý lấy trực tiếp từ server (search theo mã CH đang gõ)
+  const [suggestions, setSuggestions] = useState([]);
+  const [searching, setSearching] = useState(false);
 
-  const suggestions = useMemo(() => {
-    const key = formData.maCH.trim().toLowerCase();
-    if (key.length < 3) return [];
-    return cuahangs
-      .filter((ch) => (ch.maCH || "").toLowerCase().includes(key))
-      .slice(0, 12);
-  }, [formData.maCH, cuahangs]);
+  useEffect(() => {
+    const key = formData.maCH.trim();
+    if (key.length < 3) {
+      setSuggestions([]);
+      return;
+    }
 
-  const handleChange = useCallback(
-    (e) => {
-      const { name, value } = e.target;
-      setErrors((prev) => ({ ...prev, [name]: undefined }));
-
-      if (name === "maCH") {
-        const trimmed = value.trim();
-        setShowSuggest(trimmed.length >= 3);
-        if (trimmed.length >= 3 && !suggestions.length) setActiveIndex(-1);
-        const matched = cuahangByCode.get(trimmed);
-        setFormData((prev) => ({
-          ...prev,
-          maCH: value,
-          tenCH: matched ? matched.tenCH : "",
-        }));
-        return;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await dataCHService.getAllDataCH({
+          search: key,
+          limit: 20,
+        });
+        const list = res?.data || [];
+        setSuggestions(
+          list.map((item) => ({
+            ...item,
+            maCH: item.mach || "",
+            tenCH: item.tench || "",
+          })),
+        );
+      } catch (err) {
+        console.error("Lỗi search cửa hàng:", err);
+        setSuggestions([]);
+      } finally {
+        setSearching(false);
       }
+    }, 250); // debounce 250ms
 
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    },
-    [cuahangByCode, suggestions.length]
-  );
+    return () => clearTimeout(timer);
+  }, [formData.maCH]);
+
+  const handleChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setErrors((prev) => ({ ...prev, [name]: undefined }));
+
+    if (name === "maCH") {
+      setFormData((prev) => ({ ...prev, maCH: value, tenCH: "" }));
+      setShowSuggest(value.trim().length >= 3);
+      setActiveIndex(-1);
+      return;
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  }, []);
 
   const selectSuggest = useCallback((ch) => {
     setFormData((prev) => ({ ...prev, maCH: ch.maCH, tenCH: ch.tenCH }));
@@ -98,17 +113,38 @@ const AddKienDialog = ({ cuahangs = [], onSubmit }) => {
     setErrors((e) => ({ ...e, maCH: undefined }));
   }, []);
 
-  const validate = useCallback(() => {
+  const validate = useCallback(async () => {
     const errs = {};
-    const matched = cuahangByCode.get(formData.maCH.trim());
-    if (!matched) errs.maCH = "Mã cửa hàng không tồn tại";
+    const key = formData.maCH.trim();
+
+    if (!key) {
+      errs.maCH = "Nhập mã cửa hàng";
+    } else {
+      try {
+        const res = await dataCHService.getAllDataCH({
+          search: key,
+          limit: 20,
+        });
+        const list = res?.data || [];
+        const matched = list.find((ch) => ch.mach === key); // khớp tuyệt đối
+        if (!matched) {
+          errs.maCH = "Mã cửa hàng không tồn tại";
+        } else {
+          setFormData((prev) => ({ ...prev, tenCH: matched.tench || "" }));
+        }
+      } catch (err) {
+        console.error("Lỗi kiểm tra mã cửa hàng:", err);
+        errs.maCH = "Không kiểm tra được mã cửa hàng, thử lại";
+      }
+    }
+
     if (!formData.ngayRotKienDate) errs.ngayRotKienDate = "Chọn ngày";
     setErrors(errs);
     return Object.keys(errs).length === 0;
-  }, [cuahangByCode, formData.maCH, formData.ngayRotKienDate]);
+  }, [formData.maCH, formData.ngayRotKienDate]);
 
   const handleSave = async () => {
-    if (!validate()) return;
+    if (!(await validate())) return;
 
     const time = nowVNTimeHHmm();
     const ngayRotKien = `${formData.ngayRotKienDate}T${time}`;
@@ -196,7 +232,9 @@ const AddKienDialog = ({ cuahangs = [], onSubmit }) => {
                   if (!showSuggest || !suggestions.length) return;
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
-                    setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                    setActiveIndex((i) =>
+                      Math.min(i + 1, suggestions.length - 1),
+                    );
                   } else if (e.key === "ArrowUp") {
                     e.preventDefault();
                     setActiveIndex((i) => Math.max(i - 1, 0));
@@ -217,16 +255,22 @@ const AddKienDialog = ({ cuahangs = [], onSubmit }) => {
 
               {showSuggest && (
                 <div className="absolute left-0 right-0 mt-1 z-[60] rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
-                  {suggestions.length ? (
+                  {searching ? (
+                    <div className="px-3 py-2 text-sm text-slate-500">
+                      Đang tìm...
+                    </div>
+                  ) : suggestions.length ? (
                     suggestions.map((ch, idx) => (
                       <button
-                        key={ch.maCH}
+                        key={ch._id || ch.maCH}
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => selectSuggest(ch)}
                         className={[
                           "w-full flex items-center gap-2 px-3 py-2 text-left",
-                          idx === activeIndex ? "bg-sky-50" : "hover:bg-slate-50",
+                          idx === activeIndex
+                            ? "bg-sky-50"
+                            : "hover:bg-slate-50",
                         ].join(" ")}
                       >
                         <span className="inline-flex items-center font-mono text-xs rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-slate-700">
@@ -311,11 +355,15 @@ const AddKienDialog = ({ cuahangs = [], onSubmit }) => {
                 max={toVNDate()}
                 className={[
                   "h-11 text-[15px] text-slate-900",
-                  errors.ngayRotKienDate ? "border-rose-500 ring-2 ring-rose-500" : "",
+                  errors.ngayRotKienDate
+                    ? "border-rose-500 ring-2 ring-rose-500"
+                    : "",
                 ].join(" ")}
               />
               {errors.ngayRotKienDate && (
-                <p className="text-sm text-rose-600">{errors.ngayRotKienDate}</p>
+                <p className="text-sm text-rose-600">
+                  {errors.ngayRotKienDate}
+                </p>
               )}
             </div>
           </div>
@@ -343,7 +391,10 @@ const AddKienDialog = ({ cuahangs = [], onSubmit }) => {
           >
             Hủy
           </Button>
-          <Button onClick={handleSave} className="h-11 px-6 text-[15px] font-semibold">
+          <Button
+            onClick={handleSave}
+            className="h-11 px-6 text-[15px] font-semibold"
+          >
             Lưu
           </Button>
         </DialogFooter>
