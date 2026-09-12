@@ -82,6 +82,7 @@ const Header = () => {
       74: "BÁO TÀI BẢO VỆ",
       75: "CHẤM CÔNG",
       76: "QUẢN LÝ PHIẾU SOẠN",
+      77: "NHẬP XUẤT BAO BÌ",
     };
     return roles[role] || "CHECKLIST";
   };

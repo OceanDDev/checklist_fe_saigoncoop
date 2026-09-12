@@ -130,6 +130,9 @@ const URL = {
   baotai: {
     baotai: ENDPOINT_PREFIX + "/baotai",
   },
+   baobi: {
+    baobi: ENDPOINT_PREFIX + "/baobi",
+  },
 };
 
 export { URL, ApiServer, DEF_HEADERS };

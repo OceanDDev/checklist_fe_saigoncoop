@@ -51,6 +51,7 @@ import HomeBookXe from "./modules/bookxe";
 import SoKhopKhuyenMaiTable from "./modules/DoiChieuTonKho";
 import HomeNhapHangDash from "./modules/nhaphang";
 import BaoTaiDieuVan from "./modules/baotai/dieuvan";
+import HomeBaoBiDash from "./modules/baobi";
 
 function App() {
   return (
@@ -535,7 +536,18 @@ function App() {
             </PrivateRoute>
           }
         />
+   {/* BAOBI*/}
 
+        <Route
+          path="/baobi"
+          element={
+            <PrivateRoute allowRoles={[77]}>
+              <MainLayout>
+                <HomeBaoBiDash />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
         <Route path="/lam-bai" element={<TrangLamBai />} />
 
         <Route path="/thank-you" element={<ThankYouScreen />} />
