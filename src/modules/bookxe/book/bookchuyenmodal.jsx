@@ -14,6 +14,15 @@ import {
   Sparkles,
   UserRound,
   Clock,
+  Sunrise,
+  Sun,
+  Sunset,
+  Moon,
+  PartyPopper,
+  Shuffle,
+  CheckCircle2,
+  PencilLine,
+  CircleDashed,
 } from "lucide-react";
 import { bookXeService } from "@/services/bookxe.service";
 
@@ -25,6 +34,7 @@ const MATCH_PRIORITY = [
   "lenh_dieu_dong",
   "ncv",
   "lich_di_hang",
+  "chuyen", // 👈 thêm
 ];
 
 const MATCH_LABEL = {
@@ -33,6 +43,7 @@ const MATCH_LABEL = {
   lenh_dieu_dong: "Từng đi chung LĐD",
   ncv: "Chung NVC",
   lich_di_hang: "Chung lịch đi hàng",
+  chuyen: "Chung chuyến", // 👈 thêm
 };
 
 const SLOT_PRESETS = [
@@ -45,14 +56,102 @@ const SLOT_PRESETS = [
   { xuat: "15:30", toi: "17:00", label: "17:00 - 21:00", color: "#EF4444" },
   { xuat: "17:30", toi: "20:30", label: "20:30 - 22:00", color: "#A855F7" },
 ];
+const CHUYEN_STYLE = {
+  SÁNG: {
+    badge:
+      "text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-300 shadow-sm",
+    dot: "bg-green-400",
+    icon: Sunrise,
+    iconColor: "text-green-500",
+  },
+  TRƯA: {
+    badge:
+      "text-red-700 bg-gradient-to-r from-red-50 to-rose-50 border border-red-300 shadow-sm",
+    dot: "bg-red-400",
+    icon: Sun,
+    iconColor: "text-red-500",
+  },
+  CHIỀU: {
+    badge:
+      "text-yellow-700 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-300 shadow-sm",
+    dot: "bg-yellow-400",
+    icon: Sunset,
+    iconColor: "text-yellow-500",
+  },
+  TỐI: {
+    badge:
+      "text-indigo-700 bg-gradient-to-r from-indigo-50 to-slate-100 border border-indigo-300 shadow-sm",
+    dot: "bg-indigo-500",
+    icon: Moon,
+    iconColor: "text-indigo-500",
+  },
+  "KHAI TRƯƠNG": {
+    badge:
+      "text-purple-700 bg-gradient-to-r from-purple-50 to-fuchsia-50 border border-purple-300 shadow-sm",
+    dot: "bg-purple-500",
+    icon: PartyPopper,
+    iconColor: "text-purple-500",
+  },
+  "PHÂN BỔ": {
+    badge:
+      "text-cyan-700 bg-gradient-to-r from-cyan-50 to-teal-50 border border-cyan-300 shadow-sm",
+    dot: "bg-cyan-500",
+    icon: Shuffle,
+    iconColor: "text-cyan-500",
+  },
+  "GIAO KHÁCH": {
+    badge:
+      "text-rose-700 bg-gradient-to-r from-rose-50 to-red-50 border border-rose-300 shadow-sm",
+    dot: "bg-rose-500",
+    icon: Truck,
+    iconColor: "text-rose-500",
+  },
+};
+const TRANG_THAI_SOAN_STYLE = {
+  "Hoàn thành": {
+    badge:
+      "text-emerald-700 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-300 shadow-sm",
+    dot: "bg-emerald-500",
+    icon: CheckCircle2,
+    iconColor: "text-emerald-600",
+    label: "Đã soạn xong",
+  },
+  "Đang soạn": {
+    badge:
+      "text-amber-700 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-300 shadow-sm",
+    dot: "bg-amber-500",
+    icon: PencilLine,
+    iconColor: "text-amber-600",
+    label: "Đang soạn",
+  },
+  "Chưa soạn": {
+    badge:
+      "text-violet-700 bg-gradient-to-r from-violet-50 to-purple-50 border-2 border-violet-300 shadow-sm",
+    dot: "bg-violet-500",
+    icon: CircleDashed,
+    iconColor: "text-violet-600",
+    label: "Chưa soạn",
+  },
+};
+const DEFAULT_CHUYEN_STYLE = {
+  badge:
+    "text-slate-600 bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-300 shadow-sm",
+  dot: "bg-slate-400",
+  icon: Clock,
+  iconColor: "text-slate-500",
+};
 
+const getChuyenStyle = (chuyen) => {
+  if (!chuyen) return null;
+  const key = chuyen.trim().toUpperCase();
+  return CHUYEN_STYLE[key] || DEFAULT_CHUYEN_STYLE;
+};
 const QUICK_FILTERS = [
   { key: "all", label: "Tất cả" },
   { key: "giaokhach", label: "Giao khách" },
   { key: "kienrot", label: "Kiện rớt" },
   { key: "ghepchung", label: "Từng ghép chung" },
 ];
-
 // ─── Helpers thuần (không phụ thuộc state, an toàn để định nghĩa ngoài component) ──
 
 const getMatchReasons = (item, selectedItems) => {
@@ -87,6 +186,9 @@ const getMatchReasons = (item, selectedItems) => {
     ) {
       reasons.add("lich_di_hang");
     }
+    if (item.chuyen && sel.chuyen && item.chuyen === sel.chuyen) {
+      reasons.add("chuyen");
+    }
     // Đủ reasons rồi thì không cần duyệt tiếp các sel khác
     if (reasons.size === MATCH_PRIORITY.length) break;
   }
@@ -98,8 +200,6 @@ const getMatchScore = (reasons) =>
     const weight = MATCH_PRIORITY.length - MATCH_PRIORITY.indexOf(r);
     return score + 10 ** weight;
   }, 0);
-
-
 
 const formatNgayVN = (ngayStr) => {
   if (!ngayStr) return "";
@@ -121,8 +221,6 @@ const tomorrowStr = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-// ─── Sub components (memo hoá để tránh re-render toàn danh sách) ───────────
-
 const ItemRow = memo(function ItemRow({
   item,
   checked,
@@ -132,6 +230,10 @@ const ItemRow = memo(function ItemRow({
   const isSuggested = !checked && matchReasons.length > 0;
   const isGiaoKhach = !!item.coGiaoKhach;
   const isKienRot = item.nguon === "kien_rot";
+  const chuyenStyle = getChuyenStyle(item.chuyen);
+  const ChuyenIcon = chuyenStyle?.icon;
+  const soanStyle = TRANG_THAI_SOAN_STYLE[item.trangThaiSoan]; // 👈
+  const SoanIcon = soanStyle?.icon; // 👈
 
   return (
     <label
@@ -182,6 +284,22 @@ const ItemRow = memo(function ItemRow({
             {item.ma_ch}
           </span>
           <span className="text-slate-600">- {item.ten_ch}</span>
+
+          {chuyenStyle && (
+            <span
+              className={[
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                chuyenStyle.badge,
+              ].join(" ")}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${chuyenStyle.dot}`} />
+              {ChuyenIcon && (
+                <ChuyenIcon size={12} className={chuyenStyle.iconColor} />
+              )}
+              {item.chuyen}
+            </span>
+          )}
+
           <span
             className={[
               "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
@@ -202,10 +320,17 @@ const ItemRow = memo(function ItemRow({
               {item.loaiCuaHang}
             </span>
           )}
-          {item.trangThaiSoan === "Đang soạn" && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-600">
-              <AlertTriangle size={11} />
-              Đang soạn - có thể phát sinh thêm kiện
+
+          {soanStyle && (
+            <span
+              className={[
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                soanStyle.badge,
+              ].join(" ")}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${soanStyle.dot}`} />
+              <SoanIcon size={12} className={soanStyle.iconColor} />
+              {soanStyle.label}
             </span>
           )}
         </div>
@@ -247,22 +372,22 @@ const SelectionSummary = memo(function SelectionSummary({
   onRemove,
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm text-slate-500">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-base text-slate-500">
           Đã chọn{" "}
-          <span className="text-base font-semibold text-slate-800">
+          <span className="text-xl font-bold text-slate-800">
             {selectedItems.length}
           </span>{" "}
           cửa hàng
         </span>
-        <span className="text-base font-semibold text-slate-800">
+        <span className="text-xl font-bold text-slate-800">
           {tongKien} kiện{nguong > 0 ? ` / ${nguong}` : ""}
         </span>
       </div>
 
       {nguong > 0 && (
-        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
           <div
             className={[
               "h-full rounded-full transition-all",
@@ -273,34 +398,34 @@ const SelectionSummary = memo(function SelectionSummary({
         </div>
       )}
 
-      <div className="mt-2.5 space-y-1.5">
+      <div className="mt-3 space-y-2">
         {coGiaoKhachChon && (
-          <p className="flex items-center gap-1.5 text-xs font-medium text-rose-600">
-            <UserRound size={13} />
+          <p className="flex items-center gap-1.5 text-sm font-medium text-rose-600">
+            <UserRound size={15} />
             Có chuyến giao khách trong lựa chọn — ưu tiên book đúng ngày.
           </p>
         )}
         {vuotNguong && (
-          <p className="flex items-center gap-1.5 text-xs text-red-600">
-            <AlertTriangle size={13} />
+          <p className="flex items-center gap-1.5 text-sm text-red-600">
+            <AlertTriangle size={15} />
             Đã vượt ngưỡng gợi ý ({nguong} kiện) — vẫn có thể book.
           </p>
         )}
         {coLoaiKhacNhau && (
-          <p className="flex items-center gap-1.5 text-xs text-amber-600">
-            <AlertTriangle size={13} />
+          <p className="flex items-center gap-1.5 text-sm text-amber-600">
+            <AlertTriangle size={15} />
             Đang ghép lẫn cả CS và CF trong cùng chuyến.
           </p>
         )}
       </div>
 
       {selectedItems.length > 0 && (
-        <div className="mt-3 max-h-64 space-y-1.5 overflow-y-auto border-t border-slate-100 pt-3">
+        <div className="mt-4 max-h-72 space-y-2 overflow-y-auto border-t border-slate-100 pt-4">
           {selectedItems.map((s) => (
             <div
               key={s.key}
               className={[
-                "flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs",
+                "flex items-center justify-between rounded-lg px-3 py-2.5 text-sm",
                 s.coGiaoKhach
                   ? "bg-rose-50 text-rose-700"
                   : "bg-slate-50 text-slate-600",
@@ -308,20 +433,22 @@ const SelectionSummary = memo(function SelectionSummary({
             >
               <span className="truncate pr-2">
                 {s.coGiaoKhach && (
-                  <UserRound size={11} className="mr-1 inline" />
+                  <UserRound size={13} className="mr-1 inline" />
                 )}
-                <span className="font-medium text-slate-800">{s.ma_ch}</span> -{" "}
-                {s.ten_ch}
+                <span className="font-semibold text-slate-800">{s.ma_ch}</span>{" "}
+                - {s.ten_ch}
               </span>
-              <span className="flex shrink-0 items-center gap-2">
-                <span className="text-slate-400">{s.kien} kiện</span>
+              <span className="flex shrink-0 items-center gap-2.5">
+                <span className="font-medium text-slate-500">
+                  {s.kien} kiện
+                </span>
                 <button
                   type="button"
                   onClick={() => onRemove(s)}
                   title="Bỏ chọn"
-                  className="rounded-full p-0.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                  className="rounded-full p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
                 >
-                  <X size={12} />
+                  <X size={14} />
                 </button>
               </span>
             </div>
@@ -622,7 +749,18 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
   const [quickFilter, setQuickFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedQuan, setSelectedQuan] = useState("");
+  const [selectedChuyen, setSelectedChuyen] = useState("");
 
+  const quanOptions = useMemo(
+    () => Array.from(new Set(items.map((i) => i.quan).filter(Boolean))).sort(),
+    [items],
+  );
+  const chuyenOptions = useMemo(
+    () =>
+      Array.from(new Set(items.map((i) => i.chuyen).filter(Boolean))).sort(),
+    [items],
+  );
   // Debounce ô search 200ms — tránh lọc lại toàn danh sách mỗi ký tự gõ.
   useEffect(() => {
     const t = setTimeout(
@@ -639,6 +777,8 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
     setSearchInput("");
     setSearch("");
     setQuickFilter("all");
+    setSelectedQuan(""); // 👈 thêm
+    setSelectedChuyen(""); // 👈 thêm
     fetchItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -676,11 +816,15 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
       list = list.filter((it) => it.nguon === "kien_rot");
     else if (quickFilter === "ghepchung")
       list = list.filter((it) => it.tungGhepChungVoi?.length);
+
+    if (selectedQuan) list = list.filter((it) => it.quan === selectedQuan);
+    if (selectedChuyen)
+      list = list.filter((it) => it.chuyen === selectedChuyen);
+
     return list;
-  }, [items, search, quickFilter]);
+  }, [items, search, quickFilter, selectedQuan, selectedChuyen]);
 
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
-
   const selectedItems = useMemo(
     () => items.filter((it) => selectedKeySet.has(it.key)),
     [items, selectedKeySet],
@@ -736,7 +880,6 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
     );
   }, []);
 
-
   const tongKien = useMemo(
     () => selectedItems.reduce((sum, s) => sum + (s.kien || 0), 0),
     [selectedItems],
@@ -784,7 +927,13 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
 
         await bookXeService.createBookXe(payload);
         onBooked?.();
-        onClose?.();
+
+        // 👇 thay vì đóng modal, refresh lại danh sách + reset lựa chọn để book tiếp
+        setSelectedKeys([]);
+        setShowForm(false);
+        setSelectedQuan("");
+        setSelectedChuyen("");
+        await fetchItems();
       } catch (err) {
         console.error("Lỗi khi tạo chuyến book xe:", err);
         setError("Tạo chuyến thất bại, thử lại.");
@@ -792,7 +941,7 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
         setSubmitting(false);
       }
     },
-    [selectedItems, tongKien, coGiaoKhachChon, onBooked, onClose],
+    [selectedItems, tongKien, coGiaoKhachChon, onBooked, fetchItems],
   );
 
   const handleShowForm = useCallback(() => setShowForm(true), []);
@@ -863,7 +1012,7 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
                   </div>
                 </div>
 
-                <div className="mb-3 flex flex-wrap gap-1.5">
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
                   {QUICK_FILTERS.map((f) => (
                     <button
                       key={f.key}
@@ -879,6 +1028,55 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
                       {f.label}
                     </button>
                   ))}
+
+                  <select
+                    value={selectedQuan}
+                    onChange={(e) => setSelectedQuan(e.target.value)}
+                    className={[
+                      "cursor-pointer rounded-full border-none px-3 py-1 text-xs font-medium outline-none transition-colors",
+                      selectedQuan
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                    ].join(" ")}
+                  >
+                    <option value="">Theo quận</option>
+                    {quanOptions.map((q) => (
+                      <option key={q} value={q}>
+                        {q}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={selectedChuyen}
+                    onChange={(e) => setSelectedChuyen(e.target.value)}
+                    className={[
+                      "cursor-pointer rounded-full border-none px-3 py-1 text-xs font-medium outline-none transition-colors",
+                      selectedChuyen
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                    ].join(" ")}
+                  >
+                    <option value="">Theo chuyến</option>
+                    {chuyenOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+
+                  {(selectedQuan || selectedChuyen) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedQuan("");
+                        setSelectedChuyen("");
+                      }}
+                      className="rounded-full px-3 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50"
+                    >
+                      Xoá lọc quận/chuyến
+                    </button>
+                  )}
                 </div>
 
                 {soLuongGiaoKhach > 0 && (

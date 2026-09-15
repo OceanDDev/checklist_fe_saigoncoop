@@ -6,6 +6,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import ExcelJS from "exceljs";
 import { dataCHService } from "@/services/phieusoan/dataCH.service";
 import ImportDataCHModal from "./component/phieule/ImportDataCH";
 
@@ -34,6 +35,8 @@ const DataCHTable = forwardRef((props, ref) => {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
   // State cho chỉnh sửa ghi chú
   const [editingId, setEditingId] = useState(null);
@@ -174,6 +177,154 @@ const DataCHTable = forwardRef((props, ref) => {
     }
   };
 
+  // Lấy TOÀN BỘ dữ liệu bằng cách gọi API nhiều lần theo trang, gộp lại.
+  // Không dùng limit cực lớn vì backend thường ép limit tối đa (vd 100),
+  // nên truyền limit=100000 vẫn chỉ trả về 100 dòng.
+  const fetchAllDataCH = async ({ search: searchTerm }) => {
+    const PAGE_SIZE = 100; // khớp với giới hạn phổ biến của backend, có thể chỉnh nếu cần
+    let currentPage = 1;
+    let allRows = [];
+    let totalCount = Infinity;
+
+    // Gọi trang đầu để biết tổng số bản ghi
+    const firstRes = await dataCHService.getAllDataCH({
+      page: currentPage,
+      limit: PAGE_SIZE,
+      search: searchTerm,
+    });
+    const firstData = Array.isArray(firstRes)
+      ? firstRes
+      : Array.isArray(firstRes?.data)
+        ? firstRes.data
+        : [];
+    totalCount = Number(
+      firstRes?.pagination?.total ?? firstRes?.total ?? firstData.length,
+    );
+    allRows = allRows.concat(firstData);
+    setExportProgress(allRows.length);
+
+    // Nếu không có thông tin total đáng tin cậy hoặc trang đầu trả về rỗng thì dừng
+    if (!firstData.length) return allRows;
+
+    const maxPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
+
+    while (currentPage < maxPages && allRows.length < totalCount) {
+      currentPage += 1;
+      const res = await dataCHService.getAllDataCH({
+        page: currentPage,
+        limit: PAGE_SIZE,
+        search: searchTerm,
+      });
+      const data = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
+      if (!data.length) break; // an toàn, tránh lặp vô hạn nếu API trả sai
+      allRows = allRows.concat(data);
+      setExportProgress(allRows.length);
+    }
+
+    return allRows;
+  };
+
+  // Xuất dữ liệu ra file Excel bằng exceljs
+  const handleExportExcel = async () => {
+    setExporting(true);
+    setExportProgress(0);
+    try {
+      // Lấy toàn bộ dữ liệu theo bộ lọc hiện tại (đi qua tất cả các trang) để xuất đầy đủ
+      let exportRows = rows;
+      try {
+        exportRows = await fetchAllDataCH({ search: debouncedSearch });
+      } catch (e) {
+        console.error(
+          "Không lấy được toàn bộ dữ liệu, sẽ xuất trang hiện tại:",
+          e,
+        );
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Hệ thống Phiếu Soạn";
+      workbook.created = new Date();
+
+      const worksheet = workbook.addWorksheet("Dữ liệu Cửa Hàng");
+
+      // Định nghĩa cột (thêm cột STT ở đầu)
+      worksheet.columns = [
+        { header: "#", key: "stt", width: 6 },
+        ...columns.map((col) => ({
+          header: col.label,
+          key: col.key,
+          width: col.key === "tench" ? 30 : 18,
+        })),
+      ];
+
+      // Style header
+      worksheet.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF1D4ED8" },
+        };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      // Đổ dữ liệu
+      exportRows.forEach((row, idx) => {
+        const rowData = { stt: idx + 1 };
+        columns.forEach((col) => {
+          if (col.key === "ngay_import") {
+            rowData[col.key] = formatDate(row?.[col.key]);
+          } else {
+            rowData[col.key] = row?.[col.key] ?? "";
+          }
+        });
+        const excelRow = worksheet.addRow(rowData);
+        excelRow.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin" },
+            bottom: { style: "thin" },
+            left: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+      });
+
+      // Freeze hàng header
+      worksheet.views = [{ state: "frozen", ySplit: 1 }];
+
+      // Xuất file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const dateStr = new Intl.DateTimeFormat("vi-VN")
+        .format(new Date())
+        .replace(/\//g, "-");
+      link.download = `DuLieuCuaHang_${dateStr}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Lỗi khi xuất Excel:", e);
+      alert("Không thể xuất file Excel. Vui lòng thử lại.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <>
       <div className="space-y-4">
@@ -205,6 +356,17 @@ const DataCHTable = forwardRef((props, ref) => {
             >
               📥 Import CH
             </button>
+
+            <button
+              onClick={handleExportExcel}
+              disabled={exporting}
+              className="h-10 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700 whitespace-nowrap font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting
+                ? `⏳ Đang xuất... (${exportProgress}/${total})`
+                : "📤 Xuất Excel"}
+            </button>
+
             <button
               onClick={async () => {
                 if (
