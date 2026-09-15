@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import dayjs from "dayjs";
+import ExcelJS from "exceljs";
 import {
   Plus,
   Pencil,
@@ -12,6 +13,7 @@ import {
   Loader2,
   XCircle,
   Printer,
+  FileSpreadsheet,
 } from "lucide-react";
 import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
@@ -20,21 +22,10 @@ import { baoBiService } from "@/services/baobi.service";
 import { dataCHService } from "@/services/phieusoan/dataCH.service";
 import PhieuXuatKho from "./phieuxuatkho";
 
-let uid = 0;
-const nextId = () => `item-${++uid}-${Date.now()}`;
-
-const emptyItem = () => ({
-  id: nextId(),
-  sku: "",
-  name: "",
-  luong_xuat: "",
-  dvt: "EA",
-});
-
 const emptyForm = {
   ma_ch: "",
   ten_ch: "",
-  items: [emptyItem()],
+  items: [], // được nạp từ tonKho khi mở modal
 };
 
 const emptyEditForm = {
@@ -50,8 +41,8 @@ const emptyFilters = {
   name: "",
   ma_ch: "",
   ten_ch: "",
-  startDate: dayjs().format("YYYY-MM-DD"), // mặc định hôm nay
-  endDate: dayjs().format("YYYY-MM-DD"), // mặc định hôm nay
+  startDate: dayjs().startOf("month").format("YYYY-MM-DD"), // mặc định đầu tháng hiện tại
+  endDate: dayjs().endOf("month").format("YYYY-MM-DD"), // mặc định cuối tháng hiện tại
 };
 const formatDate = (date) => {
   if (!date) return "";
@@ -132,8 +123,9 @@ const DateRangeFilter = ({ startValue, endValue, onChange, onClear }) => {
   };
 
   const handleClear = () => {
-    const today = new Date();
-    setRange([{ startDate: today, endDate: today, key: "selection" }]);
+    const start = dayjs().startOf("month").toDate();
+    const end = dayjs().endOf("month").toDate();
+    setRange([{ startDate: start, endDate: end, key: "selection" }]);
     onClear();
     setShow(false);
   };
@@ -155,7 +147,7 @@ const DateRangeFilter = ({ startValue, endValue, onChange, onClear }) => {
           e.stopPropagation();
           handleClear();
         }}
-        title="Xoá lọc ngày (về hôm nay)"
+        title="Xoá lọc ngày (về tháng hiện tại)"
         className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
       >
         <X size={12} />
@@ -204,19 +196,15 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
-  const [skuInfoMap, setSkuInfoMap] = useState({});
-  const [checkingSkuMap, setCheckingSkuMap] = useState({});
-  const skuTimers = useRef({});
-
-  const [, setEditSkuInfo] = useState(null);
-  const editSkuTimer = useRef(null);
-
   const [checkingMaCh, setCheckingMaCh] = useState(false);
   const [maChFound, setMaChFound] = useState(null);
   const maChCheckTimer = useRef(null);
 
   // ---------- Phiếu xuất kho (in) ----------
   const [phieuData, setPhieuData] = useState(null);
+
+  // ---------- Xuất Excel ----------
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   useEffect(() => {
     if (!phieuData) return;
@@ -234,21 +222,25 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
   const [filters, setFilters] = useState(emptyFilters);
   const filterDebounceRef = useRef(null);
 
+  const buildQueryParams = useCallback(
+    (extra = {}) => ({
+      loai: "xuat",
+      ...(initialFilters || {}),
+      ...(filters.sku.trim() && { sku: filters.sku.trim() }),
+      ...(filters.name.trim() && { name: filters.name.trim() }),
+      ...(filters.ma_ch.trim() && { ma_ch: filters.ma_ch.trim() }),
+      ...(filters.ten_ch.trim() && { ten_ch: filters.ten_ch.trim() }),
+      ...(filters.startDate && { tu_ngay_xuat: filters.startDate }),
+      ...(filters.endDate && { den_ngay_xuat: filters.endDate }),
+      ...extra,
+    }),
+    [initialFilters, filters],
+  );
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params = {
-        page,
-        limit: 20,
-        loai: "xuat",
-        ...(initialFilters || {}),
-        ...(filters.sku.trim() && { sku: filters.sku.trim() }),
-        ...(filters.name.trim() && { name: filters.name.trim() }),
-        ...(filters.ma_ch.trim() && { ma_ch: filters.ma_ch.trim() }),
-        ...(filters.ten_ch.trim() && { ten_ch: filters.ten_ch.trim() }),
-        ...(filters.startDate && { tu_ngay_xuat: filters.startDate }), // đổi tên
-        ...(filters.endDate && { den_ngay_xuat: filters.endDate }), // đổi tên
-      };
+      const params = buildQueryParams({ page, limit: 20 });
       const res = await baoBiService.getAllBaoBi(params);
       setRows(res?.data || []);
       setTotalPages(res?.pagination?.totalPages || 1);
@@ -258,7 +250,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, initialFilters, filters]);
+  }, [page, buildQueryParams]);
 
   const fetchTonKho = useCallback(async () => {
     setLoadingTonKho(true);
@@ -297,7 +289,11 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
   };
 
   const handleDateFilterClear = () => {
-    setFilters((prev) => ({ ...prev, startDate: "", endDate: "" }));
+    setFilters((prev) => ({
+      ...prev,
+      startDate: dayjs().startOf("month").format("YYYY-MM-DD"),
+      endDate: dayjs().endOf("month").format("YYYY-MM-DD"),
+    }));
     setPage(1);
   };
 
@@ -311,44 +307,8 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     filters.name ||
     filters.ma_ch ||
     filters.ten_ch ||
-    filters.startDate ||
-    filters.endDate;
-
-  // ---------- Tra cứu SKU cho từng dòng (thêm mới, multi-SKU) ----------
-  const checkSkuForItem = useCallback(async (itemId, sku) => {
-    if (!sku) {
-      setSkuInfoMap((prev) => ({ ...prev, [itemId]: null }));
-      return;
-    }
-    setCheckingSkuMap((prev) => ({ ...prev, [itemId]: true }));
-    try {
-      const res = await baoBiService.getKhaDungXuatBySku(sku);
-      setSkuInfoMap((prev) => ({ ...prev, [itemId]: res || null }));
-      if (res?.exists_in_kho && res.name) {
-        setForm((prev) => ({
-          ...prev,
-          items: prev.items.map((it) =>
-            it.id === itemId ? { ...it, name: res.name } : it,
-          ),
-        }));
-      }
-    } catch (err) {
-      console.error("Lỗi khi tra cứu khả dụng xuất:", err);
-      setSkuInfoMap((prev) => ({ ...prev, [itemId]: null }));
-    } finally {
-      setCheckingSkuMap((prev) => ({ ...prev, [itemId]: false }));
-    }
-  }, []);
-
-  const handleItemSkuChange = (itemId, value) => {
-    updateItem(itemId, "sku", value);
-    setSkuInfoMap((prev) => ({ ...prev, [itemId]: null }));
-
-    if (skuTimers.current[itemId]) clearTimeout(skuTimers.current[itemId]);
-    skuTimers.current[itemId] = setTimeout(() => {
-      checkSkuForItem(itemId, value.trim());
-    }, 400);
-  };
+    filters.startDate !== emptyFilters.startDate ||
+    filters.endDate !== emptyFilters.endDate;
 
   // ---------- Tra cứu tên cửa hàng theo mã CH (dùng chung) ----------
   const checkMaCh = useCallback(async (ma_ch, isEdit) => {
@@ -412,33 +372,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     }, 400);
   };
 
-  // ---------- Quản lý danh sách item (thêm mới, multi-SKU) ----------
-  const addItem = () => {
-    setForm((prev) => ({ ...prev, items: [...prev.items, emptyItem()] }));
-  };
-
-  const removeItem = (itemId) => {
-    setForm((prev) => ({
-      ...prev,
-      items: prev.items.filter((it) => it.id !== itemId),
-    }));
-    setSkuInfoMap((prev) => {
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
-    setErrors((prev) => {
-      if (!prev.items) return prev;
-      const nextItems = { ...prev.items };
-      delete nextItems[itemId];
-      return { ...prev, items: nextItems };
-    });
-    if (skuTimers.current[itemId]) {
-      clearTimeout(skuTimers.current[itemId]);
-      delete skuTimers.current[itemId];
-    }
-  };
-
+  // ---------- Cập nhật lượng xuất / dvt cho 1 dòng SKU (lấy sẵn từ tồn kho) ----------
   const updateItem = (itemId, field, value) => {
     setForm((prev) => ({
       ...prev,
@@ -468,9 +402,28 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
   // ---------- Modal open/close ----------
   const openAddModal = () => {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      // Nạp sẵn toàn bộ SKU đang có trong tồn kho, chỉ chờ nhập lượng xuất
+      // Sắp xếp theo tên để các SKU cùng nhãn hàng (Cheers, Csmiles...) đứng gần nhau
+      items: [...tonKho]
+        .sort((a, b) =>
+          (a.name || "").localeCompare(b.name || "", "vi", {
+            sensitivity: "base",
+          }),
+        )
+        .map((t) => ({
+          id: t.sku,
+          sku: t.sku,
+          name: t.name,
+          ton_kha_dung: t.ton_kha_dung ?? 0,
+          ton_nhap: t.ton_nhap ?? 0,
+          da_xuat: t.da_xuat ?? 0,
+          luong_xuat: "",
+          dvt: "EA",
+        })),
+    });
     setErrors({});
-    setSkuInfoMap({});
     setMaChFound(null);
     setShowModal(true);
   };
@@ -485,23 +438,17 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       luong_xuat: row.luong_xuat ?? "",
     });
     setErrors({});
-    setEditSkuInfo(null);
     setMaChFound(null);
     setShowModal(true);
   };
 
   const closeModal = () => {
-    Object.values(skuTimers.current).forEach((t) => clearTimeout(t));
-    skuTimers.current = {};
-    if (editSkuTimer.current) clearTimeout(editSkuTimer.current);
     if (maChCheckTimer.current) clearTimeout(maChCheckTimer.current);
     setShowModal(false);
     setEditingId(null);
     setForm(emptyForm);
     setEditForm(emptyEditForm);
     setErrors({});
-    setSkuInfoMap({});
-    setEditSkuInfo(null);
     setMaChFound(null);
   };
 
@@ -515,37 +462,22 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       newErrors.ma_ch = "Không tìm thấy cửa hàng với mã này";
     }
 
-    if (form.items.length === 0) {
-      newErrors.submit = "Cần ít nhất 1 dòng SKU để xuất";
+    // Chỉ những dòng có nhập lượng xuất mới được coi là chọn xuất
+    const selectedItems = form.items.filter(
+      (it) => it.luong_xuat !== "" && it.luong_xuat !== null,
+    );
+
+    if (selectedItems.length === 0) {
+      newErrors.submit = "Vui lòng nhập lượng xuất cho ít nhất 1 SKU";
     }
 
-    const skuCount = {};
-    form.items.forEach((it) => {
-      const key = it.sku.trim().toLowerCase();
-      if (key) skuCount[key] = (skuCount[key] || 0) + 1;
-    });
-
-    form.items.forEach((item) => {
+    selectedItems.forEach((item) => {
       const itemErr = {};
-      const info = skuInfoMap[item.id];
 
-      if (!item.sku?.trim()) {
-        itemErr.sku = "Vui lòng nhập SKU";
-      } else if (info && info.exists_in_kho === false) {
-        itemErr.sku = "SKU chưa từng được nhập kho, không thể xuất";
-      } else if (skuCount[item.sku.trim().toLowerCase()] > 1) {
-        itemErr.sku = "SKU bị trùng trong phiếu xuất, gộp lại 1 dòng";
-      }
-
-      if (item.luong_xuat === "" || item.luong_xuat === null) {
-        itemErr.luong_xuat = "Vui lòng nhập lượng xuất";
-      } else if (Number(item.luong_xuat) <= 0) {
+      if (Number(item.luong_xuat) <= 0) {
         itemErr.luong_xuat = "Lượng xuất phải lớn hơn 0";
-      } else if (
-        info?.exists_in_kho &&
-        Number(item.luong_xuat) > (info.ton_kha_dung ?? 0)
-      ) {
-        itemErr.luong_xuat = `Không đủ tồn để xuất. Tồn khả dụng: ${info.ton_kha_dung ?? 0}`;
+      } else if (Number(item.luong_xuat) > (item.ton_kha_dung ?? 0)) {
+        itemErr.luong_xuat = `Không đủ tồn để xuất. Tồn khả dụng: ${item.ton_kha_dung ?? 0}`;
       }
 
       if (Object.keys(itemErr).length > 0) {
@@ -622,10 +554,15 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       const ten_ch = form.ten_ch?.trim() || undefined;
       const tg_xuat = new Date().toISOString();
 
+      // Chỉ gửi các SKU có nhập lượng xuất, SKU nào để trống coi như không xuất
+      const selectedItems = form.items.filter(
+        (it) => it.luong_xuat !== "" && it.luong_xuat !== null,
+      );
+
       const succeededItems = [];
       const failedItems = [];
 
-      for (const item of form.items) {
+      for (const item of selectedItems) {
         try {
           await baoBiService.createXuatBaoBi({
             sku: item.sku.trim(),
@@ -737,6 +674,110 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     }
   };
 
+  // ---------- Xuất Excel theo bộ lọc (ngày + các filter khác) đang chọn ----------
+  const handleExportExcel = async () => {
+    setExportingExcel(true);
+    try {
+      // Lấy toàn bộ dữ liệu khớp filter hiện tại, gom hết các trang (không chỉ trang đang xem)
+      let allRows = [];
+      let currentPage = 1;
+      let fetchedTotalPages = 1;
+
+      do {
+        const res = await baoBiService.getAllBaoBi(
+          buildQueryParams({ page: currentPage, limit: 500 }),
+        );
+        allRows = allRows.concat(res?.data || []);
+        fetchedTotalPages = res?.pagination?.totalPages || 1;
+        currentPage += 1;
+      } while (currentPage <= fetchedTotalPages);
+
+      if (allRows.length === 0) {
+        alert("Không có dữ liệu để xuất trong khoảng ngày đã chọn");
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "SC Logistics";
+      workbook.created = new Date();
+
+      const sheet = workbook.addWorksheet("Xuất Bao Bì");
+
+      sheet.columns = [
+        { header: "SKU", key: "sku", width: 14 },
+        { header: "Tên Bao Bì", key: "name", width: 34 },
+        { header: "Mã CH", key: "ma_ch", width: 12 },
+        { header: "Tên CH", key: "ten_ch", width: 28 },
+        { header: "Lượng Xuất", key: "luong_xuat", width: 14 },
+        { header: "Dvt", key: "dvt", width: 8 },
+        { header: "TG Xuất", key: "tg_xuat", width: 14 },
+      ];
+
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE2E8F0" },
+        };
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      allRows.forEach((row) => {
+        const dataRow = sheet.addRow({
+          sku: row.sku,
+          name: row.name,
+          ma_ch: row.ma_ch,
+          ten_ch: row.ten_ch || "",
+          luong_xuat: row.luong_xuat ?? "",
+          dvt: row.dvt || "EA",
+          tg_xuat: formatDate(row.tg_xuat),
+        });
+        dataRow.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFE2E8F0" } },
+            bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+            left: { style: "thin", color: { argb: "FFE2E8F0" } },
+            right: { style: "thin", color: { argb: "FFE2E8F0" } },
+          };
+        });
+      });
+
+      sheet.getColumn("luong_xuat").alignment = { horizontal: "right" };
+      sheet.autoFilter = { from: "A1", to: "G1" };
+      sheet.views = [{ state: "frozen", ySplit: 1 }];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `xuat-bao-bi_${filters.startDate}_den_${filters.endDate}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Lỗi khi xuất Excel:", err);
+      alert("Xuất Excel thất bại, vui lòng thử lại");
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  const selectedCount = form.items.filter(
+    (it) => it.luong_xuat !== "" && it.luong_xuat !== null,
+  ).length;
+
   return (
     <div className="p-4">
       {/* Header + nút xuất */}
@@ -755,6 +796,20 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
               Xóa lọc
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={exportingExcel}
+            title="Xuất Excel theo khoảng ngày đang lọc"
+            className="flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {exportingExcel ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <FileSpreadsheet size={16} />
+            )}
+            {exportingExcel ? "Đang xuất..." : "Xuất Excel"}
+          </button>
           <button
             type="button"
             onClick={openAddModal}
@@ -1150,150 +1205,107 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
 
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                      Danh Sách SKU Xuất
+                      Danh Sách SKU Tồn Kho — chỉ cần nhập lượng xuất, để trống
+                      SKU nào thì SKU đó không được xuất
                     </p>
-                    <button
-                      type="button"
-                      onClick={addItem}
-                      className="flex items-center gap-1 rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
-                    >
-                      <Plus size={13} />
-                      Thêm SKU
-                    </button>
+                    <span className="whitespace-nowrap text-xs font-medium text-blue-600">
+                      Đã chọn: {selectedCount}
+                    </span>
                   </div>
 
-                  <div className="space-y-3">
-                    {form.items.map((item, idx) => {
-                      const info = skuInfoMap[item.id];
-                      const checking = checkingSkuMap[item.id];
-                      const itemErr = errors.items?.[item.id] || {};
+                  {loadingTonKho ? (
+                    <p className="py-4 text-center text-sm text-slate-400">
+                      Đang tải danh sách SKU tồn kho...
+                    </p>
+                  ) : form.items.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-slate-400">
+                      Không có SKU nào trong tồn kho
+                    </p>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-slate-200">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">
+                              SKU
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">
+                              Tên Bao Bì
+                            </th>
+                            <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">
+                              Tồn Khả Dụng
+                            </th>
+                            <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">
+                              Lượng Xuất
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">
+                              Dvt
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {form.items.map((item) => {
+                            const itemErr = errors.items?.[item.id] || {};
+                            const isSelected =
+                              item.luong_xuat !== "" &&
+                              item.luong_xuat !== null;
 
-                      return (
-                        <div
-                          key={item.id}
-                          className="rounded-lg border border-slate-200 p-3"
-                        >
-                          <div className="mb-2 flex items-center justify-between">
-                            <span className="text-xs font-medium text-slate-500">
-                              Dòng {idx + 1}
-                            </span>
-                            {form.items.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removeItem(item.id)}
-                                className="rounded p-1 text-red-500 hover:bg-red-50"
-                                title="Xóa dòng"
+                            return (
+                              <tr
+                                key={item.id}
+                                className={isSelected ? "bg-emerald-50/40" : ""}
                               >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="col-span-2 sm:col-span-1">
-                              <label className="mb-1 block text-xs font-medium text-slate-600">
-                                SKU *
-                              </label>
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  value={item.sku}
-                                  onChange={(e) =>
-                                    handleItemSkuChange(item.id, e.target.value)
-                                  }
-                                  required
-                                  className={`w-full rounded-md border px-2.5 py-1.5 text-sm ${
-                                    itemErr.sku
-                                      ? "border-red-400"
-                                      : "border-slate-300"
-                                  }`}
-                                />
-                                {checking && (
-                                  <Loader2
-                                    size={14}
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-slate-400"
+                                <td className="px-3 py-2 font-medium text-slate-700">
+                                  {item.sku}
+                                </td>
+                                <td className="px-3 py-2 text-slate-600">
+                                  {item.name || "-"}
+                                </td>
+                                <td className="px-3 py-2 text-right text-slate-500">
+                                  {item.ton_kha_dung ?? 0}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="number"
+                                    value={item.luong_xuat}
+                                    onChange={(e) =>
+                                      updateItem(
+                                        item.id,
+                                        "luong_xuat",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="—"
+                                    className={`w-24 rounded-md border px-2 py-1 text-right text-sm ${
+                                      itemErr.luong_xuat
+                                        ? "border-red-400"
+                                        : "border-slate-300"
+                                    }`}
                                   />
-                                )}
-                              </div>
-                              {itemErr.sku && (
-                                <p className="mt-1 text-xs text-red-500">
-                                  {itemErr.sku}
-                                </p>
-                              )}
-                              {info?.exists_in_kho === true && !itemErr.sku && (
-                                <p className="mt-1 text-xs text-emerald-600">
-                                  Tồn khả dụng: {info.ton_kha_dung ?? 0} (nhập:{" "}
-                                  {info.ton_nhap ?? 0}, đã xuất:{" "}
-                                  {info.da_xuat ?? 0})
-                                </p>
-                              )}
-                              {info?.exists_in_kho === false &&
-                                !itemErr.sku && (
-                                  <p className="mt-1 text-xs text-red-500">
-                                    SKU chưa từng được nhập kho
-                                  </p>
-                                )}
-                            </div>
-
-                            <div className="col-span-2 sm:col-span-1">
-                              <label className="mb-1 block text-xs font-medium text-slate-600">
-                                Tên Bao Bì
-                              </label>
-                              <input
-                                type="text"
-                                value={item.name}
-                                disabled
-                                className="w-full rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1.5 text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-slate-600">
-                                Lượng Xuất *
-                              </label>
-                              <input
-                                type="number"
-                                value={item.luong_xuat}
-                                onChange={(e) =>
-                                  updateItem(
-                                    item.id,
-                                    "luong_xuat",
-                                    e.target.value,
-                                  )
-                                }
-                                required
-                                className={`w-full rounded-md border px-2.5 py-1.5 text-sm ${
-                                  itemErr.luong_xuat
-                                    ? "border-red-400"
-                                    : "border-slate-300"
-                                }`}
-                              />
-                              {itemErr.luong_xuat && (
-                                <p className="mt-1 text-xs text-red-500">
-                                  {itemErr.luong_xuat}
-                                </p>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-slate-600">
-                                Dvt
-                              </label>
-                              <input
-                                type="text"
-                                value={item.dvt}
-                                onChange={(e) =>
-                                  updateItem(item.id, "dvt", e.target.value)
-                                }
-                                placeholder="EA"
-                                className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                                  {itemErr.luong_xuat && (
+                                    <p className="mt-1 text-xs text-red-500">
+                                      {itemErr.luong_xuat}
+                                    </p>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="text"
+                                    value={item.dvt}
+                                    onChange={(e) =>
+                                      updateItem(item.id, "dvt", e.target.value)
+                                    }
+                                    placeholder="EA"
+                                    className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1321,7 +1333,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
                     ? "Đang lưu..."
                     : editingId
                       ? "Cập Nhật"
-                      : `In Phiếu Xuất (${form.items.length} SKU)`}
+                      : `In Phiếu Xuất (${selectedCount} SKU)`}
                 </button>
               </div>
             </form>

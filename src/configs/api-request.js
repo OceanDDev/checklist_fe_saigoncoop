@@ -98,9 +98,7 @@ const URL = {
   nangsuat: {
     nangsuat: ENDPOINT_PREFIX + "/nangsuat",
   },
-  inventory: {
-    inventory: ENDPOINT_PREFIX + "/tonkho",
-  },
+
   learning: {
     khoahoc: ENDPOINT_PREFIX + "/khoa-hoc",
     baihoc: ENDPOINT_PREFIX + "/bai-hoc",
@@ -118,8 +116,8 @@ const URL = {
     bookxe: ENDPOINT_PREFIX + "/bookxe",
     historybookxe: ENDPOINT_PREFIX + "/historybookxe",
   },
-  khuyenmai: {
-    khuyenmai: ENDPOINT_PREFIX + "/khuyenmai",
+  tonkho: {
+    tonkho: ENDPOINT_PREFIX + "/tonkho",
   },
   nhaphang: {
     nhaphang: ENDPOINT_PREFIX + "/nhaphang",

@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 // components/baobi/PhieuXuatKho.jsx
 import { forwardRef } from "react";
+import { createPortal } from "react-dom";
 import dayjs from "dayjs";
 
 const KHO_XUAT_DEFAULT =
@@ -22,20 +23,26 @@ const PhieuXuatKho = forwardRef(function PhieuXuatKho({ data }, ref) {
   const rows = [...items];
   while (rows.length < MIN_ROWS) rows.push(null);
 
-  return (
+  const content = (
     <div ref={ref} className="phieu-xuat-print-root">
       <style>{`
         .phieu-xuat-print-root { display: none; }
 
         @media print {
           @page { size: A4 portrait; margin: 14mm 12mm; }
-          body * { visibility: hidden; }
-          .phieu-xuat-print-root,
-          .phieu-xuat-print-root * { visibility: visible; }
+
+          html, body {
+            height: auto !important;
+          }
+
+          /* Ẩn toàn bộ app (kể cả phần layout chiếm chỗ), chỉ giữ lại phiếu in */
+          #root {
+            display: none !important;
+          }
+
           .phieu-xuat-print-root {
-            display: block;
-            position: absolute;
-            top: 0; left: 0;
+            display: block !important;
+            position: static;
             width: 100%;
           }
         }
@@ -64,7 +71,9 @@ const PhieuXuatKho = forwardRef(function PhieuXuatKho({ data }, ref) {
 
       <div className="pxk-doc">
         <div className="pxk-header">
-          <div className="pxk-company">Công Ty TNHH MTV Kho Vận Saigon Co.op</div>
+          <div className="pxk-company">
+            Công Ty TNHH MTV Kho Vận Saigon Co.op
+          </div>
           <div className="pxk-date">Ngày: {ngay}</div>
         </div>
 
@@ -74,7 +83,8 @@ const PhieuXuatKho = forwardRef(function PhieuXuatKho({ data }, ref) {
 
         <div className="pxk-store-row">
           <div>
-            Đến cửa hàng:&nbsp;<span className="pxk-store-name">{tenCH || "-"}</span>
+            Đến cửa hàng:&nbsp;
+            <span className="pxk-store-name">{tenCH || "-"}</span>
           </div>
           <div>
             Store:&nbsp;<span className="pxk-store-code">{maCH || "-"}</span>
@@ -104,20 +114,26 @@ const PhieuXuatKho = forwardRef(function PhieuXuatKho({ data }, ref) {
           </tbody>
         </table>
 
-        <div className="pxk-note">Số tiền bằng chữ: Hàng không có giá trị thanh toán</div>
+        <div className="pxk-note">
+          Số tiền bằng chữ: Hàng không có giá trị thanh toán
+        </div>
 
         <div className="pxk-signatures">
-          {["Người Lập Phiếu", "Thủ Kho", "BĐH Kho", "Người Nhận Hàng"].map((t) => (
-            <div key={t}>
-              <div className="pxk-sig-title">{t}</div>
-              <div className="pxk-sig-sub">(Ký, ghi rõ họ tên)</div>
-              <div className="pxk-sig-space" />
-            </div>
-          ))}
+          {["Người Lập Phiếu", "Thủ Kho", "BĐH Kho", "Người Nhận Hàng"].map(
+            (t) => (
+              <div key={t}>
+                <div className="pxk-sig-title">{t}</div>
+                <div className="pxk-sig-sub">(Ký, ghi rõ họ tên)</div>
+                <div className="pxk-sig-space" />
+              </div>
+            ),
+          )}
         </div>
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 });
 
 export default PhieuXuatKho;

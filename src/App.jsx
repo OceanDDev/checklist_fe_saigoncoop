@@ -31,7 +31,6 @@ import HomeXuatHang from "./modules/KPI/KPINV/XUATHANG";
 import TableXuatHang from "./modules/KPI/KPINV/XUATHANG/table";
 import HomeBDH from "./modules/KPI/KPIBDH";
 import TableBDH from "./modules/KPI/KPIBDH/table";
-import HandleTonKho from "./modules/Tonkho";
 import ChamCongPage from "./modules/ChamCong";
 import FormCheckInQR from "./modules/ChamCong/FormCheck/FormCheckInQR.jsx";
 import QrDisplay from "./modules/ChamCong/FormCheck/QrDisplay";
@@ -41,7 +40,6 @@ import DashBoardNangSuat from "./modules/NangSuat/Dashboard";
 import HomeLearning from "./modules/LearningSCL/HomeLearning";
 import HomeLearningAdmin from "./modules/LearningSCL/Admin/HomeLearningAdmin";
 import KhoaHocDetail from "./modules/LearningSCL/KhoaHocDetail";
-import ProductLookupMobile from "./modules/TraCuu";
 import QuanLyQR from "./modules/LearningSCL/Admin/Q&A/quanlyQR";
 import TrangLamBai from "./modules/LearningSCL/Admin/Q&A/tranglambai";
 import NhanSuSoanTable from "./modules/NhanSuSoan";
@@ -210,18 +208,7 @@ function App() {
           }
         />
 
-        {/* TỒN KHO  */}
-        <Route
-          path="/tonkho"
-          element={
-            <PrivateRoute allowRoles={[25]}>
-              <MainLayout>
-                {" "}
-                <HandleTonKho />{" "}
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+       
 
         {/* TTB */}
         <Route
@@ -551,7 +538,6 @@ function App() {
         <Route path="/lam-bai" element={<TrangLamBai />} />
 
         <Route path="/thank-you" element={<ThankYouScreen />} />
-        <Route path="/tracuu" element={<ProductLookupMobile />} />
         {/* Trang login */}
         <Route path="/login" element={<LoginPage />} />
       </Routes>

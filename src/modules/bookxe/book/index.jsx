@@ -5,14 +5,26 @@ import dayjs from "dayjs";
 import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
-import { Trash2, RefreshCw, X, Truck, Pencil, UserRound } from "lucide-react";
+import {
+  Trash2,
+  RefreshCw,
+  X,
+  Truck,
+  Pencil,
+  UserRound,
+  AlertTriangle,
+} from "lucide-react";
 import { bookXeService } from "@/services/bookxe.service";
 import EditBookXeModal from "./editbookxemodal";
 import ExportExcelButton from "./export";
 import BookChuyenModal from "./bookchuyenmodal";
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
 const PAGE_SIZE = 20;
 const EXPORT_LIMIT = 100000;
+const LOW_KIEN_THRESHOLD = 50; // <= ngưỡng này thì cảnh báo
+const COLUMN_COUNT = 16;
 
 const STATUS_OPTIONS = ["Chờ xe", "Hoàn thành"];
 
@@ -30,23 +42,6 @@ const NCV_NAME_MAP = {
   "04.2021-TP": "Thuỳ An Hưng",
 };
 
-const getTenNVCRutGon = (item) => {
-  const maNcv = (item.ma_ncv || "").trim();
-  return NCV_NAME_MAP[maNcv] || item.ten_nvc || "—";
-};
-
-const formatNgayDiHang = (value) => {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "Asia/Ho_Chi_Minh",
-  });
-};
-
 const SLOT_PRESETS = [
   { xuat: "07:30", toi: "09:00", label: "9:00 - 16:00", color: "#3B82F6" },
   { xuat: "08:30", toi: "09:00", label: "9:00 - 16:00", color: "#06B6D4" },
@@ -57,6 +52,37 @@ const SLOT_PRESETS = [
   { xuat: "15:30", toi: "17:00", label: "17:00 - 21:00", color: "#EF4444" },
   { xuat: "17:30", toi: "20:30", label: "20:30 - 22:00", color: "#A855F7" },
 ];
+
+const DEFAULT_FILTERS = {
+  quan: "",
+  maCh: "",
+  tenCh: "",
+  maNcv: "",
+  tenNvc: "",
+  lichDiHang: "",
+  ghiChu: "",
+  trangThai: "",
+};
+
+const TEXT_FILTER_KEYS = [
+  "quan",
+  "maCh",
+  "tenCh",
+  "maNcv",
+  "tenNvc",
+  "lichDiHang",
+  "ghiChu",
+];
+
+const filterInputCls =
+  "w-full h-7 px-2 text-xs rounded-md border border-slate-300 bg-white/70 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-shadow";
+
+// ─── Pure helpers ────────────────────────────────────────────────────────────
+
+const getTenNVCRutGon = (item) => {
+  const maNcv = (item.ma_ncv || "").trim();
+  return NCV_NAME_MAP[maNcv] || item.ten_nvc || "—";
+};
 
 const getVNTime = (value) => {
   if (!value) return "";
@@ -79,6 +105,18 @@ const getSlotInfo = (item) => {
   );
   if (preset) return { color: preset.color, label: preset.label, gioXuat };
   return { color: null, label: "", gioXuat };
+};
+
+const formatNgayDiHang = (value) => {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
 };
 
 const formatDateTime = (value) => {
@@ -135,6 +173,7 @@ const cleanTenCH = (tenCh, maCh) => {
   result = result.replace(/^[A-Za-z]{1,4}\d{3,6}-\s*/, "");
   return result.trim();
 };
+
 // Gộp các mã CH trùng nhau (giữ lần xuất hiện đầu tiên), đồng thời gộp tên CH tương ứng
 const dedupeCHPair = (maCh, tenCh) => {
   const maChArr = String(maCh || "")
@@ -159,6 +198,7 @@ const dedupeCHPair = (maCh, tenCh) => {
 
   return { maChArr: resultMa, tenChArr: resultTen };
 };
+
 const getMinutesOfDayVN = (value) => {
   if (!value) return Infinity;
   const d = new Date(value);
@@ -179,10 +219,13 @@ const sortByGioXuatAsc = (rows) =>
       getMinutesOfDayVN(a.thoi_gian_xuat) - getMinutesOfDayVN(b.thoi_gian_xuat),
   );
 
-// ─── Filter row input styles + DateRangeFilter (giống style ô "Lọc...") ─────
+const getKienValue = (item) => item.kien ?? 0;
+const isLowKien = (item) => getKienValue(item) <= LOW_KIEN_THRESHOLD;
 
-const filterInputCls =
-  "w-full h-7 px-2 text-xs rounded-md border border-slate-300 bg-white/70 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-shadow";
+const getTodayVN = () =>
+  new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+
+// ─── DateRangeFilter (giống style ô "Lọc...") ───────────────────────────────
 
 const DateRangeFilter = ({
   label,
@@ -315,32 +358,6 @@ const DateRangeFilter = ({
   );
 };
 
-// ─── Filter mặc định + các field text cần debounce trước khi gọi API ────────
-
-const DEFAULT_FILTERS = {
-  quan: "",
-  maCh: "",
-  tenCh: "",
-  maNcv: "",
-  tenNvc: "",
-  lichDiHang: "",
-  ghiChu: "",
-  trangThai: "",
-};
-
-const TEXT_FILTER_KEYS = [
-  "quan",
-  "maCh",
-  "tenCh",
-  "maNcv",
-  "tenNvc",
-  "lichDiHang",
-  "ghiChu",
-];
-
-const getTodayVN = () =>
-  new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
-
 // ─── Sub components ─────────────────────────────────────────────────────────
 
 const StatusBadge = ({ value, onClick, updating }) => (
@@ -400,6 +417,53 @@ const TenCHList = ({ maChArr = [], tenChArr = [] }) => {
     </div>
   );
 };
+
+// Badge cảnh báo dùng chung cho cột Kiện — số kiện thấp thì nổi bật đỏ + icon
+const KienBadge = ({ item }) => {
+  const kienValue = getKienValue(item);
+  const low = isLowKien(item);
+
+  if (!low) {
+    return (
+      <span className="text-[13px] font-medium text-slate-700">
+        {kienValue}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      title={`Cảnh báo: chỉ ${kienValue} kiện (≤ ${LOW_KIEN_THRESHOLD})`}
+      className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-100 px-2 py-1 text-[13px] font-bold text-red-700"
+    >
+      <AlertTriangle size={14} />
+      {kienValue}
+    </span>
+  );
+};
+
+const RowActions = ({ onEdit, onDelete }) => (
+  <div className="flex items-center justify-end gap-0.5">
+    <button
+      type="button"
+      onClick={onEdit}
+      className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+      title="Sửa"
+    >
+      <Pencil size={14} />
+    </button>
+    <button
+      type="button"
+      onClick={onDelete}
+      className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+      title="Xóa"
+    >
+      <Trash2 size={14} />
+    </button>
+  </div>
+);
+
+// ─── Main component ──────────────────────────────────────────────────────────
 
 const BookXeTable = () => {
   const [data, setData] = useState([]);
@@ -507,6 +571,8 @@ const BookXeTable = () => {
     () => data.filter((item) => item.co_giao_khach).length,
     [data],
   );
+
+  const soLuongKienThap = useMemo(() => data.filter(isLowKien).length, [data]);
 
   const fetchExportRows = useCallback(async () => {
     const res = await bookXeService.getAllBookXe({
@@ -624,14 +690,20 @@ const BookXeTable = () => {
     }
   };
 
-  const COLUMN_COUNT = 16;
-
   return (
     <div className="p-3 md:p-4">
       {soLuongGiaoKhach > 0 && (
         <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700">
           <UserRound size={16} className="shrink-0" />
           Có {soLuongGiaoKhach} chuyến đang giao khách — cần ưu tiên xử lý.
+        </div>
+      )}
+
+      {soLuongKienThap > 0 && (
+        <div className="mb-3 flex items-center gap-2.5 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 animate-pulse">
+          <AlertTriangle size={18} className="shrink-0" />
+          Có {soLuongKienThap} chuyến số kiện thấp (≤ {LOW_KIEN_THRESHOLD}) —
+          cần kiểm tra ngay!
         </div>
       )}
 
@@ -923,6 +995,7 @@ const BookXeTable = () => {
                   const isGiaoKhach = !!item.co_giao_khach;
                   const slot = getSlotInfo(item);
                   const slotColor = slot?.color;
+                  const lowKien = isLowKien(item);
                   const { maChArr, tenChArr } = dedupeCHPair(
                     item.ma_ch,
                     item.ten_ch,
@@ -931,14 +1004,21 @@ const BookXeTable = () => {
                   return (
                     <tr
                       key={item._id}
-                      className="divide-x divide-slate-100 align-top transition-colors hover:brightness-[0.97]"
+                      className={[
+                        "divide-x divide-slate-100 align-top transition-colors hover:brightness-[0.97]",
+                        lowKien ? "bg-red-50" : "",
+                      ].join(" ")}
                       style={{
-                        backgroundColor: slotColor
-                          ? `${slotColor}14`
-                          : undefined,
-                        borderLeft: slotColor
-                          ? `4px solid ${slotColor}`
-                          : "4px solid transparent",
+                        backgroundColor: lowKien
+                          ? undefined // class bg-red-50 ở trên quyết định
+                          : slotColor
+                            ? `${slotColor}14`
+                            : undefined,
+                        borderLeft: lowKien
+                          ? "4px solid #DC2626"
+                          : slotColor
+                            ? `4px solid ${slotColor}`
+                            : "4px solid transparent",
                       }}
                     >
                       <td className="px-2 py-2">
@@ -994,8 +1074,8 @@ const BookXeTable = () => {
                       <td className="px-2.5 py-2 text-[13px] text-slate-600">
                         {item.lich_di_hang || "—"}
                       </td>
-                      <td className="px-2.5 py-2 text-right text-[13px] font-medium text-slate-700">
-                        {item.kien ?? 0}
+                      <td className="px-2.5 py-2 text-right">
+                        <KienBadge item={item} />
                       </td>
                       <td className="px-2.5 py-2 text-[13px] text-slate-600">
                         {item.ghi_chu || "—"}
@@ -1014,24 +1094,10 @@ const BookXeTable = () => {
                         {formatNgayOnly(item.thoi_gian_hoan_thanh)}
                       </td>
                       <td className="px-2.5 py-2 text-right">
-                        <div className="flex items-center justify-end gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => setEditingItem(item)}
-                            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
-                            title="Sửa"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteOne(item._id)}
-                            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                            title="Xóa"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                        <RowActions
+                          onEdit={() => setEditingItem(item)}
+                          onDelete={() => handleDeleteOne(item._id)}
+                        />
                       </td>
                     </tr>
                   );

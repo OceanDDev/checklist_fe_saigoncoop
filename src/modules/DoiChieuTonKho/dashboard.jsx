@@ -5,7 +5,7 @@ import { Pie } from "react-chartjs-2";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { Loader2 } from "lucide-react";
-import { khuyenMaiService } from "@/services/khuyenmai.service";
+import { tonKhoService } from "@/services/tonhko.service";
 
 ChartJS.register(ArcElement, Tooltip, Legend, ChartDataLabels);
 
@@ -41,7 +41,7 @@ const StatsDonut = ({ activeTrangThai, onSelect, refreshTrigger }) => {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await khuyenMaiService.getAllKhuyenMai({
+        const res = await tonKhoService.getAllKhuyenMai({
           page: 1,
           limit: FETCH_ALL_LIMIT,
           excludeZero: true,

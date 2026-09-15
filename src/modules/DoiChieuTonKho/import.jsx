@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from "lucide-react";
-import { khuyenMaiService } from "@/services/khuyenmai.service";
+import { tonKhoService } from "@/services/tonhko.service";
 
 const ImportTonKho = ({ onImported }) => {
   const [open, setOpen] = useState(false);
@@ -45,7 +45,7 @@ const ImportTonKho = ({ onImported }) => {
     setSaving(true);
     setResult(null);
     try {
-      const res = await khuyenMaiService.matchImportKhuyenMai(
+      const res = await tonKhoService.matchImportKhuyenMai(
         excelFile,
         txtFile,
       );

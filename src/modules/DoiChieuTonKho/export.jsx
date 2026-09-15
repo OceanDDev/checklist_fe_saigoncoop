@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { FileDown, Loader2 } from "lucide-react";
 import ExcelJS from "exceljs";
 import dayjs from "dayjs";
-import { khuyenMaiService } from "@/services/khuyenmai.service";
+import { tonKhoService } from "@/services/tonhko.service";
 
 const STATUS_COLOR = {
   "Khớp": "FF16A34A",       // green
@@ -35,7 +35,7 @@ const ExportTonKho = ({ filters = {} }) => {
     try {
       // Lấy hết dữ liệu khớp filter hiện tại (không phân trang thật sự,
       // set limit lớn để BE trả về toàn bộ).
-      const res = await khuyenMaiService.getAllKhuyenMai({
+      const res = await tonKhoService.getAllKhuyenMai({
         ...filters,
         page: 1,
         limit: 1000000,

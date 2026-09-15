@@ -3,7 +3,17 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import dayjs from "dayjs";
-import { Plus, Pencil, Trash2, X, Save, Loader2, XCircle } from "lucide-react";
+import ExcelJS from "exceljs";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  Save,
+  Loader2,
+  XCircle,
+  FileSpreadsheet,
+} from "lucide-react";
 import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
@@ -26,9 +36,9 @@ const emptyFilters = {
   so_hd: "",
   tu_ngay_hd: "",
   den_ngay_hd: "",
-  // Mặc định lọc TG Nhập = hôm nay, để mở trang lên là thấy ngay hàng vừa nhập hôm nay
-  tu_ngay_nhap: dayjs().format("YYYY-MM-DD"),
-  den_ngay_nhap: dayjs().format("YYYY-MM-DD"),
+  // Mặc định lọc TG Nhập = tháng hiện tại, để mở trang lên là thấy ngay hàng nhập trong tháng
+  tu_ngay_nhap: dayjs().startOf("month").format("YYYY-MM-DD"),
+  den_ngay_nhap: dayjs().endOf("month").format("YYYY-MM-DD"),
 };
 
 const formatDate = (date) => {
@@ -116,8 +126,9 @@ const DateRangeFilter = ({ startValue, endValue, onChange, onClear }) => {
   };
 
   const handleClear = () => {
-    const today = new Date();
-    setRange([{ startDate: today, endDate: today, key: "selection" }]);
+    const start = dayjs().startOf("month").toDate();
+    const end = dayjs().endOf("month").toDate();
+    setRange([{ startDate: start, endDate: end, key: "selection" }]);
     onClear();
     setShow(false);
   };
@@ -139,7 +150,7 @@ const DateRangeFilter = ({ startValue, endValue, onChange, onClear }) => {
           e.stopPropagation();
           handleClear();
         }}
-        title="Xoá lọc ngày (về hôm nay)"
+        title="Xoá lọc ngày (về tháng hiện tại)"
         className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
       >
         <X size={12} />
@@ -171,7 +182,7 @@ const DateRangeFilter = ({ startValue, endValue, onChange, onClear }) => {
   );
 };
 
-// Component filter riêng cho cột KHÔNG mặc định hôm nay (Ngày HĐ) —
+// Component filter riêng cho cột KHÔNG mặc định (Ngày HĐ) —
 // hiển thị placeholder "Lọc ngày..." khi chưa chọn, thay vì luôn hiện 1 khoảng ngày
 const DateRangeFilterOptional = ({
   startValue,
@@ -327,27 +338,34 @@ const NhapBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
   const [checkingSku, setCheckingSku] = useState(false);
   const skuCheckTimer = useRef(null);
 
+  // ---------- Xuất Excel ----------
+  const [exportingExcel, setExportingExcel] = useState(false);
+
   // ---------- Filter trong table ----------
   const [filters, setFilters] = useState(emptyFilters);
   const filterDebounceRef = useRef(null);
 
+  const buildQueryParams = useCallback(
+    (extra = {}) => ({
+      loai: "nhap",
+      ...(initialFilters || {}),
+      ...(filters.sku.trim() && { sku: filters.sku.trim() }),
+      ...(filters.name.trim() && { name: filters.name.trim() }),
+      ...(filters.ten_ncc.trim() && { ten_ncc: filters.ten_ncc.trim() }),
+      ...(filters.so_hd.trim() && { so_hd: filters.so_hd.trim() }),
+      ...(filters.tu_ngay_hd && { tu_ngay_hd: filters.tu_ngay_hd }),
+      ...(filters.den_ngay_hd && { den_ngay_hd: filters.den_ngay_hd }),
+      ...(filters.tu_ngay_nhap && { tu_ngay_nhap: filters.tu_ngay_nhap }),
+      ...(filters.den_ngay_nhap && { den_ngay_nhap: filters.den_ngay_nhap }),
+      ...extra,
+    }),
+    [initialFilters, filters],
+  );
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params = {
-        page,
-        limit: 20,
-        loai: "nhap",
-        ...(initialFilters || {}),
-        ...(filters.sku.trim() && { sku: filters.sku.trim() }),
-        ...(filters.name.trim() && { name: filters.name.trim() }),
-        ...(filters.ten_ncc.trim() && { ten_ncc: filters.ten_ncc.trim() }),
-        ...(filters.so_hd.trim() && { so_hd: filters.so_hd.trim() }),
-        ...(filters.tu_ngay_hd && { tu_ngay_hd: filters.tu_ngay_hd }),
-        ...(filters.den_ngay_hd && { den_ngay_hd: filters.den_ngay_hd }),
-        ...(filters.tu_ngay_nhap && { tu_ngay_nhap: filters.tu_ngay_nhap }),
-        ...(filters.den_ngay_nhap && { den_ngay_nhap: filters.den_ngay_nhap }),
-      };
+      const params = buildQueryParams({ page, limit: 20 });
       const res = await baoBiService.getAllBaoBi(params);
       setRows(res?.data || []);
       setTotalPages(res?.pagination?.totalPages || 1);
@@ -357,7 +375,7 @@ const NhapBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, initialFilters, filters]);
+  }, [page, buildQueryParams]);
 
   const fetchTonKho = useCallback(async () => {
     setLoadingTonKho(true);
@@ -407,12 +425,11 @@ const NhapBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     setPage(1);
   };
   const handleTgNhapFilterClear = () => {
-    // "Xóa" cho TG Nhập đưa về mặc định hôm nay, không phải xóa trắng
-    const today = dayjs().format("YYYY-MM-DD");
+    // "Xóa" cho TG Nhập đưa về mặc định tháng hiện tại, không phải xóa trắng
     setFilters((prev) => ({
       ...prev,
-      tu_ngay_nhap: today,
-      den_ngay_nhap: today,
+      tu_ngay_nhap: dayjs().startOf("month").format("YYYY-MM-DD"),
+      den_ngay_nhap: dayjs().endOf("month").format("YYYY-MM-DD"),
     }));
     setPage(1);
   };
@@ -429,8 +446,8 @@ const NhapBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     filters.so_hd ||
     filters.tu_ngay_hd ||
     filters.den_ngay_hd ||
-    filters.tu_ngay_nhap !== dayjs().format("YYYY-MM-DD") ||
-    filters.den_ngay_nhap !== dayjs().format("YYYY-MM-DD");
+    filters.tu_ngay_nhap !== emptyFilters.tu_ngay_nhap ||
+    filters.den_ngay_nhap !== emptyFilters.den_ngay_nhap;
 
   // Tra cứu SKU khi người dùng gõ (debounce 400ms) — chỉ chạy khi đang thêm mới
   const checkSku = useCallback(
@@ -613,6 +630,110 @@ const NhapBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     }
   };
 
+  // ---------- Xuất Excel theo bộ lọc đang chọn ----------
+  const handleExportExcel = async () => {
+    setExportingExcel(true);
+    try {
+      // Lấy toàn bộ dữ liệu khớp filter hiện tại, gom hết các trang (không chỉ trang đang xem)
+      let allRows = [];
+      let currentPage = 1;
+      let fetchedTotalPages = 1;
+
+      do {
+        const res = await baoBiService.getAllBaoBi(
+          buildQueryParams({ page: currentPage, limit: 500 }),
+        );
+        allRows = allRows.concat(res?.data || []);
+        fetchedTotalPages = res?.pagination?.totalPages || 1;
+        currentPage += 1;
+      } while (currentPage <= fetchedTotalPages);
+
+      if (allRows.length === 0) {
+        alert("Không có dữ liệu để xuất trong khoảng ngày đã chọn");
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "SC Logistics";
+      workbook.created = new Date();
+
+      const sheet = workbook.addWorksheet("Nhập Bao Bì");
+
+      sheet.columns = [
+        { header: "SKU", key: "sku", width: 14 },
+        { header: "Tên Bao Bì", key: "name", width: 34 },
+        { header: "Lượng Nhập", key: "luong_nhap", width: 14 },
+        { header: "Nhà Cung Cấp", key: "ten_ncc", width: 28 },
+        { header: "Số HĐ", key: "so_hd", width: 12 },
+        { header: "Ngày HĐ", key: "ngay_hd", width: 14 },
+        { header: "TG Nhập", key: "tg_nhap", width: 14 },
+      ];
+
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE2E8F0" },
+        };
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      allRows.forEach((row) => {
+        const dataRow = sheet.addRow({
+          sku: row.sku,
+          name: row.name,
+          luong_nhap: row.luong_nhap ?? "",
+          ten_ncc: row.ten_ncc || "",
+          so_hd: row.so_hd ?? "",
+          ngay_hd: formatDate(row.ngay_hd),
+          tg_nhap: formatDate(row.tg_nhap),
+        });
+        dataRow.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFE2E8F0" } },
+            bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+            left: { style: "thin", color: { argb: "FFE2E8F0" } },
+            right: { style: "thin", color: { argb: "FFE2E8F0" } },
+          };
+        });
+      });
+
+      sheet.getColumn("luong_nhap").alignment = { horizontal: "right" };
+      sheet.autoFilter = { from: "A1", to: "G1" };
+      sheet.views = [{ state: "frozen", ySplit: 1 }];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const rangeLabel =
+        filters.tu_ngay_nhap && filters.den_ngay_nhap
+          ? `${filters.tu_ngay_nhap}_den_${filters.den_ngay_nhap}`
+          : dayjs().format("YYYY-MM-DD");
+      link.download = `nhap-bao-bi_${rangeLabel}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Lỗi khi xuất Excel:", err);
+      alert("Xuất Excel thất bại, vui lòng thử lại");
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   return (
     <div className="p-4">
       {/* Header + nút nhập */}
@@ -631,6 +752,20 @@ const NhapBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
               Xóa lọc
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={exportingExcel}
+            title="Xuất Excel theo bộ lọc đang áp dụng"
+            className="flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {exportingExcel ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <FileSpreadsheet size={16} />
+            )}
+            {exportingExcel ? "Đang xuất..." : "Xuất Excel"}
+          </button>
           <button
             type="button"
             onClick={openAddModal}

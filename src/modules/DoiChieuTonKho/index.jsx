@@ -18,8 +18,8 @@ import "react-date-range/dist/theme/default.css";
 import ImportTonKho from "./import";
 import ExportTonKho from "./export";
 import DeleteAllTonKho from "./deleteall";
-import { khuyenMaiService } from "@/services/khuyenmai.service";
 import StatsDonut from "./dashboard";
+import { tonKhoService } from "@/services/tonhko.service";
 
 /* ------------------------------------------------------------------ */
 /* Hằng số                                                             */
@@ -252,7 +252,7 @@ const FilterSummary = memo(function FilterSummary({ filters }) {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await khuyenMaiService.getAllKhuyenMai({
+        const res = await tonKhoService.getAllKhuyenMai({
           page: 1,
           limit: FETCH_ALL_LIMIT,
           ...filters,
@@ -431,7 +431,7 @@ const DoiChieuTonKho = ({
     setLoading(true);
     setError("");
     try {
-      const res = await khuyenMaiService.getAllKhuyenMai({
+      const res = await tonKhoService.getAllKhuyenMai({
         page,
         limit,
         ...filters,

@@ -159,6 +159,12 @@ const rowToExcelRecord = (item) => {
   };
 };
 
+// Key dùng để phát hiện "đổi khung giờ" -> đổi màu band.
+// Ưu tiên slot label (9:00-16:00, 11:00-16:00...) vì đây là nhóm hiển thị
+// trên UI; fallback về giờ xuất thực tế nếu không khớp preset nào.
+const getBandKey = (item) =>
+  getSlotLabel(item) || formatTimeOnly(item.thoi_gian_xuat) || "no-time";
+
 /**
  * Nút xuất Excel cho BookXeTable, dùng exceljs.
  *
@@ -213,31 +219,52 @@ export default function ExportExcelButton({
         { header: "Ngày HT", key: "ngayHt", width: 14 },
       ];
 
-      // Style hàng header
+      // Style hàng header — nền trắng, chữ đen
       const headerRow = sheet.getRow(1);
-      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.font = { bold: true, color: { argb: "FF000000" } };
       headerRow.alignment = { vertical: "middle", horizontal: "center" };
       headerRow.height = 22;
       headerRow.eachCell((cell) => {
         cell.fill = {
           type: "pattern",
           pattern: "solid",
-          fgColor: { argb: "FF2563EB" }, // blue-600
+          fgColor: { argb: "FFF2DCDB" }, // hồng nhạt như trong ảnh
+        };
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFBFBFBF" } },
+          left: { style: "thin", color: { argb: "FFBFBFBF" } },
+          bottom: { style: "medium", color: { argb: "FF000000" } },
+          right: { style: "thin", color: { argb: "FFBFBFBF" } },
         };
       });
 
-      // Đổ dữ liệu, tô hồng các dòng đang giao khách
+      // 2 màu nhạt xen kẽ theo nhóm Giờ Xuất (giống dải màu bên table UI)
+      const BAND_COLORS = ["FFE9F3FF", "FFEAF7EC"]; // xanh dương nhạt / xanh lá nhạt
+      const ROSE_COLOR = "FFFFE4E6"; // ưu tiên tô hồng cho dòng giao khách
+
+      let bandIndex = -1;
+      let prevBandKey = null;
+
+      // Đổ dữ liệu, tô màu theo nhóm Giờ Xuất
       rows.forEach((item) => {
-        const row = sheet.addRow(rowToExcelRecord(item));
-        if (item.co_giao_khach) {
-          row.eachCell((cell) => {
-            cell.fill = {
-              type: "pattern",
-              pattern: "solid",
-              fgColor: { argb: "FFFFE4E6" }, // rose-100
-            };
-          });
+        const bandKey = getBandKey(item);
+        if (bandKey !== prevBandKey) {
+          bandIndex = (bandIndex + 1) % BAND_COLORS.length;
+          prevBandKey = bandKey;
         }
+
+        const row = sheet.addRow(rowToExcelRecord(item));
+        const fillColor = item.co_giao_khach
+          ? ROSE_COLOR
+          : BAND_COLORS[bandIndex];
+
+        row.eachCell((cell) => {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: fillColor },
+          };
+        });
       });
 
       // Border cho toàn bộ bảng + căn phải cột số

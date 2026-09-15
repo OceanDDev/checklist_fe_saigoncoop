@@ -180,11 +180,11 @@ const getMatchReasons = (item, selectedItems) => {
       reasons.add("ncv");
     }
     if (
-      item.lich_di_hang &&
-      sel.lich_di_hang &&
-      item.lich_di_hang === sel.lich_di_hang
+      item.lich_di_hang_bookxe && // 👈 đổi
+      sel.lich_di_hang_bookxe && // 👈 đổi
+      item.lich_di_hang_bookxe === sel.lich_di_hang_bookxe // 👈 đổi
     ) {
-      reasons.add("lich_di_hang");
+      reasons.add("lich_di_hang"); // giữ nguyên key label, chỉ đổi nguồn dữ liệu
     }
     if (item.chuyen && sel.chuyen && item.chuyen === sel.chuyen) {
       reasons.add("chuyen");
@@ -337,7 +337,9 @@ const ItemRow = memo(function ItemRow({
         <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-slate-500">
           <span className="font-medium text-slate-700">{item.kien} kiện</span>
           {item.ten_nvc && <span>NVC: {item.ten_nvc}</span>}
-          {item.lich_di_hang && <span>Lịch: {item.lich_di_hang}</span>}
+          {item.lich_di_hang_bookxe && ( // 👈 đổi
+            <span>Lịch: {item.lich_di_hang_bookxe}</span> // 👈 đổi
+          )}
           {item.quan && <span>{item.quan}</span>}
         </div>
         {isKienRot && item.ghiChuRotKien && (
@@ -915,7 +917,7 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
           ten_ch: selectedItems.map((s) => s.ten_ch).join(", "),
           so_luong_ch: String(selectedItems.length),
           kien: tongKien,
-          lich_di_hang: selectedItems[0]?.lich_di_hang || undefined,
+          lich_di_hang: selectedItems[0]?.lich_di_hang_bookxe || undefined, // 👈 đổi nguồn
           trangThai: "Chờ xe",
           co_giao_khach: coGiaoKhachChon || undefined,
           ngay_giao_khach: coGiaoKhachChon

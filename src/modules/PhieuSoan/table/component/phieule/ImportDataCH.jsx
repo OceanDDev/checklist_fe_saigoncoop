@@ -24,7 +24,8 @@ const HEADER_KEY_MAP = {
   [normalizeHeader("Quận")]: "quan",
   [normalizeHeader("Tên Cửa Hàng")]: "tench",
   [normalizeHeader("Chuyến")]: "chuyen",
-  [normalizeHeader("Lịch Đi Hàng")]: "lich_di_hang",
+  [normalizeHeader("Lịch Đặt Hàng")]: "lich_di_hang", // 👈 đổi tên cột header
+  [normalizeHeader("Lịch Đi Hàng")]: "lich_di_hang_bookxe", // 👈 thêm cột mới
   [normalizeHeader("Ghi chú cửa hàng")]: "ghi_chu_ch",
 };
 
@@ -39,7 +40,6 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
 
   if (!isOpen) return null;
 
-  // Xuất template Excel
   const handleExportTemplate = async () => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Template");
@@ -51,13 +51,15 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
       "Quận",
       "Tên Cửa Hàng",
       "Chuyến",
-      "Lịch Đi Hàng",
+      "Lịch Đặt Hàng", // 👈 đổi tên
+      "Lịch Đi Hàng", // 👈 thêm cột mới
       "Ghi chú cửa hàng",
     ]);
 
     headerRow.height = 25;
 
-    for (let i = 1; i <= 8; i++) {
+    for (let i = 1; i <= 9; i++) {
+      // 👈 8 -> 9
       const cell = headerRow.getCell(i);
       cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = {
@@ -77,10 +79,10 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
     worksheet.getColumn(4).width = 15;
     worksheet.getColumn(5).width = 30;
     worksheet.getColumn(6).width = 10;
-    worksheet.getColumn(7).width = 18;
-    worksheet.getColumn(8).width = 30;
+    worksheet.getColumn(7).width = 18; // Lịch Đặt Hàng
+    worksheet.getColumn(8).width = 18; // 👈 Lịch Đi Hàng
+    worksheet.getColumn(9).width = 30; // 👈 Ghi chú dịch xuống cột 9
 
-    // Thêm border
     const borderStyle = {
       top: { style: "thin", color: { argb: "FF000000" } },
       left: { style: "thin", color: { argb: "FF000000" } },
@@ -90,13 +92,13 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
 
     for (let i = 1; i <= worksheet.rowCount; i++) {
       const row = worksheet.getRow(i);
-      for (let j = 1; j <= 8; j++) {
+      for (let j = 1; j <= 9; j++) {
+        // 👈 8 -> 9
         const cell = row.getCell(j);
         cell.border = borderStyle;
       }
     }
 
-    // Xuất file
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -178,8 +180,6 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
       // Lấy ngày hiện tại
       const currentDate = new Date().toISOString().split("T")[0];
 
-      // jsonData đã có key chuẩn (sd_tf, so_document, mach, ...) nhờ
-      // colIndexToKey ở trên, chỉ cần ép kiểu string + trim + gắn ngày import
       const mappedData = jsonData.map((row) => ({
         sd_tf: String(row.sd_tf || "").trim(),
         so_document: String(row.so_document || "").trim(),
@@ -188,6 +188,7 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
         tench: String(row.tench || "").trim(),
         chuyen: String(row.chuyen || "").trim(),
         lich_di_hang: String(row.lich_di_hang || "").trim(),
+        lich_di_hang_bookxe: String(row.lich_di_hang_bookxe || "").trim(), // 👈 thêm
         ghi_chu_ch: String(row.ghi_chu_ch || "").trim(),
         ngay_import: currentDate,
       }));
@@ -226,13 +227,16 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
     setProgress({ current: 0, total: fullData.length });
 
     try {
-      // Validate dữ liệu bắt buộc
       const invalidRows = fullData.filter(
-        (row) => !row.mach || !row.tench || !row.lich_di_hang,
+        (row) =>
+          !row.mach ||
+          !row.tench ||
+          !row.lich_di_hang ||
+          !row.lich_di_hang_bookxe, // 👈 thêm điều kiện
       );
       if (invalidRows.length > 0) {
         setError(
-          `Có ${invalidRows.length} dòng thiếu Mã Cửa Hàng, Tên Cửa Hàng hoặc Lịch Đi Hàng`,
+          `Có ${invalidRows.length} dòng thiếu Mã Cửa Hàng, Tên Cửa Hàng, Lịch Đặt Hàng hoặc Lịch Đi Hàng`, // 👈 cập nhật message
         );
         setImporting(false);
         return;
@@ -383,7 +387,10 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
               <li>Tải file template Excel mẫu bằng nút bên dưới</li>
               <li>Điền dữ liệu vào file Excel theo đúng cột template</li>
               <li>Chọn file Excel đã điền để import vào hệ thống</li>
-              <li>Các cột bắt buộc: Mã Cửa Hàng, Tên Cửa Hàng, Lịch Đi Hàng</li>
+              <li>
+                Các cột bắt buộc: Mã Cửa Hàng, Tên Cửa Hàng, Lịch Đặt Hàng, Lịch
+                Đi Hàng
+              </li>
               <li className="text-green-700 font-medium">
                 ✓ Ngày import sẽ tự động lấy ngày hiện tại
               </li>
@@ -497,8 +504,12 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
                         Chuyến
                       </th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">
+                        Lịch Đặt Hàng
+                      </th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">
                         Lịch Đi Hàng
                       </th>
+                      {/* 👈 thêm */}
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">
                         Ghi chú
                       </th>
@@ -531,6 +542,10 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
                         <td className="px-3 py-2 text-slate-700">
                           {row.lich_di_hang}
                         </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {row.lich_di_hang_bookxe}
+                        </td>
+                        {/* 👈 thêm */}
                         <td className="px-3 py-2 text-slate-700">
                           {row.ghi_chu_ch}
                         </td>
