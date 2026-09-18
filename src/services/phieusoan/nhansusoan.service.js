@@ -237,6 +237,19 @@ const updateManyKienDuKien = async (data) => {
     throw error;
   }
 };
+
+const getKienTheoSoSoda = async (codes) => {
+  try {
+    const response = await ApiServer.post(
+      `${URL.phieusoan.nhansusoan}/kien-theo-soda`,
+      { codes },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi getKienTheoSoSoda:", error);
+    throw error;
+  }
+};
 export const nhanSuSoanService = {
   getAllNhanSuSoan, // GET    /api/saigoncoop/nhansusoan?page=1&limit=50&...
   getNhanSuSoanById, // GET    /api/saigoncoop/nhansusoan/:id
@@ -252,4 +265,5 @@ export const nhanSuSoanService = {
   addGiaoKhach,
   getTopNangSuatCongKhai,
   updateManyKienDuKien,
+  getKienTheoSoSoda
 };

@@ -82,7 +82,7 @@ const KienHT = ({ data, onUncomplete }) => {
                     arrow={true}
                     maxWidth="400px"
                   >
-                    <span className="block truncate max-w-[120px] mx-auto cursor-help">
+                    <span className="block truncate max-w-[160px] mx-auto cursor-help">
                       {fmtNum(item.soSoda)}
                     </span>
                   </Tippy>

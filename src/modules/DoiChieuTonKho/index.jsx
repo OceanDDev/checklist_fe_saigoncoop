@@ -19,12 +19,13 @@ import ImportTonKho from "./import";
 import ExportTonKho from "./export";
 import DeleteAllTonKho from "./deleteall";
 import StatsDonut from "./dashboard";
-import { tonKhoService } from "@/services/tonhko.service";
+import { tonKhoService } from "@/services/tonhkho.service";
 
 /* ------------------------------------------------------------------ */
 /* Hằng số                                                             */
 /* ------------------------------------------------------------------ */
 const TRANG_THAI_OPTIONS = ["Khớp", "Không Khớp", "Không có DATA"];
+const KHO_OPTIONS = ["810", "8101"];
 
 const TRANG_THAI_STYLE = {
   Khớp: "text-emerald-700 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-300 shadow-sm",
@@ -45,6 +46,7 @@ const DEFAULT_FILTERS = {
   name: "",
   lpn: "",
   slot: "",
+  kho: "",
   trangThai: "",
   tuNgay: "",
   denNgay: "",
@@ -237,9 +239,9 @@ const EmptyState = memo(function EmptyState() {
 });
 
 /* ------------------------------------------------------------------ */
-/* FilterSummary — tổng hợp On Hand / MMS / lượng lệch theo bộ lọc     */
-/* hiện tại. Tính trên TOÀN BỘ dữ liệu khớp bộ lọc (không chỉ trang    */
-/* đang xem) để không bị sai khi kết quả trải nhiều trang.             */
+/* FilterSummary — tổng hợp On Hand / MMS / lượng lệch / thành tiền    */
+/* theo bộ lọc hiện tại. Tính trên TOÀN BỘ dữ liệu khớp bộ lọc (không  */
+/* chỉ trang đang xem) để không bị sai khi kết quả trải nhiều trang.   */
 /* Vì MMS được denormalize lặp lại theo từng dòng slot/lpn của 1 SKU,  */
 /* nên phải gộp theo SKU trước rồi mới cộng, tránh đếm trùng MMS.      */
 /* ------------------------------------------------------------------ */
@@ -252,7 +254,7 @@ const FilterSummary = memo(function FilterSummary({ filters }) {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await tonKhoService.getAllKhuyenMai({
+        const res = await tonKhoService.getAllTonKho({
           page: 1,
           limit: FETCH_ALL_LIMIT,
           ...filters,
@@ -268,18 +270,23 @@ const FilterSummary = memo(function FilterSummary({ filters }) {
             bySku.set(key, {
               onHand: 0,
               mms: Number(item.luong_mms) || 0,
+              thanhTien: 0,
             });
           }
-          bySku.get(key).onHand += Number(item.luong_onhand) || 0;
+          const entry = bySku.get(key);
+          entry.onHand += Number(item.luong_onhand) || 0;
+          entry.thanhTien += Number(item.thanh_tien) || 0;
         });
 
         let totalOnHand = 0;
         let totalMms = 0;
         let totalLech = 0;
-        bySku.forEach(({ onHand, mms }) => {
+        let totalThanhTien = 0;
+        bySku.forEach(({ onHand, mms, thanhTien }) => {
           totalOnHand += onHand;
           totalMms += mms;
           totalLech += mms - onHand;
+          totalThanhTien += thanhTien;
         });
 
         if (!cancelled) {
@@ -288,6 +295,7 @@ const FilterSummary = memo(function FilterSummary({ filters }) {
             totalOnHand,
             totalMms,
             totalLech,
+            totalThanhTien,
           });
         }
       } catch (err) {
@@ -314,7 +322,8 @@ const FilterSummary = memo(function FilterSummary({ filters }) {
 
   if (!summary) return null;
 
-  const { skuCount, totalOnHand, totalMms, totalLech } = summary;
+  const { skuCount, totalOnHand, totalMms, totalLech, totalThanhTien } =
+    summary;
 
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-200">
@@ -329,6 +338,10 @@ const FilterSummary = memo(function FilterSummary({ filters }) {
       </span>
       <span className="text-xs text-slate-500">
         Tổng MMS: <b className="text-slate-800">{formatQty(totalMms)}</b>
+      </span>
+      <span className="text-xs text-slate-500">
+        Tổng thành tiền:{" "}
+        <b className="text-slate-800">{formatQty(totalThanhTien)}</b>
       </span>
       <span
         className={`rounded-md px-2.5 py-1 text-xs font-bold ring-1 ${
@@ -431,7 +444,7 @@ const DoiChieuTonKho = ({
     setLoading(true);
     setError("");
     try {
-      const res = await tonKhoService.getAllKhuyenMai({
+      const res = await tonKhoService.getAllTonKho({
         page,
         limit,
         ...filters,
@@ -529,19 +542,22 @@ const DoiChieuTonKho = ({
                 On Hand
               </th>
               <th className="px-3 py-2.5 text-right font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                Available
-              </th>
-              <th className="px-3 py-2.5 text-right font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
-                Allocate
-              </th>
-              <th className="px-3 py-2.5 text-right font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
                 On Hand MMS
+              </th>
+              <th className="px-3 py-2.5 text-right font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                Đơn giá
+              </th>
+              <th className="px-3 py-2.5 text-right font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                Thành tiền
               </th>
               <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
                 Trạng thái
               </th>
               <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
                 TG import
+              </th>
+              <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide text-[11px] text-slate-500 whitespace-nowrap">
+                Kho
               </th>
             </tr>
 
@@ -633,6 +649,20 @@ const DoiChieuTonKho = ({
                   }}
                 />
               </th>
+              <th className="px-3 py-1.5">
+                <select
+                  value={filters.kho}
+                  onChange={(e) => handleFilterChange("kho", e.target.value)}
+                  className={filterInputCls}
+                >
+                  <option value="">Tất cả</option>
+                  {KHO_OPTIONS.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </th>
             </tr>
           </thead>
 
@@ -696,15 +726,24 @@ const DoiChieuTonKho = ({
                     <td className="px-3 py-2 text-right font-semibold text-slate-700">
                       {formatQty(item.luong_onhand)}
                     </td>
-                    <td className="px-3 py-2 text-right text-slate-600">
-                      {formatQty(item.luong_available)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-slate-600">
-                      {formatQty(item.luong_allocate)}
-                    </td>
                     <td className="px-3 py-2 text-right font-semibold text-slate-700">
                       {item.luong_mms !== "" ? (
                         formatQty(item.luong_mms)
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right text-slate-600">
+                      {item.cost !== "" && item.cost !== undefined ? (
+                        formatQty(item.cost)
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right text-slate-600">
+                      {item.thanh_tien !== "" &&
+                      item.thanh_tien !== undefined ? (
+                        formatQty(item.thanh_tien)
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
@@ -727,6 +766,9 @@ const DoiChieuTonKho = ({
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-slate-500">
                       {formatDateTime(item.thoi_gian_impport)}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-slate-500">
+                      {item.kho || <span className="text-slate-300">—</span>}
                     </td>
                   </tr>
                 );

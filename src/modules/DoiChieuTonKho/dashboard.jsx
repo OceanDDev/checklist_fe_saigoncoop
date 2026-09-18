@@ -5,7 +5,7 @@ import { Pie } from "react-chartjs-2";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { Loader2 } from "lucide-react";
-import { tonKhoService } from "@/services/tonhko.service";
+import { tonKhoService } from "@/services/tonhkho.service";
 
 ChartJS.register(ArcElement, Tooltip, Legend, ChartDataLabels);
 

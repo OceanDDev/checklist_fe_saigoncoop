@@ -103,7 +103,7 @@ const RotKienRow = ({
           arrow={true}
           maxWidth="400px"
         >
-          <span className="block truncate max-w-[80px] mx-auto cursor-help">
+         <span className="block truncate max-w-[140px] mx-auto cursor-help">
             {fmtNum(data.soSoda)}
           </span>
         </Tippy>

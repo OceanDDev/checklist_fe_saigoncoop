@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Trash2, AlertTriangle, Loader2, X } from "lucide-react";
-import { tonKhoService } from "@/services/tonhko.service";
+import { tonKhoService } from "@/services/tonhkho.service";
 
 const CONFIRM_TEXT = "XOA HET";
 
@@ -31,7 +31,7 @@ const DeleteAllTonKho = ({ onDeleted, disabled }) => {
     setDeleting(true);
     setError("");
     try {
-      await tonKhoService.deleteAllKhuyenMai();
+      await tonKhoService.deleteAllTonKho();
       setOpen(false);
       setConfirmText("");
       onDeleted?.();

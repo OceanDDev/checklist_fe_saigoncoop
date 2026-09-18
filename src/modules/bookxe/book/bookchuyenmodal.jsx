@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   PencilLine,
   CircleDashed,
+  Layers,
 } from "lucide-react";
 import { bookXeService } from "@/services/bookxe.service";
 
@@ -34,7 +35,7 @@ const MATCH_PRIORITY = [
   "lenh_dieu_dong",
   "ncv",
   "lich_di_hang",
-  "chuyen", // 👈 thêm
+  "chuyen",
 ];
 
 const MATCH_LABEL = {
@@ -43,7 +44,7 @@ const MATCH_LABEL = {
   lenh_dieu_dong: "Từng đi chung LĐD",
   ncv: "Chung NVC",
   lich_di_hang: "Chung lịch đi hàng",
-  chuyen: "Chung chuyến", // 👈 thêm
+  chuyen: "Chung chuyến",
 };
 
 const SLOT_PRESETS = [
@@ -56,6 +57,7 @@ const SLOT_PRESETS = [
   { xuat: "15:30", toi: "17:00", label: "17:00 - 21:00", color: "#EF4444" },
   { xuat: "17:30", toi: "20:30", label: "20:30 - 22:00", color: "#A855F7" },
 ];
+
 const CHUYEN_STYLE = {
   SÁNG: {
     badge:
@@ -107,6 +109,7 @@ const CHUYEN_STYLE = {
     iconColor: "text-rose-500",
   },
 };
+
 const TRANG_THAI_SOAN_STYLE = {
   "Hoàn thành": {
     badge:
@@ -133,6 +136,7 @@ const TRANG_THAI_SOAN_STYLE = {
     label: "Chưa soạn",
   },
 };
+
 const DEFAULT_CHUYEN_STYLE = {
   badge:
     "text-slate-600 bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-300 shadow-sm",
@@ -146,13 +150,176 @@ const getChuyenStyle = (chuyen) => {
   const key = chuyen.trim().toUpperCase();
   return CHUYEN_STYLE[key] || DEFAULT_CHUYEN_STYLE;
 };
+
 const QUICK_FILTERS = [
   { key: "all", label: "Tất cả" },
   { key: "giaokhach", label: "Giao khách" },
   { key: "kienrot", label: "Kiện rớt" },
+  { key: "phanbo", label: "Phân bổ" },
   { key: "ghepchung", label: "Từng ghép chung" },
 ];
+
 // ─── Helpers thuần (không phụ thuộc state, an toàn để định nghĩa ngoài component) ──
+
+// Lấy phần "gốc" của quận (bookxe), tính trước dấu chấm đầu tiên.
+// Vd: "Bình Dương. P Dĩ An" -> "Bình Dương"
+const getQuanGoc = (quanBookxe) => {
+  if (!quanBookxe) return "";
+  return quanBookxe.split(".")[0].trim();
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// GHI CHÚ QUAN TRỌNG VỀ MÔ HÌNH DỮ LIỆU (đọc kỹ trước khi sửa logic gộp):
+//
+// Mỗi item trả về từ API suggestBookXe() thuộc 1 trong 3 NGUỒN kiện độc lập,
+// có thể cộng dồn/trùng lặp với nhau trên cùng 1 cửa hàng:
+//
+//   1) "Giao khách"  — cờ it.coGiaoKhach === true. Có thể trùng thêm với
+//      loại (2) hoặc (3) bên dưới (1 item vừa giao khách vừa rớt/phân bổ).
+//
+//   2) "Bảng rớt kiện" — it.nguon === "kien_rot". Bảng này KHÔNG phải 1 loại
+//      kiện duy nhất — nó gộp chung 2 loại con, phân biệt bằng nội dung
+//      field ghiChuRotKien:
+//        - ghiChuRotKien bắt đầu bằng "Phân Bổ"  -> loại con "Phân bổ"
+//        - ghiChuRotKien khác (hoặc rỗng)        -> loại con "Rớt kiện" (mặc định)
+//
+//   3) "Kiện thường" — không phải giao khách, không thuộc bảng rớt kiện.
+//
+// => Khi thêm loại kiện mới trong tương lai, chỉ cần sửa isPhanBoItem (hoặc
+//    thêm hàm phân loại tương tự) — không được gán trực tiếp coKienRot cho
+//    mọi item có nguon === "kien_rot" nữa.
+// ════════════════════════════════════════════════════════════════════════
+const isPhanBoItem = (it) =>
+  (it.ghiChuRotKien || "").trim().toUpperCase().startsWith("PHÂN BỔ");
+
+// Gộp danh sách item "phẳng" thành danh sách nhóm theo mã cửa hàng — 1 cửa
+// hàng chỉ hiện 1 dòng, tổng kiện cộng dồn từ tất cả các loại, kèm breakdown
+// để hiển thị chi tiết. Đồng thời tiền tính sẵn chuỗi lowercase của mã/tên CH
+// để lọc tìm kiếm không phải gọi toLowerCase() lặp lại mỗi lần gõ phím.
+const groupItemsByCuaHang = (rawItems) => {
+  const map = new Map();
+
+  for (const it of rawItems) {
+    const gKey = `group:${it.ma_ch}`;
+    let g = map.get(gKey);
+    if (!g) {
+      g = {
+        key: gKey,
+        ma_ch: it.ma_ch,
+        ten_ch: it.ten_ch,
+        maChLower: (it.ma_ch || "").toLowerCase(),
+        tenChLower: (it.ten_ch || "").toLowerCase(),
+        kien: 0,
+        kienGiaoKhach: 0,
+        kienRot: 0,
+        kienPhanBo: 0,
+        kienBinhThuong: 0,
+        coGiaoKhach: false,
+        coKienRot: false,
+        coPhanBo: false,
+        coBinhThuong: false,
+        loaiCuaHang: it.loaiCuaHang || "",
+        quan_bookxe: it.quan_bookxe || "",
+        ten_nvc: it.ten_nvc || "",
+        ma_ncv: it.ma_ncv || "",
+        lich_di_hang_bookxe: it.lich_di_hang_bookxe || "",
+        chuyen: it.chuyen || "",
+        trangThaiSoan: it.trangThaiSoan,
+        tungGhepChungVoi: [],
+        lenhDieuDongLienQuan: [],
+        ngayGiaoKhach: null,
+        ngayRotKien: null,
+        ngayPhanBo: null,
+        ghiChuRotKien: null,
+        ghiChuPhanBo: null,
+        subItems: [],
+        keys: [],
+      };
+      map.set(gKey, g);
+    }
+
+    const kien = it.kien || 0;
+    g.kien += kien;
+    g.keys.push(it.key);
+    g.subItems.push(it);
+
+    if (it.coGiaoKhach) {
+      // Loại 1: Giao khách
+      g.coGiaoKhach = true;
+      g.kienGiaoKhach += kien;
+      g.ngayGiaoKhach = g.ngayGiaoKhach || it.ngayGiaoKhach;
+    } else if (it.nguon === "kien_rot" && isPhanBoItem(it)) {
+      // Loại 2a: thuộc bảng rớt kiện, ghiChu = "Phân Bổ" -> tách riêng
+      g.coPhanBo = true;
+      g.kienPhanBo += kien;
+      g.ngayPhanBo = g.ngayPhanBo || it.ngayRotKien;
+      g.ghiChuPhanBo = g.ghiChuPhanBo || it.ghiChuRotKien;
+    } else if (it.nguon === "kien_rot") {
+      // Loại 2b: thuộc bảng rớt kiện, ghiChu không phải Phân Bổ -> Rớt kiện
+      g.coKienRot = true;
+      g.kienRot += kien;
+      g.ngayRotKien = g.ngayRotKien || it.ngayRotKien;
+      g.ghiChuRotKien = g.ghiChuRotKien || it.ghiChuRotKien;
+    } else {
+      // Loại 3: Kiện thường
+      g.coBinhThuong = true;
+      g.kienBinhThuong += kien;
+    }
+
+    // Item vừa Giao khách vừa thuộc bảng rớt kiện: nhánh trên chỉ tính vào
+    // kienGiaoKhach, cần bổ sung cờ + ngày + ghi chú Phân bổ/Rớt kiện ở đây.
+    if (it.nguon === "kien_rot" && it.coGiaoKhach) {
+      if (isPhanBoItem(it)) {
+        g.coPhanBo = true;
+        g.ngayPhanBo = g.ngayPhanBo || it.ngayRotKien;
+        g.ghiChuPhanBo = g.ghiChuPhanBo || it.ghiChuRotKien;
+      } else {
+        g.coKienRot = true;
+        g.ngayRotKien = g.ngayRotKien || it.ngayRotKien;
+        g.ghiChuRotKien = g.ghiChuRotKien || it.ghiChuRotKien;
+      }
+    }
+
+    g.quan_bookxe = g.quan_bookxe || it.quan_bookxe || "";
+    g.ten_nvc = g.ten_nvc || it.ten_nvc || "";
+    g.ma_ncv = g.ma_ncv || it.ma_ncv || "";
+    g.lich_di_hang_bookxe =
+      g.lich_di_hang_bookxe || it.lich_di_hang_bookxe || "";
+    g.chuyen = g.chuyen || it.chuyen || "";
+    g.loaiCuaHang = g.loaiCuaHang || it.loaiCuaHang || "";
+    if (it.tungGhepChungVoi?.length)
+      g.tungGhepChungVoi.push(...it.tungGhepChungVoi);
+    if (it.lenhDieuDongLienQuan?.length)
+      g.lenhDieuDongLienQuan.push(...it.lenhDieuDongLienQuan);
+  }
+
+  return Array.from(map.values());
+};
+
+// Số loại kiện khác nhau đang gộp trong 1 cửa hàng — chỉ có ý nghĩa hiển thị
+// (breakdown) khi >= 2.
+const getSoLoai = (g) =>
+  [g.coGiaoKhach, g.coKienRot, g.coPhanBo, g.coBinhThuong].filter(Boolean)
+    .length;
+
+const formatBreakdown = (g) => {
+  const parts = [];
+  if (g.kienGiaoKhach > 0)
+    parts.push({
+      label: `${g.kienGiaoKhach} giao khách`,
+      cls: "text-rose-600",
+    });
+  if (g.kienRot > 0)
+    parts.push({ label: `${g.kienRot} kiện rớt`, cls: "text-amber-600" });
+  if (g.kienPhanBo > 0)
+    parts.push({ label: `${g.kienPhanBo} phân bổ`, cls: "text-cyan-600" });
+  if (g.kienBinhThuong > 0)
+    parts.push({
+      label: `${g.kienBinhThuong} kiện thường`,
+      cls: "text-blue-600",
+    });
+  return parts;
+};
 
 const getMatchReasons = (item, selectedItems) => {
   if (selectedItems.length === 0) return [];
@@ -167,7 +334,11 @@ const getMatchReasons = (item, selectedItems) => {
     ) {
       reasons.add("tung_ghep_chung");
     }
-    if (item.quan && sel.quan && item.quan === sel.quan) {
+    if (
+      item.quan_bookxe &&
+      sel.quan_bookxe &&
+      getQuanGoc(item.quan_bookxe) === getQuanGoc(sel.quan_bookxe)
+    ) {
       reasons.add("quan");
     }
     if (item.lenhDieuDongLienQuan?.length && sel.lenhDieuDongLienQuan?.length) {
@@ -180,16 +351,15 @@ const getMatchReasons = (item, selectedItems) => {
       reasons.add("ncv");
     }
     if (
-      item.lich_di_hang_bookxe && // 👈 đổi
-      sel.lich_di_hang_bookxe && // 👈 đổi
-      item.lich_di_hang_bookxe === sel.lich_di_hang_bookxe // 👈 đổi
+      item.lich_di_hang_bookxe &&
+      sel.lich_di_hang_bookxe &&
+      item.lich_di_hang_bookxe === sel.lich_di_hang_bookxe
     ) {
-      reasons.add("lich_di_hang"); // giữ nguyên key label, chỉ đổi nguồn dữ liệu
+      reasons.add("lich_di_hang");
     }
     if (item.chuyen && sel.chuyen && item.chuyen === sel.chuyen) {
       reasons.add("chuyen");
     }
-    // Đủ reasons rồi thì không cần duyệt tiếp các sel khác
     if (reasons.size === MATCH_PRIORITY.length) break;
   }
   return MATCH_PRIORITY.filter((r) => reasons.has(r));
@@ -229,11 +399,16 @@ const ItemRow = memo(function ItemRow({
 }) {
   const isSuggested = !checked && matchReasons.length > 0;
   const isGiaoKhach = !!item.coGiaoKhach;
-  const isKienRot = item.nguon === "kien_rot";
+  const isKienRot = !!item.coKienRot;
+  const isPhanBo = !!item.coPhanBo;
   const chuyenStyle = getChuyenStyle(item.chuyen);
   const ChuyenIcon = chuyenStyle?.icon;
-  const soanStyle = TRANG_THAI_SOAN_STYLE[item.trangThaiSoan]; // 👈
-  const SoanIcon = soanStyle?.icon; // 👈
+  const soanStyle = TRANG_THAI_SOAN_STYLE[item.trangThaiSoan];
+  const SoanIcon = soanStyle?.icon;
+
+  const soLoai = getSoLoai(item);
+  const isMixed = soLoai > 1;
+  const breakdown = isMixed ? formatBreakdown(item) : [];
 
   return (
     <label
@@ -245,9 +420,11 @@ const ItemRow = memo(function ItemRow({
             ? "border-rose-300 bg-rose-50/70 hover:border-rose-400 hover:shadow-sm"
             : isKienRot
               ? "border-amber-300 bg-amber-50/70 hover:border-amber-400 hover:shadow-sm"
-              : isSuggested
-                ? "border-emerald-300 bg-emerald-50/60 hover:border-emerald-400"
-                : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+              : isPhanBo
+                ? "border-cyan-300 bg-cyan-50/70 hover:border-cyan-400 hover:shadow-sm"
+                : isSuggested
+                  ? "border-emerald-300 bg-emerald-50/60 hover:border-emerald-400"
+                  : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
       ].join(" ")}
     >
       <input
@@ -276,8 +453,15 @@ const ItemRow = memo(function ItemRow({
             <span className="font-normal text-amber-600">(cần rebook lại)</span>
           </div>
         )}
+        {isPhanBo && (
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-cyan-600">
+            <Shuffle size={13} />
+            Phân bổ
+            {item.ngayPhanBo ? ` — ngày ${formatNgayVN(item.ngayPhanBo)}` : ""}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
-          {isSuggested && !isGiaoKhach && !isKienRot && (
+          {isSuggested && !isGiaoKhach && !isKienRot && !isPhanBo && (
             <Sparkles size={14} className="shrink-0 text-emerald-500" />
           )}
           <span className="text-[15px] font-semibold text-slate-800">
@@ -300,21 +484,36 @@ const ItemRow = memo(function ItemRow({
             </span>
           )}
 
-          <span
-            className={[
-              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
-              item.nguon === "kien_rot"
-                ? "bg-amber-50 text-amber-600"
-                : "bg-blue-50 text-blue-600",
-            ].join(" ")}
-          >
-            {item.nguon === "kien_rot" ? (
-              <RotateCcw size={12} />
-            ) : (
-              <PackageCheck size={12} />
-            )}
-            {item.nguon === "kien_rot" ? "Kiện rớt" : "Kiện mới"}
-          </span>
+          {isMixed ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2.5 py-1 text-xs font-medium text-fuchsia-600">
+              <Layers size={12} />
+              Gộp {soLoai} loại kiện
+            </span>
+          ) : (
+            <span
+              className={[
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
+                item.coKienRot
+                  ? "bg-amber-50 text-amber-600"
+                  : item.coPhanBo
+                    ? "bg-cyan-50 text-cyan-600"
+                    : "bg-blue-50 text-blue-600",
+              ].join(" ")}
+            >
+              {item.coKienRot ? (
+                <RotateCcw size={12} />
+              ) : item.coPhanBo ? (
+                <Shuffle size={12} />
+              ) : (
+                <PackageCheck size={12} />
+              )}
+              {item.coKienRot
+                ? "Kiện rớt"
+                : item.coPhanBo
+                  ? "Phân bổ"
+                  : "Kiện mới"}
+            </span>
+          )}
           {item.loaiCuaHang && (
             <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
               {item.loaiCuaHang}
@@ -335,16 +534,32 @@ const ItemRow = memo(function ItemRow({
           )}
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-slate-500">
-          <span className="font-medium text-slate-700">{item.kien} kiện</span>
+          <span className="font-medium text-slate-700">
+            {isMixed ? `Tổng ${item.kien} kiện` : `${item.kien} kiện`}
+          </span>
           {item.ten_nvc && <span>NVC: {item.ten_nvc}</span>}
-          {item.lich_di_hang_bookxe && ( // 👈 đổi
-            <span>Lịch: {item.lich_di_hang_bookxe}</span> // 👈 đổi
+          {item.lich_di_hang_bookxe && (
+            <span>Lịch: {item.lich_di_hang_bookxe}</span>
           )}
-          {item.quan && <span>{item.quan}</span>}
+          {item.quan_bookxe && <span>{item.quan_bookxe}</span>}
         </div>
+        {isMixed && breakdown.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]">
+            {breakdown.map((b) => (
+              <span key={b.label} className={`font-medium ${b.cls}`}>
+                {b.label}
+              </span>
+            ))}
+          </div>
+        )}
         {isKienRot && item.ghiChuRotKien && (
           <div className="mt-1.5 text-[13px] italic text-amber-600">
             Ghi chú: {item.ghiChuRotKien}
+          </div>
+        )}
+        {isPhanBo && item.ghiChuPhanBo && (
+          <div className="mt-1.5 text-[13px] italic text-cyan-600">
+            Ghi chú: {item.ghiChuPhanBo}
           </div>
         )}
         {matchReasons.length > 0 && (
@@ -368,9 +583,12 @@ const SelectionSummary = memo(function SelectionSummary({
   selectedItems,
   nguong,
   tongKien,
+  tongKienGoc,
+  onTongKienChange,
   vuotNguong,
   coLoaiKhacNhau,
   coGiaoKhachChon,
+  coPhanBoChon,
   onRemove,
 }) {
   return (
@@ -383,8 +601,21 @@ const SelectionSummary = memo(function SelectionSummary({
           </span>{" "}
           cửa hàng
         </span>
-        <span className="text-xl font-bold text-slate-800">
-          {tongKien} kiện{nguong > 0 ? ` / ${nguong}` : ""}
+        <span className="flex items-center gap-1.5 text-xl font-bold text-slate-800">
+          <input
+            type="number"
+            min={tongKienGoc}
+            value={tongKien}
+            onChange={(e) => onTongKienChange(Number(e.target.value))}
+            onBlur={(e) => {
+              const val = Number(e.target.value);
+              if (Number.isNaN(val) || val < tongKienGoc) {
+                onTongKienChange(tongKienGoc);
+              }
+            }}
+            className="w-20 rounded-md border border-slate-300 px-2 py-1 text-right text-base font-bold text-slate-800 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          />
+          <span>kiện{nguong > 0 ? ` / ${nguong}` : ""}</span>
         </span>
       </div>
 
@@ -401,10 +632,22 @@ const SelectionSummary = memo(function SelectionSummary({
       )}
 
       <div className="mt-3 space-y-2">
+        {tongKien > tongKienGoc && (
+          <p className="text-xs text-slate-400">
+            Số kiện thực tế theo cửa hàng đã chọn: {tongKienGoc} — đang điều
+            chỉnh tăng lên {tongKien}.
+          </p>
+        )}
         {coGiaoKhachChon && (
           <p className="flex items-center gap-1.5 text-sm font-medium text-rose-600">
             <UserRound size={15} />
             Có chuyến giao khách trong lựa chọn — ưu tiên book đúng ngày.
+          </p>
+        )}
+        {coPhanBoChon && (
+          <p className="flex items-center gap-1.5 text-sm font-medium text-cyan-600">
+            <Shuffle size={15} />
+            Có kiện phân bổ trong lựa chọn.
           </p>
         )}
         {vuotNguong && (
@@ -423,38 +666,49 @@ const SelectionSummary = memo(function SelectionSummary({
 
       {selectedItems.length > 0 && (
         <div className="mt-4 max-h-72 space-y-2 overflow-y-auto border-t border-slate-100 pt-4">
-          {selectedItems.map((s) => (
-            <div
-              key={s.key}
-              className={[
-                "flex items-center justify-between rounded-lg px-3 py-2.5 text-sm",
-                s.coGiaoKhach
-                  ? "bg-rose-50 text-rose-700"
-                  : "bg-slate-50 text-slate-600",
-              ].join(" ")}
-            >
-              <span className="truncate pr-2">
-                {s.coGiaoKhach && (
-                  <UserRound size={13} className="mr-1 inline" />
-                )}
-                <span className="font-semibold text-slate-800">{s.ma_ch}</span>{" "}
-                - {s.ten_ch}
-              </span>
-              <span className="flex shrink-0 items-center gap-2.5">
-                <span className="font-medium text-slate-500">
-                  {s.kien} kiện
+          {selectedItems.map((s) => {
+            const soLoai = getSoLoai(s);
+            const breakdown = soLoai > 1 ? formatBreakdown(s) : [];
+            return (
+              <div
+                key={s.key}
+                className={[
+                  "flex items-center justify-between rounded-lg px-3 py-2.5 text-sm",
+                  s.coGiaoKhach
+                    ? "bg-rose-50 text-rose-700"
+                    : "bg-slate-50 text-slate-600",
+                ].join(" ")}
+              >
+                <span className="min-w-0 truncate pr-2">
+                  {s.coGiaoKhach && (
+                    <UserRound size={13} className="mr-1 inline" />
+                  )}
+                  <span className="font-semibold text-slate-800">
+                    {s.ma_ch}
+                  </span>{" "}
+                  - {s.ten_ch}
+                  {breakdown.length > 0 && (
+                    <span className="ml-1.5 text-xs font-normal text-slate-400">
+                      ({breakdown.map((b) => b.label).join(" + ")})
+                    </span>
+                  )}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onRemove(s)}
-                  title="Bỏ chọn"
-                  className="rounded-full p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
-                >
-                  <X size={14} />
-                </button>
-              </span>
-            </div>
-          ))}
+                <span className="flex shrink-0 items-center gap-2.5">
+                  <span className="font-medium text-slate-500">
+                    {s.kien} kiện
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(s)}
+                    title="Bỏ chọn"
+                    className="rounded-full p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -466,13 +720,15 @@ const BookForm = memo(function BookForm({
   onCancel,
   onConfirm,
   submitting,
+  tongKien,
 }) {
   const ncvGoiY = selectedItems.find((s) => s.ma_ncv)?.ma_ncv || "";
   const tenNvcGoiY = selectedItems.find((s) => s.ten_nvc)?.ten_nvc || "";
-  const quanGoiY = selectedItems.every((s) => s.quan === selectedItems[0]?.quan)
-    ? selectedItems[0]?.quan || ""
+  const quanGoiY = selectedItems.every(
+    (s) => s.quan_bookxe === selectedItems[0]?.quan_bookxe,
+  )
+    ? selectedItems[0]?.quan_bookxe || ""
     : "";
-  const tongKien = selectedItems.reduce((sum, s) => sum + (s.kien || 0), 0);
   const coGiaoKhach = selectedItems.some((s) => s.coGiaoKhach);
 
   const [form, setForm] = useState({
@@ -747,15 +1003,25 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
   const [items, setItems] = useState([]);
   const [selectedKeys, setSelectedKeys] = useState([]);
   const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState(""); // giá trị đã debounce, dùng để lọc thật
+  const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedQuan, setSelectedQuan] = useState("");
   const [selectedChuyen, setSelectedChuyen] = useState("");
+  const [selectedLichDiHang, setSelectedLichDiHang] = useState("");
+  const [tongKienOverride, setTongKienOverride] = useState(null);
+
+  // Gộp toàn bộ item theo mã cửa hàng TRƯỚC khi lọc — để 1 cửa hàng có cả
+  // giao khách / kiện rớt / phân bổ / kiện thường luôn hiện 1 dòng duy nhất
+  // với tổng kiện cộng dồn, dù filter đang áp dụng theo loại nào.
+  const groupedAll = useMemo(() => groupItemsByCuaHang(items), [items]);
 
   const quanOptions = useMemo(
-    () => Array.from(new Set(items.map((i) => i.quan).filter(Boolean))).sort(),
+    () =>
+      Array.from(
+        new Set(items.map((i) => getQuanGoc(i.quan_bookxe)).filter(Boolean)),
+      ).sort(),
     [items],
   );
   const chuyenOptions = useMemo(
@@ -763,6 +1029,14 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
       Array.from(new Set(items.map((i) => i.chuyen).filter(Boolean))).sort(),
     [items],
   );
+  const lichDiHangOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(items.map((i) => i.lich_di_hang_bookxe).filter(Boolean)),
+      ).sort(),
+    [items],
+  );
+
   // Debounce ô search 200ms — tránh lọc lại toàn danh sách mỗi ký tự gõ.
   useEffect(() => {
     const t = setTimeout(
@@ -779,8 +1053,9 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
     setSearchInput("");
     setSearch("");
     setQuickFilter("all");
-    setSelectedQuan(""); // 👈 thêm
-    setSelectedChuyen(""); // 👈 thêm
+    setSelectedQuan("");
+    setSelectedChuyen("");
+    setSelectedLichDiHang("");
     fetchItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -804,46 +1079,61 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
     }
   }, []);
 
-  const filteredItems = useMemo(() => {
-    let list = items;
+  // Dùng maChLower/tenChLower đã tiền tính sẵn trong groupItemsByCuaHang —
+  // tránh gọi toLowerCase() lặp lại trên toàn danh sách mỗi lần search đổi.
+  const filteredGroups = useMemo(() => {
+    let list = groupedAll;
     if (search) {
       list = list.filter(
-        (it) =>
-          it.ma_ch?.toLowerCase().includes(search) ||
-          it.ten_ch?.toLowerCase().includes(search),
+        (g) => g.maChLower.includes(search) || g.tenChLower.includes(search),
       );
     }
-    if (quickFilter === "giaokhach") list = list.filter((it) => it.coGiaoKhach);
-    else if (quickFilter === "kienrot")
-      list = list.filter((it) => it.nguon === "kien_rot");
+    if (quickFilter === "giaokhach") list = list.filter((g) => g.coGiaoKhach);
+    else if (quickFilter === "kienrot") list = list.filter((g) => g.coKienRot);
+    else if (quickFilter === "phanbo") list = list.filter((g) => g.coPhanBo);
     else if (quickFilter === "ghepchung")
-      list = list.filter((it) => it.tungGhepChungVoi?.length);
+      list = list.filter((g) => g.tungGhepChungVoi?.length);
 
-    if (selectedQuan) list = list.filter((it) => it.quan === selectedQuan);
-    if (selectedChuyen)
-      list = list.filter((it) => it.chuyen === selectedChuyen);
+    if (selectedQuan)
+      list = list.filter((g) => getQuanGoc(g.quan_bookxe) === selectedQuan);
+    if (selectedChuyen) list = list.filter((g) => g.chuyen === selectedChuyen);
+    if (selectedLichDiHang)
+      list = list.filter((g) => g.lich_di_hang_bookxe === selectedLichDiHang);
 
     return list;
-  }, [items, search, quickFilter, selectedQuan, selectedChuyen]);
+  }, [
+    groupedAll,
+    search,
+    quickFilter,
+    selectedQuan,
+    selectedChuyen,
+    selectedLichDiHang,
+  ]);
 
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const selectedItems = useMemo(
-    () => items.filter((it) => selectedKeySet.has(it.key)),
-    [items, selectedKeySet],
+    () => groupedAll.filter((g) => selectedKeySet.has(g.key)),
+    [groupedAll, selectedKeySet],
   );
 
-  const soLuongGiaoKhach = useMemo(
-    () => filteredItems.filter((it) => it.coGiaoKhach).length,
-    [filteredItems],
-  );
-
-  const soLuongKienRot = useMemo(
-    () => filteredItems.filter((it) => it.nguon === "kien_rot").length,
-    [filteredItems],
+  // Gộp 3 lượt đếm (giao khách / kiện rớt / phân bổ) thành 1 lượt reduce duy
+  // nhất thay vì gọi .filter() riêng 3 lần trên cùng mảng filteredGroups.
+  const { soLuongGiaoKhach, soLuongKienRot, soLuongPhanBo } = useMemo(
+    () =>
+      filteredGroups.reduce(
+        (acc, g) => {
+          if (g.coGiaoKhach) acc.soLuongGiaoKhach += 1;
+          if (g.coKienRot) acc.soLuongKienRot += 1;
+          if (g.coPhanBo) acc.soLuongPhanBo += 1;
+          return acc;
+        },
+        { soLuongGiaoKhach: 0, soLuongKienRot: 0, soLuongPhanBo: 0 },
+      ),
+    [filteredGroups],
   );
 
   const sortedItems = useMemo(() => {
-    return filteredItems
+    return filteredGroups
       .map((item) => {
         const checked = selectedKeySet.has(item.key);
         const matchReasons = checked
@@ -863,16 +1153,20 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
           const gkB = b.item.coGiaoKhach ? 1 : 0;
           if (gkA !== gkB) return gkB - gkA;
 
-          const rotA = a.item.nguon === "kien_rot" ? 1 : 0;
-          const rotB = b.item.nguon === "kien_rot" ? 1 : 0;
+          const rotA = a.item.coKienRot ? 1 : 0;
+          const rotB = b.item.coKienRot ? 1 : 0;
           if (rotA !== rotB) return rotB - rotA;
+
+          const pbA = a.item.coPhanBo ? 1 : 0;
+          const pbB = b.item.coPhanBo ? 1 : 0;
+          if (pbA !== pbB) return pbB - pbA;
 
           const diff = b.matchScore - a.matchScore;
           if (diff !== 0) return diff;
         }
         return 0;
       });
-  }, [filteredItems, selectedKeySet, selectedItems]);
+  }, [filteredGroups, selectedKeySet, selectedItems]);
 
   const toggleItem = useCallback((item) => {
     setSelectedKeys((prev) =>
@@ -882,10 +1176,32 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
     );
   }, []);
 
-  const tongKien = useMemo(
+  // Tổng kiện "gốc" — cộng dồn thật từ các cửa hàng đã chọn.
+  const tongKienGoc = useMemo(
     () => selectedItems.reduce((sum, s) => sum + (s.kien || 0), 0),
     [selectedItems],
   );
+
+  useEffect(() => {
+    setTongKienOverride(null);
+  }, [selectedKeys]);
+
+  const tongKien =
+    tongKienOverride != null && tongKienOverride > tongKienGoc
+      ? tongKienOverride
+      : tongKienGoc;
+
+  const handleTongKienChange = useCallback(
+    (value) => {
+      if (value === "" || Number.isNaN(value)) {
+        setTongKienOverride(null);
+        return;
+      }
+      setTongKienOverride(Math.max(value, tongKienGoc));
+    },
+    [tongKienGoc],
+  );
+
   const loaiChon = selectedItems[0]?.loaiCuaHang;
   const coLoaiKhacNhau = useMemo(
     () => selectedItems.some((s) => s.loaiCuaHang !== loaiChon),
@@ -895,6 +1211,10 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
   const vuotNguong = nguong > 0 && tongKien > nguong;
   const coGiaoKhachChon = useMemo(
     () => selectedItems.some((s) => s.coGiaoKhach),
+    [selectedItems],
+  );
+  const coPhanBoChon = useMemo(
+    () => selectedItems.some((s) => s.coPhanBo),
     [selectedItems],
   );
 
@@ -917,20 +1237,23 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
           ten_ch: selectedItems.map((s) => s.ten_ch).join(", "),
           so_luong_ch: String(selectedItems.length),
           kien: tongKien,
-          lich_di_hang: selectedItems[0]?.lich_di_hang_bookxe || undefined, // 👈 đổi nguồn
+          lich_di_hang: selectedItems[0]?.lich_di_hang_bookxe || undefined,
           trangThai: "Chờ xe",
           co_giao_khach: coGiaoKhachChon || undefined,
           ngay_giao_khach: coGiaoKhachChon
             ? selectedItems.find((s) => s.coGiaoKhach)?.ngayGiaoKhach
             : undefined,
-          nhan_su_soan_ids: selectedItems.flatMap((s) => s.nhanSuSoanIds || []),
-          rot_kien_ids: selectedItems.flatMap((s) => s.rotKienIds || []),
+          nhan_su_soan_ids: selectedItems.flatMap((s) =>
+            s.subItems.flatMap((si) => si.nhanSuSoanIds || []),
+          ),
+          rot_kien_ids: selectedItems.flatMap((s) =>
+            s.subItems.flatMap((si) => si.rotKienIds || []),
+          ),
         };
 
         await bookXeService.createBookXe(payload);
         onBooked?.();
 
-        // 👇 thay vì đóng modal, refresh lại danh sách + reset lựa chọn để book tiếp
         setSelectedKeys([]);
         setShowForm(false);
         setSelectedQuan("");
@@ -984,6 +1307,7 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
               onCancel={handleCancelForm}
               onConfirm={handleConfirmBook}
               submitting={submitting}
+              tongKien={tongKien}
             />
           ) : loading ? (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-400">
@@ -1067,16 +1391,35 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
                     ))}
                   </select>
 
-                  {(selectedQuan || selectedChuyen) && (
+                  <select
+                    value={selectedLichDiHang}
+                    onChange={(e) => setSelectedLichDiHang(e.target.value)}
+                    className={[
+                      "cursor-pointer rounded-full border-none px-3 py-1 text-xs font-medium outline-none transition-colors",
+                      selectedLichDiHang
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                    ].join(" ")}
+                  >
+                    <option value="">Theo lịch đi hàng</option>
+                    {lichDiHangOptions.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+
+                  {(selectedQuan || selectedChuyen || selectedLichDiHang) && (
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedQuan("");
                         setSelectedChuyen("");
+                        setSelectedLichDiHang("");
                       }}
                       className="rounded-full px-3 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50"
                     >
-                      Xoá lọc quận/chuyến
+                      Xoá lọc quận/chuyến/lịch
                     </button>
                   )}
                 </div>
@@ -1092,6 +1435,12 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
                   <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-medium text-amber-700">
                     <RotateCcw size={14} className="shrink-0" />
                     Có {soLuongKienRot} cửa hàng có kiện rớt cần rebook lại.
+                  </div>
+                )}
+                {soLuongPhanBo > 0 && (
+                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3.5 py-2.5 text-xs font-medium text-cyan-700">
+                    <Shuffle size={14} className="shrink-0" />
+                    Có {soLuongPhanBo} cửa hàng có kiện phân bổ.
                   </div>
                 )}
 
@@ -1120,9 +1469,12 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
                     selectedItems={selectedItems}
                     nguong={nguong}
                     tongKien={tongKien}
+                    tongKienGoc={tongKienGoc}
+                    onTongKienChange={handleTongKienChange}
                     vuotNguong={vuotNguong}
                     coLoaiKhacNhau={coLoaiKhacNhau}
                     coGiaoKhachChon={coGiaoKhachChon}
+                    coPhanBoChon={coPhanBoChon}
                     onRemove={toggleItem}
                   />
                 ) : (

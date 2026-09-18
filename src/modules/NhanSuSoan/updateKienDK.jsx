@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 
-const TEMPLATE_HEADERS = ["Số đơn hàng", "Kiện dự kiến"];
+const TEMPLATE_HEADERS = ["Mã cửa hàng", "Kiện dự kiến"];
 
 // Chuẩn hoá tên cột (bỏ dấu, thường hoá, bỏ khoảng trắng) để nhận diện
 // header linh hoạt dù người dùng gõ "Số đơn hàng", "soDonHang", "SODONHANG"...
@@ -31,24 +31,25 @@ const normalizeHeader = (h) =>
     .replace(/\s+/g, "");
 
 const HEADER_MAP = {
-  sodonhang: "soDonHang",
+  macuahang: "maNXD",
+  mach: "maNXD",
+  manxd: "maNXD",
   kiendukien: "kien_du_kien",
   kienduk: "kien_du_kien",
 };
 
-// ─── Tải file mẫu bằng ExcelJS ─────────────────────────────────────────────
 const downloadTemplate = async () => {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("KienDuKien");
 
   ws.columns = [
-    { header: TEMPLATE_HEADERS[0], key: "soDonHang", width: 22 },
+    { header: TEMPLATE_HEADERS[0], key: "maNXD", width: 18 },
     { header: TEMPLATE_HEADERS[1], key: "kien_du_kien", width: 16 },
   ];
   ws.getRow(1).font = { bold: true };
 
-  ws.addRow({ soDonHang: "SO12345678", kien_du_kien: 10 });
-  ws.addRow({ soDonHang: "TO87654321", kien_du_kien: 5 });
+  ws.addRow({ maNXD: "CH0111", kien_du_kien: 38 });
+  ws.addRow({ maNXD: "CH0273", kien_du_kien: 12 });
 
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
@@ -64,7 +65,6 @@ const downloadTemplate = async () => {
   URL.revokeObjectURL(url);
 };
 
-// ─── Đọc file Excel người dùng tải lên bằng ExcelJS ────────────────────────
 const parseExcelFile = async (file) => {
   const buffer = await file.arrayBuffer();
   const wb = new ExcelJS.Workbook();
@@ -73,7 +73,6 @@ const parseExcelFile = async (file) => {
   const sheet = wb.worksheets[0];
   if (!sheet) return [];
 
-  // Đọc hàng header (hàng 1) để map cột -> key chuẩn
   const headerRow = sheet.getRow(1);
   const colIndexToKey = {};
   headerRow.eachCell((cell, colNumber) => {
@@ -83,16 +82,15 @@ const parseExcelFile = async (file) => {
 
   const rows = [];
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return; // bỏ qua header
+    if (rowNumber === 1) return;
 
-    const out = { soDonHang: "", kien_du_kien: "" };
+    const out = { maNXD: "", kien_du_kien: "" };
     let hasAnyValue = false;
 
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       const key = colIndexToKey[colNumber];
       if (!key) return;
       let v = cell.value;
-      // ExcelJS trả về object cho công thức/rich-text -> lấy .result / .text
       if (v && typeof v === "object") {
         v = v.result ?? v.text ?? "";
       }
@@ -153,14 +151,13 @@ const UpdateKienDuKien = ({ onImported }) => {
     try {
       const parsed = await parseExcelFile(file);
 
-      // Lọc dòng rỗng hoàn toàn (không có soDonHang)
       const cleaned = parsed.filter(
-        (r) => (r.soDonHang || "").toString().trim() !== "",
+        (r) => (r.maNXD || "").toString().trim() !== "",
       );
 
       if (cleaned.length === 0) {
         setParseError(
-          "Không tìm thấy dữ liệu hợp lệ. Vui lòng dùng đúng file mẫu với cột 'Số đơn hàng' và 'Kiện dự kiến'.",
+          "Không tìm thấy dữ liệu hợp lệ. Vui lòng dùng đúng file mẫu với cột 'Mã cửa hàng' và 'Kiện dự kiến'.",
         );
         setRows([]);
         return;
@@ -180,7 +177,7 @@ const UpdateKienDuKien = ({ onImported }) => {
     setResult(null);
     try {
       const payload = rows.map((r) => ({
-        soDonHang: (r.soDonHang || "").toString().trim(),
+        maNXD: (r.maNXD || "").toString().trim(),
         kien_du_kien: r.kien_du_kien,
       }));
       const res = await nhanSuSoanService.updateManyKienDuKien(payload);
@@ -236,9 +233,15 @@ const UpdateKienDuKien = ({ onImported }) => {
               {/* Body */}
               <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
                 <p className="text-sm text-slate-500">
-                  Tải file mẫu, điền <b className="text-slate-700">Số đơn hàng</b>{" "}
-                  và <b className="text-slate-700">Kiện dự kiến</b> tương ứng,
-                  sau đó tải lên để cập nhật hàng loạt.
+                  Tải file mẫu, điền{" "}
+                  <b className="text-slate-700">Mã cửa hàng</b> và{" "}
+                  <b className="text-slate-700">tổng Kiện dự kiến</b> của mã đó,
+                  sau đó tải lên. Hệ thống sẽ tự{" "}
+                  <b className="text-slate-700">
+                    chia đều số kiện cho tất cả phiếu đang Chưa soạn/Đang soạn
+                  </b>{" "}
+                  của mã cửa hàng tương ứng (phiếu Hoàn thành không bị ảnh
+                  hưởng).
                 </p>
 
                 {/* Tải template */}
@@ -262,7 +265,10 @@ const UpdateKienDuKien = ({ onImported }) => {
                   <span>
                     {fileName ? (
                       <span className="flex items-center gap-1.5 text-slate-700">
-                        <FileSpreadsheet size={14} className="text-emerald-500" />
+                        <FileSpreadsheet
+                          size={14}
+                          className="text-emerald-500"
+                        />
                         {fileName}
                       </span>
                     ) : (
@@ -298,21 +304,20 @@ const UpdateKienDuKien = ({ onImported }) => {
                   </div>
                 )}
 
-                {/* Preview dữ liệu đã đọc được */}
                 {rows.length > 0 && !result && (
                   <div className="rounded-xl border border-slate-200">
                     <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
-                      <span>Xem trước ({rows.length} dòng)</span>
+                      <span>Xem trước ({rows.length} mã cửa hàng)</span>
                     </div>
                     <div className="max-h-48 overflow-y-auto">
                       <table className="w-full text-xs">
                         <thead className="sticky top-0 bg-white">
                           <tr className="border-b border-slate-100 text-slate-400">
                             <th className="px-3 py-1.5 text-left font-semibold">
-                              Số đơn hàng
+                              Mã cửa hàng
                             </th>
                             <th className="px-3 py-1.5 text-left font-semibold">
-                              Kiện dự kiến
+                              Tổng kiện dự kiến
                             </th>
                           </tr>
                         </thead>
@@ -320,7 +325,7 @@ const UpdateKienDuKien = ({ onImported }) => {
                           {rows.slice(0, 200).map((r, idx) => (
                             <tr key={idx} className="border-b border-slate-50">
                               <td className="px-3 py-1.5 font-medium text-slate-700">
-                                {r.soDonHang}
+                                {r.maNXD}
                               </td>
                               <td className="px-3 py-1.5 text-slate-600">
                                 {r.kien_du_kien}
@@ -363,7 +368,7 @@ const UpdateKienDuKien = ({ onImported }) => {
                             <thead>
                               <tr className="border-b border-slate-100 text-slate-400">
                                 <th className="px-2.5 py-1.5 text-left font-semibold">
-                                  Số đơn hàng
+                                  Mã cửa hàng
                                 </th>
                                 <th className="px-2.5 py-1.5 text-left font-semibold">
                                   Lý do bỏ qua
@@ -372,9 +377,12 @@ const UpdateKienDuKien = ({ onImported }) => {
                             </thead>
                             <tbody>
                               {result.skipped.map((s, idx) => (
-                                <tr key={idx} className="border-b border-slate-50">
+                                <tr
+                                  key={idx}
+                                  className="border-b border-slate-50"
+                                >
                                   <td className="px-2.5 py-1.5 font-medium text-slate-700">
-                                    {s.soDonHang}
+                                    {s.maNXD}
                                   </td>
                                   <td className="px-2.5 py-1.5 text-slate-500">
                                     {s.reason}
@@ -414,7 +422,7 @@ const UpdateKienDuKien = ({ onImported }) => {
                     ) : (
                       <>
                         <PackageCheck size={15} />
-                        Cập nhật ({rows.length})
+                        Cập nhật ({rows.length} mã){" "}
                       </>
                     )}
                   </button>

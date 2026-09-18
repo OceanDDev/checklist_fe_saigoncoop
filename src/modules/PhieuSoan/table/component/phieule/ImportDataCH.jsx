@@ -22,6 +22,7 @@ const HEADER_KEY_MAP = {
   [normalizeHeader("Số Document")]: "so_document",
   [normalizeHeader("Mã Cửa Hàng")]: "mach",
   [normalizeHeader("Quận")]: "quan",
+  [normalizeHeader("Quận Bookxe")]: "quan_bookxe", // 👈 thêm
   [normalizeHeader("Tên Cửa Hàng")]: "tench",
   [normalizeHeader("Chuyến")]: "chuyen",
   [normalizeHeader("Lịch Đặt Hàng")]: "lich_di_hang", // 👈 đổi tên cột header
@@ -49,6 +50,7 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
       "Số Document",
       "Mã Cửa Hàng",
       "Quận",
+      "Quận Bookxe", // 👈 thêm
       "Tên Cửa Hàng",
       "Chuyến",
       "Lịch Đặt Hàng", // 👈 đổi tên
@@ -58,7 +60,7 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
 
     headerRow.height = 25;
 
-    for (let i = 1; i <= 9; i++) {
+    for (let i = 1; i <= 10; i++) {
       // 👈 8 -> 9
       const cell = headerRow.getCell(i);
       cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -73,15 +75,16 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
       };
     }
 
-    worksheet.getColumn(1).width = 15;
-    worksheet.getColumn(2).width = 15;
-    worksheet.getColumn(3).width = 15;
-    worksheet.getColumn(4).width = 15;
-    worksheet.getColumn(5).width = 30;
-    worksheet.getColumn(6).width = 10;
-    worksheet.getColumn(7).width = 18; // Lịch Đặt Hàng
-    worksheet.getColumn(8).width = 18; // 👈 Lịch Đi Hàng
-    worksheet.getColumn(9).width = 30; // 👈 Ghi chú dịch xuống cột 9
+  worksheet.getColumn(1).width = 15;
+worksheet.getColumn(2).width = 15;
+worksheet.getColumn(3).width = 15;
+worksheet.getColumn(4).width = 15;
+worksheet.getColumn(5).width = 15; // 👈 Quận Bookxe
+worksheet.getColumn(6).width = 30; // Tên CH (dịch xuống 1 cột)
+worksheet.getColumn(7).width = 10; // Chuyến
+worksheet.getColumn(8).width = 18; // Lịch Đặt Hàng
+worksheet.getColumn(9).width = 18; // Lịch Đi Hàng
+worksheet.getColumn(10).width = 30; // Ghi chú
 
     const borderStyle = {
       top: { style: "thin", color: { argb: "FF000000" } },
@@ -92,7 +95,7 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
 
     for (let i = 1; i <= worksheet.rowCount; i++) {
       const row = worksheet.getRow(i);
-      for (let j = 1; j <= 9; j++) {
+      for (let j = 1; j <= 10; j++) {
         // 👈 8 -> 9
         const cell = row.getCell(j);
         cell.border = borderStyle;
@@ -180,18 +183,19 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
       // Lấy ngày hiện tại
       const currentDate = new Date().toISOString().split("T")[0];
 
-      const mappedData = jsonData.map((row) => ({
-        sd_tf: String(row.sd_tf || "").trim(),
-        so_document: String(row.so_document || "").trim(),
-        mach: String(row.mach || "").trim(),
-        quan: String(row.quan || "").trim(),
-        tench: String(row.tench || "").trim(),
-        chuyen: String(row.chuyen || "").trim(),
-        lich_di_hang: String(row.lich_di_hang || "").trim(),
-        lich_di_hang_bookxe: String(row.lich_di_hang_bookxe || "").trim(), // 👈 thêm
-        ghi_chu_ch: String(row.ghi_chu_ch || "").trim(),
-        ngay_import: currentDate,
-      }));
+const mappedData = jsonData.map((row) => ({
+  sd_tf: String(row.sd_tf || "").trim(),
+  so_document: String(row.so_document || "").trim(),
+  mach: String(row.mach || "").trim(),
+  quan: String(row.quan || "").trim(),
+  quan_bookxe: String(row.quan_bookxe || "").trim(),   // 👈 thêm
+  tench: String(row.tench || "").trim(),
+  chuyen: String(row.chuyen || "").trim(),
+  lich_di_hang: String(row.lich_di_hang || "").trim(),
+  lich_di_hang_bookxe: String(row.lich_di_hang_bookxe || "").trim(),
+  ghi_chu_ch: String(row.ghi_chu_ch || "").trim(),
+  ngay_import: currentDate,
+}));
 
       setFullData(mappedData);
       setPreviewData(mappedData.slice(0, 5));
@@ -232,7 +236,9 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
           !row.mach ||
           !row.tench ||
           !row.lich_di_hang ||
-          !row.lich_di_hang_bookxe, // 👈 thêm điều kiện
+          !row.lich_di_hang_bookxe|| // 👈 thêm điều kiện
+          !row.quan_bookxe, // 👈 thêm nếu muốn bắt buộc giống schema
+
       );
       if (invalidRows.length > 0) {
         setError(
@@ -498,6 +504,9 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
                         Quận
                       </th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">
+  Quận Bookxe {/* 👈 thêm */}
+</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">
                         Tên CH
                       </th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">
@@ -533,6 +542,7 @@ const ImportDataCHModal = ({ isOpen, onClose, onImportSuccess }) => {
                         </td>
                         <td className="px-3 py-2 text-slate-700">{row.mach}</td>
                         <td className="px-3 py-2 text-slate-700">{row.quan}</td>
+                        <td className="px-3 py-2 text-slate-700">{row.quan_bookxe}</td> {/* 👈 thêm */}
                         <td className="px-3 py-2 text-slate-700">
                           {row.tench}
                         </td>

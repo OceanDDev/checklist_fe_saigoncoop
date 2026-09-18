@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 // components/tonkho/ImportTonKho.jsx
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   UploadCloud,
@@ -11,25 +11,64 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from "lucide-react";
-import { tonKhoService } from "@/services/tonhko.service";
+import { tonKhoService } from "@/services/tonhkho.service";
+
+// 2 kho cần import, mỗi kho cần 1 file excel tồn kho + 1 file txt MMS.
+const KHO_LIST = [
+  { key: "810", label: "Kho 810" },
+  { key: "8101", label: "Kho 8101" },
+];
+
+const EMPTY_FILES = {
+  excel810: null,
+  txt810: null,
+  excel8101: null,
+  txt8101: null,
+};
+
+/* ------------------------------------------------------------------ */
+/* FileDropField — 1 ô chọn file, dùng chung cho cả excel & txt.       */
+/* ------------------------------------------------------------------ */
+const FileDropField = ({ label, file, accept, icon: Icon, onChange }) => (
+  <label
+    className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed p-3 transition-colors ${
+      file
+        ? "border-emerald-300 bg-emerald-50/50"
+        : "border-slate-300 bg-slate-50/40 hover:border-indigo-300 hover:bg-indigo-50/30"
+    }`}
+  >
+    <div
+      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
+        file ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
+      }`}
+    >
+      <Icon size={16} />
+    </div>
+    <div className="min-w-0 flex-1">
+      <div className="text-xs font-semibold text-slate-700">{label}</div>
+      <div className="truncate text-xs text-slate-400">
+        {file ? file.name : "Chưa chọn file"}
+      </div>
+    </div>
+    <input
+      type="file"
+      accept={accept}
+      className="hidden"
+      onChange={(e) => onChange(e.target.files?.[0] || null)}
+    />
+  </label>
+);
 
 const ImportTonKho = ({ onImported }) => {
   const [open, setOpen] = useState(false);
-  const [excelFile, setExcelFile] = useState(null);
-  const [txtFile, setTxtFile] = useState(null);
+  const [files, setFiles] = useState({ ...EMPTY_FILES });
   const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState(null); // { ...thongKe } | { error: true }
-
-  const excelInputRef = useRef(null);
-  const txtInputRef = useRef(null);
+  const [result, setResult] = useState(null); // { theoKho: {...} } | { error: true, message }
 
   const resetState = useCallback(() => {
-    setExcelFile(null);
-    setTxtFile(null);
+    setFiles({ ...EMPTY_FILES });
     setSaving(false);
     setResult(null);
-    if (excelInputRef.current) excelInputRef.current.value = "";
-    if (txtInputRef.current) txtInputRef.current.value = "";
   }, []);
 
   const handleClose = useCallback(() => {
@@ -38,33 +77,42 @@ const ImportTonKho = ({ onImported }) => {
     resetState();
   }, [saving, resetState]);
 
-  const canSubmit = Boolean(excelFile) && Boolean(txtFile) && !saving;
+  const setFile = useCallback((key, file) => {
+    setFiles((prev) => ({ ...prev, [key]: file }));
+  }, []);
+
+  const canSubmit =
+    Boolean(files.excel810) &&
+    Boolean(files.txt810) &&
+    Boolean(files.excel8101) &&
+    Boolean(files.txt8101) &&
+    !saving;
 
   const handleSubmit = useCallback(async () => {
-    if (!excelFile || !txtFile) return;
+    if (!canSubmit) return;
     setSaving(true);
     setResult(null);
     try {
-      const res = await tonKhoService.matchImportKhuyenMai(
-        excelFile,
-        txtFile,
-      );
+      const res = await tonKhoService.matchImportTonKho(files);
       setResult(res || {});
       onImported?.();
     } catch (err) {
       console.error("Lỗi import & so khớp tồn kho:", err);
-      setResult({ error: true });
+      const message =
+        err?.response?.data?.message ||
+        "Import thất bại. Vui lòng kiểm tra lại 4 file và thử lại.";
+      setResult({ error: true, message });
     } finally {
       setSaving(false);
     }
-  }, [excelFile, txtFile, onImported]);
+  }, [canSubmit, files, onImported]);
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="Import file Excel tồn kho + file txt MMS để so khớp số lượng"
+        title="Import file Excel tồn kho + file txt MMS cho 2 kho (810, 8101) để so khớp số lượng"
         className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:from-indigo-700 hover:to-blue-700 hover:shadow-md active:scale-95"
       >
         <UploadCloud size={15} />
@@ -79,14 +127,14 @@ const ImportTonKho = ({ onImported }) => {
               if (e.target === e.currentTarget) handleClose();
             }}
           >
-            <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
+            <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
                 <div className="flex items-center gap-2">
                   <div className="grid h-8 w-8 place-items-center rounded-full bg-indigo-50 text-indigo-600">
                     <UploadCloud size={16} />
                   </div>
                   <h3 className="text-base font-bold text-slate-800">
-                    Import & So khớp tồn kho
+                    Import & So khớp tồn kho (2 kho)
                   </h3>
                 </div>
                 <button
@@ -104,89 +152,49 @@ const ImportTonKho = ({ onImported }) => {
                 {!result && (
                   <>
                     <p className="text-sm text-slate-500">
-                      Upload <b>file Excel tồn kho</b> (export custom) và{" "}
-                      <b>file txt báo cáo MMS</b> (Inventory Valuation
-                      Report). Hệ thống sẽ cộng dồn số lượng theo SKU, so
-                      khớp <b>On Hand</b> giữa 2 nguồn, và ghi đè toàn bộ dữ
-                      liệu hiện có bằng kết quả mới.
+                      Upload đủ <b>4 file</b> cho <b>2 kho 810 và 8101</b>: mỗi
+                      kho gồm 1 file Excel tồn kho (export custom) + 1 file txt
+                      báo cáo MMS (Inventory Valuation Report). Hệ thống sẽ tự
+                      kiểm tra header <b>&quot;Store &lt;số&gt;: ...&quot;</b>{" "}
+                      trong file txt có đúng khớp với kho bạn đang import không,
+                      so khớp <b>On Hand</b>, lấy <b>đơn giá (Unit Cost)</b> từ
+                      MMS, và <b>ghi đè toàn bộ</b> dữ liệu hiện có (cả 2 kho)
+                      bằng kết quả mới.
                     </p>
 
-                    {/* Ô chọn file Excel */}
-                    <label
-                      className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed p-4 transition-colors ${
-                        excelFile
-                          ? "border-emerald-300 bg-emerald-50/50"
-                          : "border-slate-300 bg-slate-50/40 hover:border-indigo-300 hover:bg-indigo-50/30"
-                      }`}
-                    >
-                      <div
-                        className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${
-                          excelFile
-                            ? "bg-emerald-100 text-emerald-600"
-                            : "bg-slate-100 text-slate-400"
-                        }`}
-                      >
-                        <FileSpreadsheet size={18} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-slate-700">
-                          File Excel tồn kho *
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {KHO_LIST.map(({ key, label }) => (
+                        <div
+                          key={key}
+                          className="space-y-2 rounded-xl bg-slate-50/60 p-3 ring-1 ring-slate-200"
+                        >
+                          <div className="text-xs font-bold uppercase tracking-wide text-indigo-600">
+                            {label}
+                          </div>
+                          <FileDropField
+                            label="File Excel tồn kho *"
+                            file={files[`excel${key}`]}
+                            accept=".xlsx,.xls"
+                            icon={FileSpreadsheet}
+                            onChange={(f) => setFile(`excel${key}`, f)}
+                          />
+                          <FileDropField
+                            label="File txt MMS *"
+                            file={files[`txt${key}`]}
+                            accept=".txt"
+                            icon={FileText}
+                            onChange={(f) => setFile(`txt${key}`, f)}
+                          />
                         </div>
-                        <div className="truncate text-xs text-slate-400">
-                          {excelFile ? excelFile.name : "Chưa chọn file .xlsx"}
-                        </div>
-                      </div>
-                      <input
-                        ref={excelInputRef}
-                        type="file"
-                        accept=".xlsx,.xls"
-                        className="hidden"
-                        onChange={(e) =>
-                          setExcelFile(e.target.files?.[0] || null)
-                        }
-                      />
-                    </label>
-
-                    {/* Ô chọn file txt */}
-                    <label
-                      className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed p-4 transition-colors ${
-                        txtFile
-                          ? "border-emerald-300 bg-emerald-50/50"
-                          : "border-slate-300 bg-slate-50/40 hover:border-indigo-300 hover:bg-indigo-50/30"
-                      }`}
-                    >
-                      <div
-                        className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${
-                          txtFile
-                            ? "bg-emerald-100 text-emerald-600"
-                            : "bg-slate-100 text-slate-400"
-                        }`}
-                      >
-                        <FileText size={18} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-slate-700">
-                          File txt MMS *
-                        </div>
-                        <div className="truncate text-xs text-slate-400">
-                          {txtFile ? txtFile.name : "Chưa chọn file .txt"}
-                        </div>
-                      </div>
-                      <input
-                        ref={txtInputRef}
-                        type="file"
-                        accept=".txt"
-                        className="hidden"
-                        onChange={(e) =>
-                          setTxtFile(e.target.files?.[0] || null)
-                        }
-                      />
-                    </label>
+                      ))}
+                    </div>
 
                     <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-700 ring-1 ring-amber-200">
                       <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                       Import lần này sẽ <b>ghi đè toàn bộ</b> dữ liệu tồn kho
-                      đang có trong bảng bằng dữ liệu mới từ 2 file này.
+                      đang có (cả kho 810 lẫn 8101) bằng dữ liệu mới từ 4 file
+                      này. Nếu file txt bị chọn nhầm kho (vd chọn file của kho
+                      8101 vào ô kho 810), hệ thống sẽ báo lỗi và không import.
                     </div>
                   </>
                 )}
@@ -204,32 +212,60 @@ const ImportTonKho = ({ onImported }) => {
                     ) : (
                       <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
                     )}
-                    <div className="space-y-1.5">
+                    <div className="w-full space-y-3">
                       {result.error ? (
-                        "Import thất bại. Vui lòng kiểm tra lại 2 file và thử lại."
+                        result.message ||
+                        "Import thất bại. Vui lòng kiểm tra lại 4 file và thử lại."
                       ) : (
                         <>
                           <div>
-                            Đã import <b>{result.tongSoDongChiTiet}</b> dòng
-                            chi tiết, tổng <b>{result.tongSoSku}</b> SKU.
+                            Đã import <b>{result.tongSoDongChiTiet}</b> dòng chi
+                            tiết cho cả 2 kho.
                           </div>
-                          <div className="flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-md bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">
-                              Khớp: {result.thongKe?.khop ?? 0}
-                            </span>
-                            <span className="rounded-md bg-rose-100 px-2 py-1 font-semibold text-rose-700">
-                              Không khớp: {result.thongKe?.khongKhop ?? 0}
-                            </span>
-                            <span className="rounded-md bg-slate-200 px-2 py-1 font-semibold text-slate-600">
-                              Không có DATA: {result.thongKe?.khongCoData ?? 0}
-                            </span>
-                          </div>
-                          {result.soSkuChiCoOTxt > 0 && (
-                            <div className="text-xs text-slate-500">
-                              ({result.soSkuChiCoOTxt} SKU chỉ có ở file txt,
-                              không có trong Excel)
-                            </div>
-                          )}
+                          {KHO_LIST.map(({ key, label }) => {
+                            const stats = result.theoKho?.[key];
+                            if (!stats) return null;
+                            return (
+                              <div
+                                key={key}
+                                className="rounded-lg bg-white/70 p-2.5 ring-1 ring-emerald-100"
+                              >
+                                <div className="text-xs font-bold text-slate-700">
+                                  {label}
+                                  {stats.tenKho
+                                    ? ` — ${stats.tenKho}`
+                                    : ""}: {stats.tongSoSku} SKU
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                                  <span className="rounded-md bg-indigo-100 px-2 py-1 font-semibold text-indigo-700">
+                                    SKU trong Excel:{" "}
+                                    {stats.soSkuTrongExcel ?? 0}
+                                  </span>
+                                  <span className="rounded-md bg-sky-100 px-2 py-1 font-semibold text-sky-700">
+                                    SKU trong txt: {stats.soSkuTrongTxt ?? 0}
+                                  </span>
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                                  <span className="rounded-md bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">
+                                    Khớp: {stats.thongKe?.khop ?? 0}
+                                  </span>
+                                  <span className="rounded-md bg-rose-100 px-2 py-1 font-semibold text-rose-700">
+                                    Không khớp: {stats.thongKe?.khongKhop ?? 0}
+                                  </span>
+                                  <span className="rounded-md bg-slate-200 px-2 py-1 font-semibold text-slate-600">
+                                    Không có DATA:{" "}
+                                    {stats.thongKe?.khongCoData ?? 0}
+                                  </span>
+                                </div>
+                                {stats.soSkuChiCoOTxt > 0 && (
+                                  <div className="mt-1 text-xs text-slate-500">
+                                    ({stats.soSkuChiCoOTxt} SKU chỉ có ở file
+                                    txt, không có trong Excel)
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </>
                       )}
                     </div>

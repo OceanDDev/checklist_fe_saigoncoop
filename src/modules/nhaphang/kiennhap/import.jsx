@@ -197,7 +197,6 @@ const NhapHangImportModal = ({ onClose, onImported }) => {
       error: null,
       fileName: file.name,
       missingSkus: [],
-      skippedLpnCount: 0,
     });
 
     try {
@@ -210,29 +209,17 @@ const NhapHangImportModal = ({ onClose, onImported }) => {
         });
         return;
       }
-      const mappedItems = rows
+
+      // Lấy đúng số dòng có trong file (chỉ loại dòng không có Mã Hàng,
+      // ví dụ dòng "Total" ở cuối file export). KHÔNG dedup/bắt trùng theo
+      // Số LPN nữa — 1 LPN xuất hiện ở nhiều dòng (nhiều vị trí khác nhau)
+      // vẫn được giữ nguyên là các dòng riêng biệt. Việc 1 dòng là "cập
+      // nhật" hay "thêm mới" do backend (nhapHangService.importNhieu) xử lý
+      // dựa trên so khớp dữ liệu, không xử lý ở đây nữa.
+      const rawItems = rows
         .map((row) => mapRow(row, kho))
         .filter((item) => item.sku);
 
-      // Bỏ qua dòng thiếu LPN hoặc LPN bị trùng trong cùng file — chỉ giữ
-      // lần xuất hiện đầu tiên của mỗi LPN, các dòng thiếu/trùng sau đó bị
-      // loại khỏi danh sách import.
-      const lpnIndexMap = new Map(); // lpn -> index trong rawItems
-      const rawItems = [];
-      let skippedLpnCount = 0;
-
-      mappedItems.forEach((item) => {
-        if (!item.lpn) {
-          skippedLpnCount++;
-          return;
-        }
-        if (lpnIndexMap.has(item.lpn)) {
-          rawItems[lpnIndexMap.get(item.lpn)] = item; // ghi đè bằng dòng mới hơn
-        } else {
-          lpnIndexMap.set(item.lpn, rawItems.length);
-          rawItems.push(item);
-        }
-      });
       // Đang tra QC Đặc Thù để tự tính lại kiện cho các SKU bị kiện = tổng SL
       setSlot(kho, { checking: true });
       const { items, missingSkus } = await resolveKienForItems(rawItems);
@@ -242,7 +229,6 @@ const NhapHangImportModal = ({ onClose, onImported }) => {
         checking: false,
         items,
         missingSkus,
-        skippedLpnCount,
         fileName: file.name,
       });
     } catch (err) {
@@ -374,12 +360,6 @@ const NhapHangImportModal = ({ onClose, onImported }) => {
                           ({slot.items.length} dòng)
                         </span>
                       </span>
-                      {slot.skippedLpnCount > 0 && (
-                        <span className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
-                          <AlertTriangle size={12} className="shrink-0" />
-                          Đã bỏ qua {slot.skippedLpnCount} dòng thiếu LPN
-                        </span>
-                      )}
                     </div>
                   ) : (
                     <span className="text-sm text-slate-400">

@@ -14,6 +14,7 @@ import CustomPagination from "@/components/ui/customPagination";
 import AddCuaHangDialog from "./addCuaHang/AddCuaHangDialog";
 import RotKienRow from "./rotKienRow/RotKienRow";
 import KienHT from "./rotKienRow/KienHT";
+import AddPhanBoDialog from "./addKien/AddPhanBoDialog";
 // Helper: YYYY-MM-DD (local timezone)
 const toDateInputValue = (d = new Date()) => {
   const tz = d.getTimezoneOffset() * 60000;
@@ -54,7 +55,7 @@ const ToolRotKien = () => {
   const debouncedSearch = useDebouncedValue(searchMaCH, 200);
   const [filterNgayRotKien, setFilterNgayRotKien] = useState("");
   const [filterBoPhan, setFilterBoPhan] = useState(""); // <— NEW
-
+  const [filterSoSoda, setFilterSoSoda] = useState("");
   // PHÂN TRANG (cố định 10 dòng/trang)
   const pageSize = 10;
   const [pageChua, setPageChua] = useState(0);
@@ -62,23 +63,43 @@ const ToolRotKien = () => {
 
   // Fetch (chặn double-fetch ở Strict Mode)
   const loadedRef = useRef(false);
+  // Đếm số lần mỗi mã soda đã xuất hiện trong TOÀN BỘ dữ liệu
+  // (data đã gồm cả chưa hoàn thành lẫn đã hoàn thành - KienHT)
+  const existingSodaCodeCounts = useMemo(() => {
+    const counts = {};
+    data.forEach((item) => {
+      (item.soSoda || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .forEach((code) => {
+          counts[code] = (counts[code] || 0) + 1;
+        });
+    });
+    return counts;
+  }, [data]);
 
-useEffect(() => {
-  if (loadedRef.current) return;
-  loadedRef.current = true;
+  const existingSodaCodes = useMemo(
+    () => Object.keys(existingSodaCodeCounts),
+    [existingSodaCodeCounts],
+  );
 
-  (async () => {
-    try {
-      const rotkien = await rotKienService.getAllRotKien();
-      setData(rotkien || []);
-    } catch (err) {
-      console.error("Fetch error:", err);
-    }
-  })();
-}, []);
-  // Lọc dữ liệu
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+
+    (async () => {
+      try {
+        const rotkien = await rotKienService.getAllRotKien();
+        setData(rotkien || []);
+      } catch (err) {
+        console.error("Fetch error:", err);
+      }
+    })();
+  }, []);
   const filteredDataChuaHT = useMemo(() => {
     const q = (debouncedSearch || "").toLowerCase();
+    const soda = filterSoSoda.trim();
     return data
       .filter((item) => !item.trangThai)
       .filter(
@@ -86,12 +107,14 @@ useEffect(() => {
           (item.maCH || "").toLowerCase().includes(q) &&
           (!filterNgayRotKien ||
             item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
-          (!filterBoPhan || item.boPhan === filterBoPhan), // <— NEW
+          (!filterBoPhan || item.boPhan === filterBoPhan) &&
+          (!soda || String(item.soSoda || "").includes(soda)),
       );
-  }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan]);
+  }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan, filterSoSoda]);
 
   const filteredDataDaHT = useMemo(() => {
     const q = (debouncedSearch || "").toLowerCase();
+    const soda = filterSoSoda.trim();
     return data
       .filter((item) => item.trangThai)
       .filter(
@@ -99,9 +122,10 @@ useEffect(() => {
           (item.maCH || "").toLowerCase().includes(q) &&
           (!filterNgayRotKien ||
             item.ngayRotKien?.slice(0, 10) === filterNgayRotKien) &&
-          (!filterBoPhan || item.boPhan === filterBoPhan), // <— NEW
+          (!filterBoPhan || item.boPhan === filterBoPhan) &&
+          (!soda || String(item.soSoda || "").includes(soda)),
       );
-  }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan]);
+  }, [data, debouncedSearch, filterNgayRotKien, filterBoPhan, filterSoSoda]);
 
   // Reset trang khi đổi filter / view
   useEffect(() => {
@@ -212,7 +236,8 @@ useEffect(() => {
   const handleClearFilter = useCallback(() => {
     setSearchMaCH("");
     setFilterNgayRotKien("");
-    setFilterBoPhan(""); // <— NEW
+    setFilterBoPhan("");
+    setFilterSoSoda("");
   }, []);
 
   // ===== Excel helpers =====
@@ -388,7 +413,13 @@ useEffect(() => {
           onChange={(e) => setSearchMaCH(e.target.value)}
           className="w-full sm:w-48"
         />
-
+        <Input
+          type="text"
+          placeholder="🔎 Số soda - hóa đơn..."
+          value={filterSoSoda}
+          onChange={(e) => setFilterSoSoda(e.target.value)}
+          className="w-full sm:w-48"
+        />
         <Input
           type="date"
           value={filterNgayRotKien}
@@ -411,7 +442,17 @@ useEffect(() => {
         {/* Dialog thêm cửa hàng MỚI */}
         <AddCuaHangDialog onSubmit={handleCreateCuaHang} />
         {/* Dialog thêm kiện */}
-        <AddKienDialog cuahangs={cuahangs} onSubmit={handleCreate} />
+        <AddKienDialog
+          cuahangs={cuahangs}
+          onSubmit={handleCreate}
+          existingSodaCodes={existingSodaCodes}
+          existingSodaCodeCounts={existingSodaCodeCounts}
+        />
+        <AddPhanBoDialog
+          onSubmit={handleCreate}
+          existingSodaCodes={existingSodaCodes}
+          existingSodaCodeCounts={existingSodaCodeCounts}
+        />
       </div>
 
       {/* Bảng dữ liệu + phân trang */}

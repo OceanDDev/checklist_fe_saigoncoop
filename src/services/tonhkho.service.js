@@ -4,11 +4,11 @@ import { requestService } from "./request.service";
 // ==========================
 // 📥 GET ALL
 // ==========================
-const getAllTonKho = async () => {
+const getAllTonKho = async (params = {}) => {
   try {
     const results = await requestService.get(
-      URL.inventory.inventory,
-      {},
+      URL.tonkho.tonkho,
+      params,
       undefined,
       ApiServer,
     );
@@ -24,7 +24,7 @@ const getAllTonKho = async () => {
 const getTonKhoById = async (id) => {
   try {
     const results = await requestService.get(
-      `${URL.inventory.inventory}/${id}`,
+      `${URL.tonkho.tonkho}/${id}`,
       {},
       undefined,
       ApiServer,
@@ -34,13 +34,14 @@ const getTonKhoById = async (id) => {
     console.error("Lỗi khi gọi getTonKhoById:", error);
   }
 };
+
 // ==========================
 const getTonKhoBySku = async (sku) => {
   try {
     // Gọi về GET /tonkho?sku=... để lấy mảng danh sách
     const results = await requestService.get(
-      URL.inventory.inventory, 
-      { sku: sku }, // Truyền params để BE lọc .find({sku})
+      URL.tonkho.tonkho,
+      { sku },
       undefined,
       ApiServer,
     );
@@ -50,6 +51,7 @@ const getTonKhoBySku = async (sku) => {
     return []; // Trả về mảng rỗng nếu lỗi để tránh crash code map()
   }
 };
+
 // ==========================
 // ➕ ADD 1
 // ==========================
@@ -58,7 +60,7 @@ const createTonKho = async (payload) => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
 
     const results = await requestService.post(
-      URL.inventory.inventory,
+      URL.tonkho.tonkho,
       payload,
       {
         "x-user-name": user?.name || "Unknown",
@@ -74,37 +76,48 @@ const createTonKho = async (payload) => {
 };
 
 // ==========================
-// ➕ ADD MANY
+// 🔍 MATCH IMPORT — upload 4 file cho 2 kho (810 và 8101), mỗi kho gồm
+// 1 file excel tồn kho + 1 file txt MMS. Backend tự parse + validate
+// header "Store <số>: ..." của từng file txt khớp đúng kho, so khớp
+// luong_onhand vs luong_mms, ghi đè toàn bộ dữ liệu (cả 2 kho).
+// Tham số: object { excel810, txt810, excel8101, txt8101 } — đều là
+// đối tượng File lấy từ <input type="file">.
 // ==========================
-const createManyTonKho = async (payload) => {
+const matchImportTonKho = async ({ excel810, txt810, excel8101, txt8101 }) => {
   try {
+    const formData = new FormData();
+    formData.append("excel810", excel810);
+    formData.append("txt810", txt810);
+    formData.append("excel8101", excel8101);
+    formData.append("txt8101", txt8101);
+
     const results = await requestService.post(
-      `${URL.inventory.inventory}/many`,
-      payload,
-      undefined,
+      `${URL.tonkho.tonkho}/match-import`,
+      formData,
+      { "Content-Type": "multipart/form-data" },
       ApiServer,
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi createManyTonKho:", error);
+    console.error("Lỗi khi gọi matchImportTonKho:", error);
     throw error;
   }
 };
 
 // ==========================
-// 🔥 UPSERT MANY
+// 📦 IMPORT MANY (upsert theo lpn + sku)
 // ==========================
-const upsertManyTonKho = async (payload) => {
+const importManyTonKho = async (payload) => {
   try {
     const results = await requestService.post(
-      `${URL.inventory.inventory}/upsert`,
+      `${URL.tonkho.tonkho}/import`,
       payload,
       undefined,
       ApiServer,
     );
     return results;
   } catch (error) {
-    console.error("Lỗi khi gọi upsertManyTonKho:", error);
+    console.error("Lỗi khi gọi importManyTonKho:", error);
     throw error;
   }
 };
@@ -115,7 +128,7 @@ const upsertManyTonKho = async (payload) => {
 const updateTonKho = async (id, payload) => {
   try {
     const results = await requestService.put(
-      `${URL.inventory.inventory}/${id}`,
+      `${URL.tonkho.tonkho}/${id}`,
       payload,
       undefined,
       ApiServer,
@@ -133,7 +146,7 @@ const updateTonKho = async (id, payload) => {
 const deleteTonKhoById = async (id) => {
   try {
     const results = await requestService.del(
-      `${URL.inventory.inventory}/${id}`,
+      `${URL.tonkho.tonkho}/${id}`,
       undefined,
       ApiServer,
     );
@@ -149,7 +162,7 @@ const deleteTonKhoById = async (id) => {
 const deleteManyTonKho = async (ids) => {
   try {
     const results = await requestService.del(
-      `${URL.inventory.inventory}/many`,
+      URL.tonkho.tonkho,
       { ids },
       ApiServer,
     );
@@ -159,16 +172,30 @@ const deleteManyTonKho = async (ids) => {
     throw error;
   }
 };
-
+// ==========================
+const deleteAllTonKho = async () => {
+  try {
+    const results = await requestService.del(
+      `${URL.tonkho.tonkho}/all`,
+      undefined,
+      ApiServer,
+    );
+    return results;
+  } catch (error) {
+    console.error("Lỗi khi gọi deleteAllTonKho:", error);
+    throw error;
+  }
+};
 // ==========================
 export const tonKhoService = {
   getAllTonKho,
   getTonKhoById,
+  getTonKhoBySku,
   createTonKho,
-  createManyTonKho,
-  upsertManyTonKho,
+  matchImportTonKho,
+  importManyTonKho,
   updateTonKho,
   deleteTonKhoById,
   deleteManyTonKho,
-  getTonKhoBySku
+  deleteAllTonKho,
 };

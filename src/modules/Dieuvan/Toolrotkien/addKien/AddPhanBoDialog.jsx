@@ -16,9 +16,8 @@ import SoSodaScanInput from "./SoSodaScanInput";
 import { toast } from "react-toastify";
 import { nhanSuSoanService } from "@/services/phieusoan/nhansusoan.service";
 
-const GHI_CHU_CO_DINH = "Rớt Kiện";
+const GHI_CHU_CO_DINH = "Phân Bổ";
 
-// Helpers VN time (UTC+7)
 const toVNDate = (d = new Date()) => {
   const VN_OFFSET = 7 * 60;
   const localOffset = d.getTimezoneOffset();
@@ -35,16 +34,15 @@ const nowVNTimeHHmm = (d = new Date()) => {
   return `${pad(vn.getHours())}:${pad(vn.getMinutes())}`;
 };
 
-// Map name → boPhan
 const mapNameToBoPhan = (name) => {
   if (!name) return "";
   const n = name.trim().toUpperCase();
   if (n === "DIEU VAN") return "Điều Vận";
   if (n === "XU LY DON HANG") return "XLĐH";
-  return name; // mặc định giữ nguyên
+  return name;
 };
 
-const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCounts = {}, }) => {
+const AddPhanBoDialog = ({ onSubmit, existingSodaCodes = [] }) => {
   const [open, setOpen] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -62,8 +60,6 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
   const [activeIndex, setActiveIndex] = useState(-1);
   const [suggestions, setSuggestions] = useState([]);
   const [searching, setSearching] = useState(false);
-  const [coRotLan2, setCoRotLan2] = useState(false);
-  const LAN_2_LABEL = "Rớt lần 2";
 
   useEffect(() => {
     const key = formData.maCH.trim();
@@ -71,7 +67,6 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
       setSuggestions([]);
       return;
     }
-
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
@@ -93,8 +88,7 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
       } finally {
         setSearching(false);
       }
-    }, 250); // debounce 250ms
-
+    }, 250);
     return () => clearTimeout(timer);
   }, [formData.maCH]);
 
@@ -132,7 +126,7 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
           limit: 20,
         });
         const list = res?.data || [];
-        const matched = list.find((ch) => ch.mach === key); // khớp tuyệt đối
+        const matched = list.find((ch) => ch.mach === key);
         if (!matched) {
           errs.maCH = "Mã cửa hàng không tồn tại";
         } else {
@@ -158,14 +152,12 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
     const time = nowVNTimeHHmm();
     const ngayRotKien = `${formData.ngayRotKienDate}T${time}`;
 
-    // Lấy user từ localStorage
     let storedUser;
     try {
       storedUser = JSON.parse(localStorage.getItem("user") || "{}");
     } catch {
       storedUser = {};
     }
-
     const boPhan = mapNameToBoPhan(storedUser.name || "");
 
     if (!boPhan) {
@@ -176,10 +168,9 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
       return;
     }
 
-    const tags = [GHI_CHU_CO_DINH, ...(coRotLan2 ? [LAN_2_LABEL] : [])];
     const ghiChu = formData.ghiChuThem.trim()
-      ? `${tags.join(" - ")} - ${formData.ghiChuThem.trim()}`
-      : tags.join(" - ");
+      ? `${GHI_CHU_CO_DINH} - ${formData.ghiChuThem.trim()}`
+      : GHI_CHU_CO_DINH;
 
     await onSubmit?.({
       maCH: formData.maCH,
@@ -199,15 +190,12 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
       ngayRotKienDate: toVNDate(),
       ghiChuThem: "",
     });
-    setSoSodaCodes([]);
-    setSoSodaHasError(false);
     setShowSuggest(false);
     setActiveIndex(-1);
-        setCoRotLan2(false); // 👈 chuyển vào đây
-
     setErrors({});
     setOpen(false);
   };
+
   useEffect(() => {
     if (open) {
       setFormData((prev) => ({
@@ -223,13 +211,13 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="default">➕ Thêm kiện rớt</Button>
+        <Button variant="default">➕ Thêm Phân bổ</Button>
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-[640px] text-[15px] md:text-base max-h-[90vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-            Thêm thông tin kiện
+            Thêm thông tin Phân bổ
           </DialogTitle>
         </DialogHeader>
 
@@ -239,7 +227,6 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
             <label className="text-sm font-semibold text-slate-800">
               Mã cửa hàng <span className="text-rose-600">*</span>
             </label>
-
             <div className="relative">
               <Input
                 name="maCH"
@@ -312,7 +299,6 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
                 </div>
               )}
             </div>
-
             {errors.maCH && (
               <p className="text-sm text-rose-600">{errors.maCH}</p>
             )}
@@ -345,7 +331,6 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
                 value={formData.soKienRot}
                 onChange={handleChange}
                 className="h-11 text-[15px] text-right tabular-nums text-slate-900 placeholder:text-slate-400"
-                inputMode="numeric"
               />
             </div>
 
@@ -382,10 +367,6 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
             <SoSodaScanInput
               key={open}
               existingCodes={existingSodaCodes}
-                existingCodeCounts={existingSodaCodeCounts} // prop mới, cần truyền từ ngoài vào
-
-              duplicateActionLabel={LAN_2_LABEL}
-              onDuplicateConfirmed={() => setCoRotLan2(true)}
               onCodesChange={async (codes, hasError) => {
                 setSoSodaCodes(codes);
                 setSoSodaHasError(hasError);
@@ -396,7 +377,7 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
                 }
                 try {
                   const res = await nhanSuSoanService.getKienTheoSoSoda(codes);
-                  const { notFound = [], tongKien = 0 } = res || {};
+                  const { notFound = [], tongKien = 0 } = res || {}; // 👈 sửa: bỏ res?.data, dùng thẳng res
                   if (notFound.length) {
                     toast.error(
                       `❌ Không tìm thấy dữ liệu cho: ${notFound.join(", ")}`,
@@ -419,17 +400,9 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
             <label className="text-sm font-semibold text-slate-800">
               Ghi chú
             </label>
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <div className="flex items-center gap-2 mb-1">
               <span className="inline-flex items-center rounded-md bg-amber-100 text-amber-800 border border-amber-300 px-2.5 py-1 text-sm font-bold select-none">
                 {GHI_CHU_CO_DINH}
-              </span>
-              {coRotLan2 && (
-                <span className="inline-flex items-center rounded-md bg-rose-100 text-rose-800 border border-rose-300 px-2.5 py-1 text-sm font-bold select-none">
-                  {LAN_2_LABEL}
-                </span>
-              )}
-              <span className="text-xs text-slate-400">
-                (cố định, không thể xóa)
               </span>
             </div>
             <Textarea
@@ -462,4 +435,4 @@ const AddKienDialog = ({ onSubmit, existingSodaCodes = [], existingSodaCodeCount
   );
 };
 
-export default AddKienDialog;
+export default AddPhanBoDialog;
