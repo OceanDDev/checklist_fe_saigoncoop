@@ -1,8 +1,15 @@
 /* eslint-disable react/prop-types */
 import Tippy from "@tippyjs/react";
 import "tippy.js/dist/tippy.css"; // style mặc định của tooltip
+import EditKienDialog from "../addKien/EditKienDialog"; // 👈 chỉnh lại path cho đúng vị trí thật
 
-const KienHT = ({ data, onUncomplete }) => {
+const KienHT = ({
+  data,
+  onUncomplete,
+  onUpdate, // 👈 thêm
+  existingSodaCodes, // 👈 thêm
+  existingSodaCodeCounts, // 👈 thêm
+}) => {
   // Hàm format giờ theo Asia/Ho_Chi_Minh
   const formatDate = (isoStr) => {
     const d = new Date(isoStr);
@@ -19,7 +26,7 @@ const KienHT = ({ data, onUncomplete }) => {
       .replace(",", "");
   };
 
-  const fmtNum = (v) => (v ?? v === 0 ? v : "—"); // vẫn hiển thị 0
+  const fmtNum = (v) => ((v ?? v === 0) ? v : "—"); // vẫn hiển thị 0
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow">
@@ -28,20 +35,37 @@ const KienHT = ({ data, onUncomplete }) => {
           <tr className="text-[12px] uppercase tracking-wide text-slate-600 text-center">
             <th className="px-3 py-3 font-semibold whitespace-nowrap">STT</th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">Mã CH</th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">TÊN CH</th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">SỐ KIỆN</th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">SỐ SODA - HÓA ĐƠN</th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">NGÀY GIỜ CẬP NHẬP</th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">GHI CHÚ</th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">BỘ PHẬN</th>
-            <th className="px-3 py-3 font-semibold whitespace-nowrap">CHỨC NĂNG</th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">
+              TÊN CH
+            </th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">
+              SỐ KIỆN
+            </th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">
+              SỐ SODA - HÓA ĐƠN
+            </th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">
+              NGÀY GIỜ CẬP NHẬP
+            </th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">
+              GHI CHÚ
+            </th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">
+              BỘ PHẬN
+            </th>
+            <th className="px-3 py-3 font-semibold whitespace-nowrap">
+              CHỨC NĂNG
+            </th>
           </tr>
         </thead>
 
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={9} className="text-center py-8 text-slate-500 italic">
+              <td
+                colSpan={9}
+                className="text-center py-8 text-slate-500 italic"
+              >
                 Không có dữ liệu đã hoàn thành
               </td>
             </tr>
@@ -120,6 +144,15 @@ const KienHT = ({ data, onUncomplete }) => {
 
                 <td className="px-3 py-3">
                   <div className="flex flex-wrap items-center justify-center gap-2">
+                    {onUpdate && (
+                      <EditKienDialog
+                        data={item}
+                        onSubmit={onUpdate}
+                        existingSodaCodes={existingSodaCodes}
+                        existingSodaCodeCounts={existingSodaCodeCounts}
+                      />
+                    )}
+
                     <button
                       onClick={() => onUncomplete(item._id)}
                       className="

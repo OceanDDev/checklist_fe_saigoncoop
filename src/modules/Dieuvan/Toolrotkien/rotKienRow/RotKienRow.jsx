@@ -2,12 +2,16 @@
 
 import Tippy from "@tippyjs/react";
 import "tippy.js/dist/tippy.css"; // style mặc định của tooltip
+import EditKienDialog from "../addKien/EditKienDialog";
 
 const RotKienRow = ({
   data,
   index,
   onDelete,
   onComplete,
+  onUpdate,                    // 👈 thêm
+  existingSodaCodes,           // 👈 thêm
+  existingSodaCodeCounts,      // 👈 thêm
   isCompletedView = false,
 }) => {
   // Format ngày giờ VN (UTC+7), 24h chuẩn
@@ -94,7 +98,6 @@ const RotKienRow = ({
         {fmtNum(data.soKienRot)}
       </td>
 
-      {/* Số soda (không tooltip, tự xuống hàng nếu dài) */}
       {/* Số soda (truncate + tooltip) */}
       <td className="px-3 py-3 tabular-nums text-slate-800">
         <Tippy
@@ -103,7 +106,7 @@ const RotKienRow = ({
           arrow={true}
           maxWidth="400px"
         >
-         <span className="block truncate max-w-[140px] mx-auto cursor-help">
+          <span className="block truncate max-w-[140px] mx-auto cursor-help">
             {fmtNum(data.soSoda)}
           </span>
         </Tippy>
@@ -152,6 +155,15 @@ const RotKienRow = ({
       {/* Hành động */}
       <td className="px-3 py-3">
         <div className="flex flex-wrap items-center justify-center gap-2">
+          {onUpdate && (
+            <EditKienDialog
+              data={data}
+              onSubmit={onUpdate}
+              existingSodaCodes={existingSodaCodes}
+              existingSodaCodeCounts={existingSodaCodeCounts}
+            />
+          )}
+
           {onComplete && (
             <button
               onClick={() => onComplete(data._id)}

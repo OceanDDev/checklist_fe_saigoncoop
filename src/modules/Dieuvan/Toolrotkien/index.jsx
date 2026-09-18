@@ -132,7 +132,17 @@ const ToolRotKien = () => {
     setPageChua(0);
     setPageDa(0);
   }, [debouncedSearch, filterNgayRotKien, filterBoPhan, viewMode, data.length]);
-
+  const handleUpdate = useCallback(async (id, payload) => {
+    try {
+      await rotKienService.updateRotKien(id, payload);
+      const list = await rotKienService.getAllRotKien();
+      setData(list || []);
+      toast.success("✅ Cập nhật thành công!");
+    } catch (err) {
+      console.error("Lỗi cập nhật kiện:", err);
+      toast.error("❌ Lỗi cập nhật kiện");
+    }
+  }, []);
   // Tính toán phân trang
   const pageCountChua = Math.max(
     0,
@@ -487,6 +497,9 @@ const ToolRotKien = () => {
                       data={item}
                       index={pageChua * pageSize + index}
                       onComplete={handleComplete}
+                      onUpdate={handleUpdate}
+                      existingSodaCodes={existingSodaCodes}
+                      existingSodaCodeCounts={existingSodaCodeCounts}
                       formatDateTimeVN={formatDateTimeVN}
                     />
                   ))
@@ -509,11 +522,14 @@ const ToolRotKien = () => {
         </>
       ) : (
         <>
-          <KienHT
-            data={currentSliceDa}
-            onUncomplete={handleUncomplete}
-            formatDateTimeVN={formatDateTimeVN}
-          />
+        <KienHT
+  data={currentSliceDa}
+  onUncomplete={handleUncomplete}
+  onUpdate={handleUpdate}
+  existingSodaCodes={existingSodaCodes}
+  existingSodaCodeCounts={existingSodaCodeCounts}
+  formatDateTimeVN={formatDateTimeVN}
+/>
 
           {/* Footer phân trang */}
           <div className="mt-4 flex justify-center">
