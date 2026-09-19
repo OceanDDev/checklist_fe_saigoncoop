@@ -238,13 +238,18 @@ const updateManyKienDuKien = async (data) => {
   }
 };
 
+/**
+ * POST: tra cứu kiện + mã/tên cửa hàng theo danh sách mã soda-hóa đơn đã quét
+ * body: { codes: string[] }
+ * trả về: { tongKien, notFound, items, maCH, tenCH, mismatch }
+ */
 const getKienTheoSoSoda = async (codes) => {
   try {
     const response = await ApiServer.post(
       `${URL.phieusoan.nhansusoan}/kien-theo-soda`,
       { codes },
     );
-    return response.data;
+    return response.data; 
   } catch (error) {
     console.error("Lỗi getKienTheoSoSoda:", error);
     throw error;

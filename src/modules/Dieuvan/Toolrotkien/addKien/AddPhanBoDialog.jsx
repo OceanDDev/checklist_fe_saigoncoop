@@ -225,7 +225,10 @@ const AddPhanBoDialog = ({ onSubmit, existingSodaCodes = [] }) => {
           {/* Mã CH + Gợi ý */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-800">
-              Mã cửa hàng <span className="text-rose-600">*</span>
+              Mã cửa hàng <span className="text-rose-600">*</span>{" "}
+              <span className="text-xs font-normal text-slate-400">
+                (tự điền khi quét mã soda, có thể sửa tay)
+              </span>
             </label>
             <div className="relative">
               <Input
@@ -375,17 +378,36 @@ const AddPhanBoDialog = ({ onSubmit, existingSodaCodes = [] }) => {
                   setFormData((prev) => ({ ...prev, soKienRot: "" }));
                   return;
                 }
+
                 try {
                   const res = await nhanSuSoanService.getKienTheoSoSoda(codes);
-                  const { notFound = [], tongKien = 0 } = res || {}; // 👈 sửa: bỏ res?.data, dùng thẳng res
+                  const {
+                    notFound = [],
+                    tongKien = 0,
+                    maCH: maCHTraCuu,
+                    tenCH: tenCHTraCuu,
+                    mismatch,
+                  } = res || {};
+
                   if (notFound.length) {
                     toast.error(
                       `❌ Không tìm thấy dữ liệu cho: ${notFound.join(", ")}`,
                     );
                   }
+
+                  if (mismatch) {
+                    toast.error(
+                      "⚠ Các mã đang quét thuộc nhiều cửa hàng khác nhau — kiểm tra lại!",
+                    );
+                  }
+
                   setFormData((prev) => ({
                     ...prev,
                     soKienRot: String(tongKien),
+                    // Chỉ tự điền mã/tên CH khi tra cứu ra đúng 1 cửa hàng duy nhất
+                    // và người dùng chưa tự gõ mã CH trước đó (tránh ghi đè lựa chọn tay)
+                    maCH: !mismatch && maCHTraCuu ? maCHTraCuu : prev.maCH,
+                    tenCH: !mismatch && tenCHTraCuu ? tenCHTraCuu : prev.tenCH,
                   }));
                 } catch (err) {
                   console.error("Lỗi tra cứu kiện theo soda:", err);

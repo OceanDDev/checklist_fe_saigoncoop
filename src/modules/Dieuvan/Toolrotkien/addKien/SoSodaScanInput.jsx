@@ -29,7 +29,15 @@ const SoSodaScanInput = ({
     return [...base, makeRow("")];
   });
   const inputRefs = useRef({});
-
+ useEffect(() => {
+    const firstRowId = rows[0]?.id;
+    if (firstRowId) {
+      requestAnimationFrame(() => {
+        inputRefs.current[firstRowId]?.focus();
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     const codes = rows.map((r) => r.text.trim()).filter(Boolean);
     const hasError = rows.some((r) => r.error);
