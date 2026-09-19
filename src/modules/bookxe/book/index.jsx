@@ -14,7 +14,7 @@ import {
   UserRound,
   AlertTriangle,
 } from "lucide-react";
-import { bookXeService } from "@/services/bookxe.service";
+import { bookXeService } from "@/services/bookxe/bookxe.service";
 import EditBookXeModal from "./editbookxemodal";
 import ExportExcelButton from "./export";
 import BookChuyenModal from "./bookchuyenmodal";

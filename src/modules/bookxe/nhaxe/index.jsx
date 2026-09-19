@@ -1,7 +1,17 @@
 import { useEffect, useState, useCallback } from "react";
-import { FileUp, Search, Trash2, RefreshCw, X } from "lucide-react";
-import { bookXeService } from "@/services/bookxe/bookxe.service"; // chỉnh lại path cho đúng vị trí service thực tế
-import ImportHistoryBookXeModal from "./import";
+import {
+  FileUp,
+  Search,
+  Trash2,
+  RefreshCw,
+  X,
+  Plus,
+  Pencil,
+  Layers,
+} from "lucide-react";
+import { nhaXeService } from "@/services/bookxe/nhaxe.service"; // chỉnh lại path cho đúng vị trí service thực tế
+import ImportNhaXeModal from "./import";
+import NhaXeFormModal from "./form";
 
 const PAGE_SIZE = 20;
 
@@ -18,7 +28,7 @@ const formatDateTime = (value) => {
   });
 };
 
-const HistoryBookXeTable = () => {
+const NhaXeTable = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -32,6 +42,13 @@ const HistoryBookXeTable = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [importOpen, setImportOpen] = useState(false);
 
+  // mode: "create" | "edit" | "bulk"
+  const [formState, setFormState] = useState({
+    open: false,
+    mode: "create",
+    item: null,
+  });
+
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
   const fetchData = useCallback(async () => {
@@ -44,11 +61,11 @@ const HistoryBookXeTable = () => {
         tu_ngay: tuNgay || undefined,
         den_ngay: denNgay || undefined,
       };
-      const res = await bookXeService.getAllHistoryBookXe(params);
+      const res = await nhaXeService.getAllNhaXe(params);
       setData(res?.data ?? []);
       setTotal(res?.pagination?.total ?? 0);
     } catch (error) {
-      console.error("Lỗi khi tải lịch sử book xe:", error);
+      console.error("Lỗi khi tải danh sách nhà xe:", error);
       setData([]);
       setTotal(0);
     } finally {
@@ -91,14 +108,15 @@ const HistoryBookXeTable = () => {
     );
   };
 
+  // ── Xóa ────────────────────────────────────────────────────────────────────
   const handleDeleteOne = async (id) => {
-    if (!window.confirm("Xóa bản ghi lịch sử này?")) return;
+    if (!window.confirm("Xóa nhà xe này?")) return;
     try {
-      await bookXeService.deleteHistoryBookXeById(id);
+      await nhaXeService.deleteNhaXeById(id);
       setSelectedIds((prev) => prev.filter((x) => x !== id));
       fetchData();
     } catch (error) {
-      console.error("Lỗi khi xóa lịch sử book xe:", error);
+      console.error("Lỗi khi xóa nhà xe:", error);
     }
   };
 
@@ -106,18 +124,37 @@ const HistoryBookXeTable = () => {
     if (selectedIds.length === 0) return;
     if (!window.confirm(`Xóa ${selectedIds.length} bản ghi đã chọn?`)) return;
     try {
-      await bookXeService.deleteManyHistoryBookXe(selectedIds);
+      await nhaXeService.deleteManyNhaXe(selectedIds);
       setSelectedIds([]);
       fetchData();
     } catch (error) {
-      console.error("Lỗi khi xóa nhiều lịch sử book xe:", error);
+      console.error("Lỗi khi xóa nhiều nhà xe:", error);
     }
   };
 
-  const handleImportExcel = () => {
-    setImportOpen(true);
+  // ── Thêm / Sửa / Cập nhật hàng loạt ────────────────────────────────────────
+  const openCreate = () =>
+    setFormState({ open: true, mode: "create", item: null });
+  const openEdit = (item) => setFormState({ open: true, mode: "edit", item });
+  const openBulk = () => setFormState({ open: true, mode: "bulk", item: null });
+  const closeForm = () => setFormState((prev) => ({ ...prev, open: false }));
+
+  // Modal tự bắt lỗi và hiển thị, nên ở đây cứ để lỗi throw ra
+  const handleSubmitForm = async (payload) => {
+    if (formState.mode === "create") {
+      await nhaXeService.createNhaXe(payload);
+      setPage(1);
+    } else if (formState.mode === "edit") {
+      await nhaXeService.updateNhaXe(formState.item._id, payload);
+    } else {
+      await nhaXeService.updateManyNhaXeByIds(selectedIds, payload);
+      setSelectedIds([]);
+    }
+    closeForm();
+    fetchData();
   };
 
+  // ── Import ─────────────────────────────────────────────────────────────────
   const handleImported = () => {
     setPage(1);
     fetchData();
@@ -137,13 +174,13 @@ const HistoryBookXeTable = () => {
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Tìm mã CH, tên CH, lệnh điều động..."
+              placeholder="Tìm mã CH, tên CH, quận, NVC, lịch đi hàng..."
               className="w-full rounded-md border border-slate-300 py-2 pl-8 pr-2 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
           <div className="flex items-center gap-1.5 text-sm text-slate-500">
-            <span className="hidden shrink-0 sm:inline">Ngày ghi nhận:</span>
+            <span className="hidden shrink-0 sm:inline">Ngày tạo:</span>
             <input
               type="date"
               value={tuNgay}
@@ -175,16 +212,26 @@ const HistoryBookXeTable = () => {
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {selectedIds.length > 0 && (
-            <button
-              type="button"
-              onClick={handleDeleteSelected}
-              className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
-            >
-              <Trash2 size={14} />
-              Xóa ({selectedIds.length})
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={openBulk}
+                className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-medium text-blue-600 hover:bg-blue-100"
+              >
+                <Layers size={14} />
+                Cập nhật ({selectedIds.length})
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
+              >
+                <Trash2 size={14} />
+                Xóa ({selectedIds.length})
+              </button>
+            </>
           )}
           <button
             type="button"
@@ -196,11 +243,19 @@ const HistoryBookXeTable = () => {
           </button>
           <button
             type="button"
-            onClick={handleImportExcel}
+            onClick={() => setImportOpen(true)}
             className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-emerald-700"
           >
             <FileUp size={14} />
             Import Excel
+          </button>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <Plus size={14} />
+            Thêm mới
           </button>
         </div>
       </div>
@@ -224,28 +279,28 @@ const HistoryBookXeTable = () => {
                 #
               </th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">
-                Lệnh Điều Động
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-slate-600">
-                Concept
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-slate-600">
                 Mã CH
               </th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">
                 Tên CH
               </th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">
-                Mã NCV
+                Quận
               </th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">
-                Tên NVC
+                Thời Gian Xuất
               </th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">
-                Thời Gian Tạo
+                Lịch Đi Hàng
               </th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">
-                Ngày Ghi Nhận
+                NVC
+              </th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">
+                Ghi Chú
+              </th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">
+                Ngày Tạo
               </th>
               <th className="px-4 py-3 text-right font-medium text-slate-600">
                 Thao Tác
@@ -268,7 +323,7 @@ const HistoryBookXeTable = () => {
                   colSpan={11}
                   className="px-3 py-8 text-center text-slate-400"
                 >
-                  Không có dữ liệu lịch sử
+                  Không có dữ liệu nhà xe
                 </td>
               </tr>
             ) : (
@@ -286,30 +341,41 @@ const HistoryBookXeTable = () => {
                     {(page - 1) * PAGE_SIZE + index + 1}
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-800">
-                    {item.lenh_dieu_dong || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {item.concept || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
                     {item.ma_ch || "—"}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {item.ten_ch || "—"}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {item.ma_ncv || "—"}
+                    {item.quan || "—"}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {item.ten_nvc || "—"}
+                    {item.thoi_gian_xuat || "—"}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {formatDateTime(item.thoi_gian_tao)}
+                    {item.lich_di_hang || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {item.nvc || "—"}
+                  </td>
+                  <td
+                    className="max-w-[220px] truncate px-4 py-3 text-slate-600"
+                    title={item.ghi_chu || ""}
+                  >
+                    {item.ghi_chu || "—"}
                   </td>
                   <td className="px-4 py-3 text-slate-500">
                     {formatDateTime(item.createdAt)}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(item)}
+                      className="rounded p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600"
+                      title="Sửa"
+                    >
+                      <Pencil size={15} />
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteOne(item._id)}
@@ -355,13 +421,22 @@ const HistoryBookXeTable = () => {
         </div>
       </div>
 
-      <ImportHistoryBookXeModal
+      <ImportNhaXeModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
         onImported={handleImported}
+      />
+
+      <NhaXeFormModal
+        open={formState.open}
+        mode={formState.mode}
+        initialData={formState.item}
+        count={selectedIds.length}
+        onClose={closeForm}
+        onSubmit={handleSubmitForm}
       />
     </div>
   );
 };
 
-export default HistoryBookXeTable;
+export default NhaXeTable;

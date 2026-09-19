@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { Truck, History } from "lucide-react";
+import { Truck, History, Bus } from "lucide-react";
 
-// Các bảng con — nằm trong 2 thư mục theo đúng cấu trúc hiện tại của bạn.
+// Các bảng con — nằm trong 3 thư mục theo đúng cấu trúc hiện tại của bạn.
 // (Giả định mỗi thư mục có 1 index.jsx export component bảng tương ứng;
 // chỉnh lại đường dẫn nếu tên file thực tế khác.)
 import BookXeTable from "./book";
 import HistoryBookXeTable from "./history";
+import NhaXeTable from "./nhaxe";
 
 const TABS = [
   { key: "bookxe", label: "Book Xe", icon: Truck },
   { key: "history", label: "Lịch Sử", icon: History },
+  { key: "nhaxe", label: "Nhà Xe", icon: Bus },
 ];
 
 const HomeBookXe = () => {
@@ -24,7 +26,8 @@ const HomeBookXe = () => {
             Quản Lý Book Xe
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Theo dõi và quản lý các phiếu book xe cùng lịch sử điều động
+            Theo dõi và quản lý các phiếu book xe, lịch sử điều động và danh
+            sách nhà xe
           </p>
         </div>
 
@@ -55,6 +58,7 @@ const HomeBookXe = () => {
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
           {activeTab === "bookxe" && <BookXeTable />}
           {activeTab === "history" && <HistoryBookXeTable />}
+          {activeTab === "nhaxe" && <NhaXeTable />}
         </div>
       </div>
     </div>

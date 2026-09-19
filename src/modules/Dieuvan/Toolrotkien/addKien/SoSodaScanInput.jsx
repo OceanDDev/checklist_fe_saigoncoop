@@ -18,6 +18,7 @@ const SoSodaScanInput = ({
   initialCodes = [],
   existingCodes = [],
   existingCodeCounts = {},
+    onRequestSave,   // 👈 thêm
   onCodesChange,
   onDuplicateConfirmed, // (code) => void — gọi khi bấm nút xác nhận trùng có chủ đích
   duplicateActionLabel, // VD: "Rớt lần 2" — nếu không truyền, dùng hành vi chặn cứng như cũ
@@ -38,6 +39,8 @@ const SoSodaScanInput = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  
   useEffect(() => {
     const codes = rows.map((r) => r.text.trim()).filter(Boolean);
     const hasError = rows.some((r) => r.error);
@@ -169,10 +172,18 @@ const SoSodaScanInput = ({
     [onDuplicateConfirmed],
   );
 
-  const handleKeyDown = (e) => {
+
+  const handleKeyDown = (e, id, text) => {
     if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
-      e.target.blur();
+
+      // Enter trên ô đang trống = đã quét xong, muốn lưu luôn
+      if (e.key === "Enter" && !text.trim()) {
+        onRequestSave?.();
+        return;
+      }
+
+      commitRow(id, text);
     }
   };
 
@@ -191,7 +202,7 @@ const SoSodaScanInput = ({
             <Input
               ref={(el) => (inputRefs.current[row.id] = el)}
               defaultValue={row.text}
-              onKeyDown={handleKeyDown}
+              onKeyDown={(e) => handleKeyDown(e, row.id, e.target.value)}
               onBlur={(e) => commitRow(row.id, e.target.value)}
               placeholder={
                 idx === 0

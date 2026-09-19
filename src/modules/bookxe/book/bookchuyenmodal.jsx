@@ -25,7 +25,7 @@ import {
   CircleDashed,
   Layers,
 } from "lucide-react";
-import { bookXeService } from "@/services/bookxe.service";
+import { bookXeService } from "@/services/bookxe/bookxe.service";
 
 const NGUONG = { CS: 120, CF: 180 };
 
@@ -153,9 +153,8 @@ const getChuyenStyle = (chuyen) => {
 
 const QUICK_FILTERS = [
   { key: "all", label: "Tất cả" },
-  { key: "giaokhach", label: "Giao khách" },
-  { key: "kienrot", label: "Kiện rớt" },
-  { key: "phanbo", label: "Phân bổ" },
+  { key: "cs", label: "CS" },
+  { key: "cf", label: "CF" },
   { key: "ghepchung", label: "Từng ghép chung" },
 ];
 
@@ -167,6 +166,20 @@ const getQuanGoc = (quanBookxe) => {
   if (!quanBookxe) return "";
   return quanBookxe.split(".")[0].trim();
 };
+
+// CS: mã CH bắt đầu bằng chữ CH (vd: CH0123).
+// CF: mã CH chỉ gồm chữ số (vd: 1234).
+const isCS = (maCh) => /^CH/i.test((maCh || "").trim());
+const isCF = (maCh) => /^\d+$/.test((maCh || "").trim());
+
+// Chuẩn hoá để lọc không phân biệt hoa/thường và dấu tiếng Việt
+// (gõ "sang" vẫn khớp "SÁNG", "toi" khớp "TỐI").
+const normalizeText = (s) =>
+  (s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase();
 
 // ════════════════════════════════════════════════════════════════════════
 // GHI CHÚ QUAN TRỌNG VỀ MÔ HÌNH DỮ LIỆU (đọc kỹ trước khi sửa logic gộp):
@@ -195,7 +208,8 @@ const isPhanBoItem = (it) =>
 // Gộp danh sách item "phẳng" thành danh sách nhóm theo mã cửa hàng — 1 cửa
 // hàng chỉ hiện 1 dòng, tổng kiện cộng dồn từ tất cả các loại, kèm breakdown
 // để hiển thị chi tiết. Đồng thời tiền tính sẵn chuỗi lowercase của mã/tên CH
-// để lọc tìm kiếm không phải gọi toLowerCase() lặp lại mỗi lần gõ phím.
+// và lịch đi hàng để lọc tìm kiếm không phải gọi toLowerCase() lặp lại mỗi
+// lần gõ phím.
 const groupItemsByCuaHang = (rawItems) => {
   const map = new Map();
 
@@ -209,6 +223,10 @@ const groupItemsByCuaHang = (rawItems) => {
         ten_ch: it.ten_ch,
         maChLower: (it.ma_ch || "").toLowerCase(),
         tenChLower: (it.ten_ch || "").toLowerCase(),
+        lichLower: "", // được tính sau khi gộp xong (xem cuối hàm)
+        chuyenLower: "", // idem — đã bỏ dấu + lowercase để lọc nhanh
+        laCS: isCS(it.ma_ch), // mã CH bắt đầu bằng CH
+        laCF: isCF(it.ma_ch), // mã CH chỉ gồm chữ số
         kien: 0,
         kienGiaoKhach: 0,
         kienRot: 0,
@@ -223,6 +241,7 @@ const groupItemsByCuaHang = (rawItems) => {
         ten_nvc: it.ten_nvc || "",
         ma_ncv: it.ma_ncv || "",
         lich_di_hang_bookxe: it.lich_di_hang_bookxe || "",
+        ghi_chu_nhaxe: it.ghi_chu_nhaxe || "",
         chuyen: it.chuyen || "",
         trangThaiSoan: it.trangThaiSoan,
         tungGhepChungVoi: [],
@@ -285,6 +304,7 @@ const groupItemsByCuaHang = (rawItems) => {
     g.ma_ncv = g.ma_ncv || it.ma_ncv || "";
     g.lich_di_hang_bookxe =
       g.lich_di_hang_bookxe || it.lich_di_hang_bookxe || "";
+    g.ghi_chu_nhaxe = g.ghi_chu_nhaxe || it.ghi_chu_nhaxe || "";
     g.chuyen = g.chuyen || it.chuyen || "";
     g.loaiCuaHang = g.loaiCuaHang || it.loaiCuaHang || "";
     if (it.tungGhepChungVoi?.length)
@@ -293,7 +313,14 @@ const groupItemsByCuaHang = (rawItems) => {
       g.lenhDieuDongLienQuan.push(...it.lenhDieuDongLienQuan);
   }
 
-  return Array.from(map.values());
+  const result = Array.from(map.values());
+  // Tiền tính sau khi gộp xong, vì lich_di_hang_bookxe được merge dần trong
+  // vòng lặp phía trên.
+  for (const g of result) {
+    g.lichLower = (g.lich_di_hang_bookxe || "").toLowerCase();
+    g.chuyenLower = normalizeText(g.chuyen);
+  }
+  return result;
 };
 
 // Số loại kiện khác nhau đang gộp trong 1 cửa hàng — chỉ có ý nghĩa hiển thị
@@ -731,6 +758,17 @@ const BookForm = memo(function BookForm({
     : "";
   const coGiaoKhach = selectedItems.some((s) => s.coGiaoKhach);
 
+  // Ghi chú lấy từ NhaXe (ghi_chu). Chọn 1 cửa hàng: điền nguyên ghi chú;
+  // chọn nhiều cửa hàng: mỗi dòng có tiền tố mã CH để biết ghi chú của cửa hàng nào.
+  const ghiChuGoiY = selectedItems
+    .filter((s) => s.ghi_chu_nhaxe)
+    .map((s) =>
+      selectedItems.length > 1
+        ? `${s.ma_ch}: ${s.ghi_chu_nhaxe}`
+        : s.ghi_chu_nhaxe,
+    )
+    .join("\n");
+
   const [form, setForm] = useState({
     ngayBook: todayStr(),
     gioXuat: "",
@@ -738,7 +776,7 @@ const BookForm = memo(function BookForm({
     ma_ncv: ncvGoiY,
     ten_nvc: tenNvcGoiY,
     quan: quanGoiY,
-    ghi_chu: "",
+    ghi_chu: ghiChuGoiY,
   });
   const [activeSlotIdx, setActiveSlotIdx] = useState(null);
 
@@ -1008,8 +1046,14 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedQuan, setSelectedQuan] = useState("");
-  const [selectedChuyen, setSelectedChuyen] = useState("");
-  const [selectedLichDiHang, setSelectedLichDiHang] = useState("");
+  // Lọc chuyến bằng ô input (gõ "sáng" hoặc "sang" -> ra mọi cửa hàng chuyến
+  // SÁNG), cũng dùng 2 state để debounce.
+  const [chuyenInput, setChuyenInput] = useState("");
+  const [chuyenSearch, setChuyenSearch] = useState("");
+  // Lọc lịch đi hàng bằng ô input (gõ 7 -> ra mọi lịch có chứa "7"),
+  // dùng 2 state giống searchInput/search để debounce.
+  const [lichInput, setLichInput] = useState("");
+  const [lichSearch, setLichSearch] = useState("");
   const [tongKienOverride, setTongKienOverride] = useState(null);
 
   // Gộp toàn bộ item theo mã cửa hàng TRƯỚC khi lọc — để 1 cửa hàng có cả
@@ -1024,27 +1068,17 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
       ).sort(),
     [items],
   );
-  const chuyenOptions = useMemo(
-    () =>
-      Array.from(new Set(items.map((i) => i.chuyen).filter(Boolean))).sort(),
-    [items],
-  );
-  const lichDiHangOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(items.map((i) => i.lich_di_hang_bookxe).filter(Boolean)),
-      ).sort(),
-    [items],
-  );
 
-  // Debounce ô search 200ms — tránh lọc lại toàn danh sách mỗi ký tự gõ.
+  // Debounce 3 ô search (mã/tên CH, chuyến, lịch đi hàng) 200ms — tránh lọc
+  // lại toàn danh sách mỗi ký tự gõ.
   useEffect(() => {
-    const t = setTimeout(
-      () => setSearch(searchInput.trim().toLowerCase()),
-      200,
-    );
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim().toLowerCase());
+      setChuyenSearch(normalizeText(chuyenInput.trim()));
+      setLichSearch(lichInput.trim().toLowerCase());
+    }, 200);
     return () => clearTimeout(t);
-  }, [searchInput]);
+  }, [searchInput, chuyenInput, lichInput]);
 
   useEffect(() => {
     if (!open) return;
@@ -1054,14 +1088,18 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
     setSearch("");
     setQuickFilter("all");
     setSelectedQuan("");
-    setSelectedChuyen("");
-    setSelectedLichDiHang("");
+    setChuyenInput("");
+    setChuyenSearch("");
+    setLichInput("");
+    setLichSearch("");
     fetchItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true);
+  // silent = true: tải lại danh sách ngầm (không bật spinner toàn màn hình),
+  // dùng sau khi book xong để giữ nguyên bộ lọc, ô tìm kiếm và vị trí cuộn.
+  const fetchItems = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setError("");
     try {
       const res = await bookXeService.suggestBookXe();
@@ -1079,8 +1117,9 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
     }
   }, []);
 
-  // Dùng maChLower/tenChLower đã tiền tính sẵn trong groupItemsByCuaHang —
-  // tránh gọi toLowerCase() lặp lại trên toàn danh sách mỗi lần search đổi.
+  // Dùng maChLower/tenChLower/lichLower đã tiền tính sẵn trong
+  // groupItemsByCuaHang — tránh gọi toLowerCase() lặp lại trên toàn danh sách
+  // mỗi lần search đổi.
   const filteredGroups = useMemo(() => {
     let list = groupedAll;
     if (search) {
@@ -1088,27 +1127,19 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
         (g) => g.maChLower.includes(search) || g.tenChLower.includes(search),
       );
     }
-    if (quickFilter === "giaokhach") list = list.filter((g) => g.coGiaoKhach);
-    else if (quickFilter === "kienrot") list = list.filter((g) => g.coKienRot);
-    else if (quickFilter === "phanbo") list = list.filter((g) => g.coPhanBo);
+    if (quickFilter === "cs") list = list.filter((g) => g.laCS);
+    else if (quickFilter === "cf") list = list.filter((g) => g.laCF);
     else if (quickFilter === "ghepchung")
       list = list.filter((g) => g.tungGhepChungVoi?.length);
 
     if (selectedQuan)
       list = list.filter((g) => getQuanGoc(g.quan_bookxe) === selectedQuan);
-    if (selectedChuyen) list = list.filter((g) => g.chuyen === selectedChuyen);
-    if (selectedLichDiHang)
-      list = list.filter((g) => g.lich_di_hang_bookxe === selectedLichDiHang);
+    if (chuyenSearch)
+      list = list.filter((g) => g.chuyenLower.includes(chuyenSearch));
+    if (lichSearch) list = list.filter((g) => g.lichLower.includes(lichSearch));
 
     return list;
-  }, [
-    groupedAll,
-    search,
-    quickFilter,
-    selectedQuan,
-    selectedChuyen,
-    selectedLichDiHang,
-  ]);
+  }, [groupedAll, search, quickFilter, selectedQuan, chuyenSearch, lichSearch]);
 
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const selectedItems = useMemo(
@@ -1254,11 +1285,12 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
         await bookXeService.createBookXe(payload);
         onBooked?.();
 
+        // Book xong: chỉ bỏ chọn + quay về danh sách để book tiếp chuyến khác.
+        // KHÔNG đóng modal và KHÔNG reset bộ lọc (tìm kiếm, quick filter,
+        // quận, chuyến, lịch đi hàng đều giữ nguyên).
         setSelectedKeys([]);
         setShowForm(false);
-        setSelectedQuan("");
-        setSelectedChuyen("");
-        await fetchItems();
+        await fetchItems({ silent: true });
       } catch (err) {
         console.error("Lỗi khi tạo chuyến book xe:", err);
         setError("Tạo chuyến thất bại, thử lại.");
@@ -1373,49 +1405,59 @@ const BookChuyenModal = ({ open, onClose, onBooked }) => {
                     ))}
                   </select>
 
-                  <select
-                    value={selectedChuyen}
-                    onChange={(e) => setSelectedChuyen(e.target.value)}
-                    className={[
-                      "cursor-pointer rounded-full border-none px-3 py-1 text-xs font-medium outline-none transition-colors",
-                      selectedChuyen
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200",
-                    ].join(" ")}
-                  >
-                    <option value="">Theo chuyến</option>
-                    {chuyenOptions.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <Truck
+                      size={12}
+                      className={[
+                        "pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2",
+                        chuyenInput ? "text-white" : "text-slate-400",
+                      ].join(" ")}
+                    />
+                    <input
+                      type="text"
+                      value={chuyenInput}
+                      onChange={(e) => setChuyenInput(e.target.value)}
+                      placeholder="Lọc chuyến..."
+                      className={[
+                        "w-36 rounded-full border-none py-1 pl-7 pr-3 text-xs font-medium outline-none transition-colors",
+                        chuyenInput
+                          ? "bg-blue-600 text-white placeholder:text-blue-200"
+                          : "bg-slate-100 text-slate-600 placeholder:text-slate-400 hover:bg-slate-200",
+                      ].join(" ")}
+                    />
+                  </div>
 
-                  <select
-                    value={selectedLichDiHang}
-                    onChange={(e) => setSelectedLichDiHang(e.target.value)}
-                    className={[
-                      "cursor-pointer rounded-full border-none px-3 py-1 text-xs font-medium outline-none transition-colors",
-                      selectedLichDiHang
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200",
-                    ].join(" ")}
-                  >
-                    <option value="">Theo lịch đi hàng</option>
-                    {lichDiHangOptions.map((l) => (
-                      <option key={l} value={l}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <CalendarClock
+                      size={12}
+                      className={[
+                        "pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2",
+                        lichInput ? "text-white" : "text-slate-400",
+                      ].join(" ")}
+                    />
+                    <input
+                      type="text"
+                      value={lichInput}
+                      onChange={(e) => setLichInput(e.target.value)}
+                      placeholder="Lọc lịch đi hàng..."
+                      className={[
+                        "w-40 rounded-full border-none py-1 pl-7 pr-3 text-xs font-medium outline-none transition-colors",
+                        lichInput
+                          ? "bg-blue-600 text-white placeholder:text-blue-200"
+                          : "bg-slate-100 text-slate-600 placeholder:text-slate-400 hover:bg-slate-200",
+                      ].join(" ")}
+                    />
+                  </div>
 
-                  {(selectedQuan || selectedChuyen || selectedLichDiHang) && (
+                  {(selectedQuan || chuyenInput || lichInput) && (
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedQuan("");
-                        setSelectedChuyen("");
-                        setSelectedLichDiHang("");
+                        setChuyenInput("");
+                        setChuyenSearch("");
+                        setLichInput("");
+                        setLichSearch("");
                       }}
                       className="rounded-full px-3 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50"
                     >

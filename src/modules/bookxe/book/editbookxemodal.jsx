@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Truck, Clock, AlertTriangle } from "lucide-react";
-import { bookXeService } from "@/services/bookxe.service";
+import { bookXeService } from "@/services/bookxe/bookxe.service";
 
 const SLOT_PRESETS = [
   { xuat: "07:30", toi: "09:00", label: "9:00 - 16:00", color: "#3B82F6" },

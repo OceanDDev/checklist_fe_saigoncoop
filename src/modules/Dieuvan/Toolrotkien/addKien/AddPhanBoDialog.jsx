@@ -91,7 +91,31 @@ const AddPhanBoDialog = ({ onSubmit, existingSodaCodes = [] }) => {
     }, 250);
     return () => clearTimeout(timer);
   }, [formData.maCH]);
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (open) return;
 
+      const activeTag = document.activeElement?.tagName;
+      const isTyping =
+        activeTag === "INPUT" ||
+        activeTag === "TEXTAREA" ||
+        document.activeElement?.isContentEditable;
+      if (isTyping) return;
+
+      if (
+        e.key.toLowerCase() === "z" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        setOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [open]);
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setErrors((prev) => ({ ...prev, [name]: undefined }));
@@ -369,6 +393,7 @@ const AddPhanBoDialog = ({ onSubmit, existingSodaCodes = [] }) => {
             </label>
             <SoSodaScanInput
               key={open}
+              onRequestSave={handleSave} // 👈 thêm
               existingCodes={existingSodaCodes}
               onCodesChange={async (codes, hasError) => {
                 setSoSodaCodes(codes);
