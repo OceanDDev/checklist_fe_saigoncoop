@@ -93,7 +93,6 @@ const EditKienDialog = ({
       ngayRotKienDateTime: toVNDateTimeLocal(data.ngayRotKien),
       ghiChuThem,
     });
-    setSoSodaCodes(parseSodaCodes(data.soSoda));
     setCoRotLan2(initialLan2);
     setSoSodaHasError(false);
     setErrors({});
@@ -114,10 +113,47 @@ const EditKienDialog = ({
   }, [existingSodaCodeCounts, ownCodes]);
 
   const adjustedExistingCodes = useMemo(
-    () => existingSodaCodes.filter((c) => !ownCodes.includes(c) || adjustedExistingCodeCounts[c] > 0),
+    () =>
+      existingSodaCodes.filter(
+        (c) => !ownCodes.includes(c) || adjustedExistingCodeCounts[c] > 0,
+      ),
     [existingSodaCodes, ownCodes, adjustedExistingCodeCounts],
   );
+  const originalSodaKey = useMemo(() => ownCodes.join(","), [ownCodes]);
 
+  const handleCodesChange = useCallback(
+    async (codes, hasError) => {
+      setSoSodaCodes(codes);
+      setSoSodaHasError(hasError);
+
+      // Danh sách giống bản ghi gốc -> giữ số kiện đã lưu, không gọi API
+      if (codes.join(",") === originalSodaKey) {
+        setFormData((prev) => ({
+          ...prev,
+          soKienRot: String(data?.soKienRot ?? ""),
+        }));
+        return;
+      }
+
+      if (!codes.length) {
+        setFormData((prev) => ({ ...prev, soKienRot: "" }));
+        return;
+      }
+
+      try {
+        const res = await nhanSuSoanService.getKienTheoSoSoda(codes);
+        const { notFound = [], tongKien = 0 } = res || {};
+        if (notFound.length) {
+          toast.error(`❌ Không tìm thấy dữ liệu cho: ${notFound.join(", ")}`);
+        }
+        setFormData((prev) => ({ ...prev, soKienRot: String(tongKien) }));
+      } catch (err) {
+        console.error("Lỗi tra cứu kiện theo soda:", err);
+        toast.error("❌ Không tra cứu được số kiện, thử lại");
+      }
+    },
+    [originalSodaKey, data],
+  );
   useEffect(() => {
     const key = formData.maCH.trim();
     if (key.length < 3) {
@@ -127,7 +163,10 @@ const EditKienDialog = ({
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await dataCHService.getAllDataCH({ search: key, limit: 20 });
+        const res = await dataCHService.getAllDataCH({
+          search: key,
+          limit: 20,
+        });
         const list = res?.data || [];
         setSuggestions(
           list.map((item) => ({
@@ -172,7 +211,10 @@ const EditKienDialog = ({
       errs.maCH = "Nhập mã cửa hàng";
     } else {
       try {
-        const res = await dataCHService.getAllDataCH({ search: key, limit: 20 });
+        const res = await dataCHService.getAllDataCH({
+          search: key,
+          limit: 20,
+        });
         const list = res?.data || [];
         const matched = list.find((ch) => ch.mach === key);
         if (!matched) {
@@ -185,7 +227,8 @@ const EditKienDialog = ({
         errs.maCH = "Không kiểm tra được mã cửa hàng, thử lại";
       }
     }
-    if (!formData.ngayRotKienDateTime) errs.ngayRotKienDateTime = "Chọn ngày giờ";
+    if (!formData.ngayRotKienDateTime)
+      errs.ngayRotKienDateTime = "Chọn ngày giờ";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }, [formData.maCH, formData.ngayRotKienDateTime]);
@@ -253,7 +296,9 @@ const EditKienDialog = ({
                   if (!showSuggest || !suggestions.length) return;
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
-                    setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                    setActiveIndex((i) =>
+                      Math.min(i + 1, suggestions.length - 1),
+                    );
                   } else if (e.key === "ArrowUp") {
                     e.preventDefault();
                     setActiveIndex((i) => Math.max(i - 1, 0));
@@ -274,7 +319,9 @@ const EditKienDialog = ({
               {showSuggest && (
                 <div className="absolute left-0 right-0 mt-1 z-[60] rounded-lg border border-slate-200 bg-white shadow-lg max-h-72 overflow-auto">
                   {searching ? (
-                    <div className="px-3 py-2 text-sm text-slate-500">Đang tìm...</div>
+                    <div className="px-3 py-2 text-sm text-slate-500">
+                      Đang tìm...
+                    </div>
                   ) : suggestions.length ? (
                     suggestions.map((ch, idx) => (
                       <button
@@ -284,13 +331,17 @@ const EditKienDialog = ({
                         onClick={() => selectSuggest(ch)}
                         className={[
                           "w-full flex items-center gap-2 px-3 py-2 text-left",
-                          idx === activeIndex ? "bg-sky-50" : "hover:bg-slate-50",
+                          idx === activeIndex
+                            ? "bg-sky-50"
+                            : "hover:bg-slate-50",
                         ].join(" ")}
                       >
                         <span className="inline-flex items-center font-mono text-xs rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-slate-700">
                           {ch.maCH}
                         </span>
-                        <span className="font-semibold text-slate-800 truncate">{ch.tenCH}</span>
+                        <span className="font-semibold text-slate-800 truncate">
+                          {ch.tenCH}
+                        </span>
                       </button>
                     ))
                   ) : (
@@ -304,12 +355,16 @@ const EditKienDialog = ({
                 </div>
               )}
             </div>
-            {errors.maCH && <p className="text-sm text-rose-600">{errors.maCH}</p>}
+            {errors.maCH && (
+              <p className="text-sm text-rose-600">{errors.maCH}</p>
+            )}
           </div>
 
           {/* Tên CH */}
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Tên cửa hàng</label>
+            <label className="text-sm font-semibold text-slate-800">
+              Tên cửa hàng
+            </label>
             <Input
               name="tenCH"
               placeholder="Tự động điền từ mã CH"
@@ -322,7 +377,9 @@ const EditKienDialog = ({
           {/* Số kiện + Ngày giờ */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800">Số kiện</label>
+              <label className="text-sm font-semibold text-slate-800">
+                Số kiện
+              </label>
               <Input
                 name="soKienRot"
                 placeholder="0"
@@ -345,50 +402,41 @@ const EditKienDialog = ({
                 onChange={handleChange}
                 className={[
                   "h-11 text-[15px] text-slate-900",
-                  errors.ngayRotKienDateTime ? "border-rose-500 ring-2 ring-rose-500" : "",
+                  errors.ngayRotKienDateTime
+                    ? "border-rose-500 ring-2 ring-rose-500"
+                    : "",
                 ].join(" ")}
               />
               {errors.ngayRotKienDateTime && (
-                <p className="text-sm text-rose-600">{errors.ngayRotKienDateTime}</p>
+                <p className="text-sm text-rose-600">
+                  {errors.ngayRotKienDateTime}
+                </p>
               )}
             </div>
           </div>
 
           {/* Số soda - hóa đơn */}
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Số soda - hóa đơn</label>
+            <label className="text-sm font-semibold text-slate-800">
+              Số soda - hóa đơn
+            </label>
             <SoSodaScanInput
               key={open ? data?._id : "closed"}
-              initialCodes={soSodaCodes}
+              initialCodes={ownCodes}
               existingCodes={adjustedExistingCodes}
               existingCodeCounts={adjustedExistingCodeCounts}
               duplicateActionLabel={LAN_2_LABEL}
               onDuplicateConfirmed={() => setCoRotLan2(true)}
-              onCodesChange={async (codes, hasError) => {
-                setSoSodaCodes(codes);
-                setSoSodaHasError(hasError);
-                if (!codes.length) {
-                  setFormData((prev) => ({ ...prev, soKienRot: "" }));
-                  return;
-                }
-                try {
-                  const res = await nhanSuSoanService.getKienTheoSoSoda(codes);
-                  const { notFound = [], tongKien = 0 } = res || {};
-                  if (notFound.length) {
-                    toast.error(`❌ Không tìm thấy dữ liệu cho: ${notFound.join(", ")}`);
-                  }
-                  setFormData((prev) => ({ ...prev, soKienRot: String(tongKien) }));
-                } catch (err) {
-                  console.error("Lỗi tra cứu kiện theo soda:", err);
-                  toast.error("❌ Không tra cứu được số kiện, thử lại");
-                }
-              }}
+              onCodesChange={handleCodesChange}
+              onRequestSave={handleSave}
             />
           </div>
 
           {/* Ghi chú */}
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Ghi chú</label>
+            <label className="text-sm font-semibold text-slate-800">
+              Ghi chú
+            </label>
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className="inline-flex items-center rounded-md bg-amber-100 text-amber-800 border border-amber-300 px-2.5 py-1 text-sm font-bold select-none">
                 {GHI_CHU_CO_DINH}
@@ -398,7 +446,9 @@ const EditKienDialog = ({
                   {LAN_2_LABEL}
                 </span>
               )}
-              <span className="text-xs text-slate-400">(cố định, không thể xóa)</span>
+              <span className="text-xs text-slate-400">
+                (cố định, không thể xóa)
+              </span>
             </div>
             <Textarea
               name="ghiChuThem"
@@ -418,7 +468,10 @@ const EditKienDialog = ({
           >
             Hủy
           </Button>
-          <Button onClick={handleSave} className="h-11 px-6 text-[15px] font-semibold">
+          <Button
+            onClick={handleSave}
+            className="h-11 px-6 text-[15px] font-semibold"
+          >
             Lưu thay đổi
           </Button>
         </DialogFooter>

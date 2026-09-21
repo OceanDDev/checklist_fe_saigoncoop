@@ -9,7 +9,7 @@ import {
   Legend as RechartsLegend,
   ResponsiveContainer,
 } from "recharts";
-import { Loader2, PackageCheck, PackageX, Boxes, Users } from "lucide-react";
+import { Loader2, PackageCheck, PackageX, Boxes } from "lucide-react";
 import { nhapHangService } from "@/services/nhaphang/nhaphang.service";
 import {
   KHO_LIST,
@@ -20,9 +20,7 @@ import {
   percentLabelFormatter,
   KhoFilter,
   StatCard,
-  buildEmpProductivity,
   formatNumber,
-  barDataLabelsOptions,
   toDateKeyUTC,
   getDefaultDateRange,
 } from "./dashboardCommon";
@@ -49,70 +47,7 @@ const normalizeTrangThai = (v) => String(v || "").trim();
 const statTones = ["bg-rose-600", "bg-blue-600", "bg-emerald-600"];
 const statIcons = [PackageX, Boxes, PackageCheck];
 
-// ─────────────────────────────────────────────
-// BIỂU ĐỒ CỘT NĂNG SUẤT NV CHÂM HÀNG — mỗi nhân viên 1 cột, giá trị = tổng
-// kiện đã châm (field nguồn: nhan_vien_let). Cùng style với
-// EmpProductivityBar bên DashNhapPut.
-// ─────────────────────────────────────────────
-const EmpProductivityBar = ({ title, data, loading }) => {
-  const chartData = useMemo(
-    () => ({
-      labels: data.map((d) => d.name),
-      datasets: [
-        {
-          label: "Kiện",
-          data: data.map((d) => d.value),
-          backgroundColor: data.map((d) => d.fill),
-          borderRadius: 4,
-        },
-      ],
-    }),
-    [data],
-  );
 
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-2 flex items-center gap-2">
-        <Users size={15} className="text-slate-500" />
-        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
-      </div>
-      {loading ? (
-        <div className="flex h-64 items-center justify-center text-slate-400">
-          <Loader2 size={20} className="animate-spin" />
-        </div>
-      ) : data.length === 0 ? (
-        <div className="flex h-64 items-center justify-center text-slate-400">
-          Không có dữ liệu
-        </div>
-      ) : (
-        <div className="h-64">
-          <Bar
-            data={chartData}
-            options={{
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: { display: false },
-                datalabels: barDataLabelsOptions,
-                tooltip: {
-                  callbacks: {
-                    label: (ctx) => `${formatNumber(ctx.parsed.y)} kiện`,
-                  },
-                },
-              },
-              scales: {
-                x: {
-                  ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 },
-                },
-                y: { beginAtZero: true },
-              },
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
-};
 
 const LetHangSection = ({ rawData, loading, onNavigate }) => {
   useDonutFonts();
@@ -214,12 +149,6 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
     percentLabelFormatter,
   );
 
-  // Năng suất NV Châm hàng — mỗi nhân viên 1 cột, tổng kiện đã châm trong
-  // phạm vi filter kho + khoảng ngày hiện tại.
-  const empLetData = useMemo(
-    () => buildEmpProductivity(filtered, "nhan_vien_let"),
-    [filtered],
-  );
 
   // Click vào lát donut -> báo lên component cha để chuyển qua tab Bảng dữ
   // liệu + áp bộ lọc theo đúng trạng thái đó.
@@ -399,13 +328,6 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
           )}
         </div>
       </div>
-
-      {/* Năng suất nhân viên châm hàng — mỗi NV 1 cột, theo kiện */}
-      <EmpProductivityBar
-        title="Năng suất NV Châm hàng (theo kiện)"
-        data={empLetData}
-        loading={loading}
-      />
     </div>
   );
 };

@@ -50,6 +50,7 @@ import SoKhopKhuyenMaiTable from "./modules/DoiChieuTonKho";
 import HomeNhapHangDash from "./modules/nhaphang";
 import BaoTaiDieuVan from "./modules/baotai/dieuvan";
 import HomeBaoBiDash from "./modules/baobi";
+import SelectSoftware from "./modules/Login/selectsofware";
 
 function App() {
   return (
@@ -65,6 +66,18 @@ function App() {
         style={{ zIndex: 999999 }} // đảm bảo nổi trên mọi overlay
       />
       <Routes>
+        {/* MỚI: Trang chọn phần mềm - Admin (role 500) sẽ thấy tất cả các card */}
+        <Route
+          path="/administrator"
+          element={
+            <PrivateRoute allowRoles={[500]}>
+              <MainLayout>
+                <SelectSoftware />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
         {/* Trang chủ chỉ vào được nếu đã login */}
         <Route
           path="/checklistform/:formId"
@@ -207,8 +220,6 @@ function App() {
             </PrivateRoute>
           }
         />
-
-       
 
         {/* TTB */}
         <Route
@@ -393,7 +404,7 @@ function App() {
         <Route
           path="/baotai"
           element={
-            <PrivateRoute allowRoles={[73,74]}>
+            <PrivateRoute allowRoles={[73, 74]}>
               <MainLayout>
                 <BaoTaiDieuVan />
               </MainLayout>
@@ -401,14 +412,11 @@ function App() {
           }
         />
 
-
-
-
         {/* PHIEU SOAN */}
         <Route
           path="/nhansusoan"
           element={
-            <PrivateRoute allowRoles={[52, 57, 58,76]}>
+            <PrivateRoute allowRoles={[52, 57, 58, 76]}>
               <MainLayout>
                 <NhanSuSoanTable />
               </MainLayout>
@@ -523,7 +531,7 @@ function App() {
             </PrivateRoute>
           }
         />
-   {/* BAOBI*/}
+        {/* BAOBI*/}
 
         <Route
           path="/baobi"

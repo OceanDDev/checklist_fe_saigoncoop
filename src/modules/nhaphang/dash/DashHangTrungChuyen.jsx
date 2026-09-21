@@ -9,7 +9,7 @@ import {
   Legend as RechartsLegend,
   ResponsiveContainer,
 } from "recharts";
-import { Loader2, PackageCheck, PackageX, Boxes } from "lucide-react";
+import { Loader2, PackageCheck, PackageX, Boxes, Users } from "lucide-react";
 import { nhapHangService } from "@/services/nhaphang/nhaphang.service";
 import {
   KHO_LIST,
@@ -20,25 +20,92 @@ import {
   FONT_SANS,
   useDonutFonts,
   formatNumber,
-  usePieLabelRenderer,  
+  usePieLabelRenderer,
   percentLabelFormatter,
+  buildEmpProductivity,
   getDefaultDateRange,
   KhoFilter,
   StatCard,
   barDataLabelsOptions,
 } from "./dashboardCommon";
 
-const NHAP_MIN_ANGLE = 6;
-const PUT_MIN_ANGLE = 8;
+// SKU cố định của Hàng Trung Chuyển — khớp với SKU_KHONG_AP_QC_DAC_THU
+// bên NhapHangImportModal (import.jsx). Đây là dòng hàng được import
+// chung với "Nhập" (loai_hinh: "Nhập") nhưng luôn cho qua rule QC Đặc Thù.
+const SKU_HANG_TRUNG_CHUYEN = "HANGTRUNGCHUYEN";
+
+const TC_NHAP_MIN_ANGLE = 6;
+const TC_PUT_MIN_ANGLE = 8;
 
 // ─────────────────────────────────────────────
-// BIỂU ĐỒ CỘT NĂNG SUẤT NHÂN VIÊN — mỗi nhân viên 1 cột, giá trị = tổng
-// kiện xử lý (kiện = 0 trên bảng tính là 1). Dùng chung cho NV Nhận &
-// NV Putaway, chỉ khác field nguồn và tiêu đề.
+// BIỂU ĐỒ CỘT NĂNG SUẤT NHÂN VIÊN — dùng chung cho NV Nhận & NV Putaway
+// của Hàng Trung Chuyển, giống hệt bản trong DashNhapPut.
 // ─────────────────────────────────────────────
+const EmpProductivityBar = ({ title, data, loading }) => {
+  const chartData = useMemo(
+    () => ({
+      labels: data.map((d) => d.name),
+      datasets: [
+        {
+          label: "Kiện",
+          data: data.map((d) => d.value),
+          backgroundColor: data.map((d) => d.fill),
+          borderRadius: 4,
+        },
+      ],
+    }),
+    [data],
+  );
 
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Users size={15} className="text-slate-500" />
+        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+      </div>
+      {loading ? (
+        <div className="flex h-64 items-center justify-center text-slate-400">
+          <Loader2 size={20} className="animate-spin" />
+        </div>
+      ) : data.length === 0 ? (
+        <div className="flex h-64 items-center justify-center text-slate-400">
+          Không có dữ liệu
+        </div>
+      ) : (
+        <div className="h-64">
+          <Bar
+            data={chartData}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                datalabels: barDataLabelsOptions,
+                tooltip: {
+                  callbacks: {
+                    label: (ctx) => `${formatNumber(ctx.parsed.y)} kiện`,
+                  },
+                },
+              },
+              scales: {
+                x: {
+                  ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 },
+                },
+                y: { beginAtZero: true },
+              },
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
 
-const NhapHangSection = ({ rawData, loading, onNavigate }) => {
+// ─────────────────────────────────────────────
+// SECTION 1: TRUNG CHUYỂN — NHẬP — tổng kiện theo ngày nhập kho, filter
+// kho + khoảng ngày. Nhận data từ component cha (không tự fetch).
+// ─────────────────────────────────────────────
+const TrungChuyenNhapSection = ({ rawData, loading, onNavigate }) => {
   useDonutFonts();
   const [selectedKho, setSelectedKho] = useState(KHO_LIST.map((k) => k.kho));
   const [dateFrom, setDateFrom] = useState(() => getDefaultDateRange().from);
@@ -61,14 +128,13 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
     });
   }, [rawData, selectedKho, dateFrom, dateTo]);
 
-  // totalKien / totalSku luôn là TỔNG của toàn bộ khoảng ngày đang lọc
+  // totalKien / totalDong luôn là TỔNG của toàn bộ khoảng ngày đang lọc
   // (không phải theo từng ngày riêng lẻ) vì tính trực tiếp từ `filtered`.
-  const { labels, khoBarData, totalKien, totalSku, byKho } = useMemo(() => {
+  const { labels, khoBarData, totalKien, totalDong, byKho } = useMemo(() => {
     const dateKeys = [
       ...new Set(filtered.map((r) => toDateKeyUTC(r.ngay_nhap_kho))),
     ].sort();
 
-    const skuSet = new Set();
     let totalKien = 0;
     const byKho = {};
 
@@ -76,7 +142,6 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
       const kien = Number(r.kien) || 0;
       const kho = Number(r.kho);
       totalKien += kien;
-      skuSet.add(r.sku);
       byKho[kho] = (byKho[kho] || 0) + kien;
     });
 
@@ -104,7 +169,7 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
       labels: dateKeys.map(formatDateLabel),
       khoBarData,
       totalKien,
-      totalSku: skuSet.size,
+      totalDong: filtered.length,
       byKho,
     };
   }, [filtered, selectedKho]);
@@ -126,21 +191,21 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
     khoPieData,
     280,
     40,
-    NHAP_MIN_ANGLE,
+    TC_NHAP_MIN_ANGLE,
     percentLabelFormatter,
   );
 
-
-
   const handleKhoSliceClick = (data) => {
     if (!onNavigate) return;
-    onNavigate({ tab: "nhap", kho: data.kho });
+    onNavigate({ tab: "nhap", sku: SKU_HANG_TRUNG_CHUYEN, kho: data.kho });
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-800">Nhập Hàng</h2>
+        <h2 className="text-base font-semibold text-slate-800">
+          Hàng Trung Chuyển — Nhập
+        </h2>
         <KhoFilter selected={selectedKho} onToggle={toggleKho} />
       </div>
 
@@ -186,8 +251,8 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
         />
         <StatCard
           icon={PackageCheck}
-          label="Số SKU"
-          value={totalSku.toLocaleString("vi-VN")}
+          label="Tổng số dòng"
+          value={totalDong.toLocaleString("vi-VN")}
           tone="bg-emerald-600"
         />
       </div>
@@ -246,7 +311,7 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
                     innerRadius={44}
                     outerRadius={72}
                     paddingAngle={2}
-                    minAngle={NHAP_MIN_ANGLE}
+                    minAngle={TC_NHAP_MIN_ANGLE}
                     label={khoPieLabel}
                     labelLine={false}
                     cursor={onNavigate ? "pointer" : "default"}
@@ -275,7 +340,11 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
   );
 };
 
-const PutHangSection = ({ rawData, loading, onNavigate }) => {
+// ─────────────────────────────────────────────
+// SECTION 2: TRUNG CHUYỂN — PUT — dùng CHUNG data với section Nhập.
+// Chưa put = vị trí (vi_tri) bắt đầu bằng "RZ" (RZ1, RZ2, ...)
+// ─────────────────────────────────────────────
+const TrungChuyenPutSection = ({ rawData, loading, onNavigate }) => {
   useDonutFonts();
   const [selectedKho, setSelectedKho] = useState(KHO_LIST.map((k) => k.kho));
   const [dateFrom, setDateFrom] = useState(() => getDefaultDateRange().from);
@@ -298,52 +367,64 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
     });
   }, [rawData, selectedKho, dateFrom, dateTo]);
 
-  const { totalKien, chuaPut, daPut, byKho } = useMemo(() => {
-    let totalKien = 0;
-    let chuaPut = 0;
-    const byKho = {};
+  const { khoBarData, totalKien, chuaPut, daPut, byKho } =
+    useMemo(() => {
+      const dateKeys = [
+        ...new Set(filtered.map((r) => toDateKeyUTC(r.ngay_nhap_kho))),
+      ].sort();
 
-    filtered.forEach((r) => {
-      const kien = Number(r.kien) || 0;
-      totalKien += kien;
-      const kho = Number(r.kho);
-      if (!byKho[kho]) byKho[kho] = { daPut: 0, chuaPut: 0 };
+      let totalKien = 0;
+      let chuaPut = 0;
+      const byKho = {};
 
-      if (isChuaPut(r.vi_tri)) {
-        chuaPut += kien;
-        byKho[kho].chuaPut += kien;
-      } else {
-        byKho[kho].daPut += kien;
-      }
-    });
+      filtered.forEach((r) => {
+        const kien = Number(r.kien) || 0;
+        totalKien += kien;
+        const kho = Number(r.kho);
+        if (!byKho[kho]) byKho[kho] = { daPut: 0, chuaPut: 0 };
 
-    return { totalKien, chuaPut, daPut: totalKien - chuaPut, byKho };
-  }, [filtered]);
+        if (isChuaPut(r.vi_tri)) {
+          chuaPut += kien;
+          byKho[kho].chuaPut += kien;
+        } else {
+          byKho[kho].daPut += kien;
+        }
+      });
+
+      const khoBarData = {
+        labels: dateKeys.map(formatDateLabel),
+        datasets: KHO_LIST.filter(({ kho }) => selectedKho.includes(kho)).map(
+          ({ kho, label, color }) => ({
+            label,
+            data: dateKeys.map((key) =>
+              filtered
+                .filter(
+                  (r) =>
+                    Number(r.kho) === kho &&
+                    toDateKeyUTC(r.ngay_nhap_kho) === key,
+                )
+                .reduce((sum, r) => sum + (Number(r.kien) || 0), 0),
+            ),
+            backgroundColor: color,
+            borderRadius: 4,
+          }),
+        ),
+      };
+
+      return {
+        labels: dateKeys.map(formatDateLabel),
+        khoBarData,
+        totalKien,
+        chuaPut,
+        daPut: totalKien - chuaPut,
+        byKho,
+      };
+    }, [filtered, selectedKho]);
 
   const khoActive = useMemo(
     () => KHO_LIST.filter(({ kho }) => selectedKho.includes(kho)),
     [selectedKho],
   );
-
-  const khoBarData = useMemo(() => {
-    return {
-      labels: khoActive.map((k) => k.label),
-      datasets: [
-        {
-          label: "Đã put",
-          data: khoActive.map((k) => byKho[k.kho]?.daPut || 0),
-          backgroundColor: "#10b981",
-          borderRadius: 4,
-        },
-        {
-          label: "Chưa put (RZ*)",
-          data: khoActive.map((k) => byKho[k.kho]?.chuaPut || 0),
-          backgroundColor: "#f43f5e",
-          borderRadius: 4,
-        },
-      ],
-    };
-  }, [byKho, khoActive]);
 
   const pieData = useMemo(
     () => [
@@ -357,16 +438,21 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
     pieData,
     280,
     40,
-    PUT_MIN_ANGLE,
+    TC_PUT_MIN_ANGLE,
     percentLabelFormatter,
   );
 
+  const empPutData = useMemo(
+    () => buildEmpProductivity(filtered, "nhan_vien_put"),
+    [filtered],
+  );
 
   const handleSliceClick = (name) => {
     if (!onNavigate) return;
     const isChuaPutSlice = name.startsWith("Chưa put");
     onNavigate({
       tab: "nhap",
+      sku: SKU_HANG_TRUNG_CHUYEN,
       status: isChuaPutSlice ? "chuaPut" : "daPut",
       viTri: isChuaPutSlice ? "RZ" : undefined,
       kho: selectedKho.length === 1 ? selectedKho[0] : undefined,
@@ -376,7 +462,9 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-800">Put Hàng</h2>
+        <h2 className="text-base font-semibold text-slate-800">
+          Hàng Trung Chuyển — Put
+        </h2>
         <KhoFilter selected={selectedKho} onToggle={toggleKho} />
       </div>
 
@@ -495,7 +583,7 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
                     innerRadius={44}
                     outerRadius={72}
                     paddingAngle={2}
-                    minAngle={PUT_MIN_ANGLE}
+                    minAngle={TC_PUT_MIN_ANGLE}
                     label={pieLabel}
                     labelLine={false}
                     cursor={onNavigate ? "pointer" : "default"}
@@ -520,16 +608,22 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
           )}
         </div>
       </div>
+
+      <EmpProductivityBar
+        title="Năng suất NV Putaway (theo kiện) — Hàng Trung Chuyển"
+        data={empPutData}
+        loading={loading}
+      />
     </div>
   );
 };
 
 // ─────────────────────────────────────────────
-// DASHNHAPPUT — gộp Nhập Hàng + Put Hàng, fetch data 1 LẦN (loai_hinh:
-// "Nhập"), dùng chung cho cả 2 section (Put chỉ khác cách tính, dựa theo
-// vi_tri bắt đầu "RZ").
+// DASHHANGTRUNGCHUYEN — gộp 2 section Nhập + Put của riêng SKU
+// "HANGTRUNGCHUYEN", fetch data 1 LẦN (loai_hinh: "Nhập", sku:
+// "HANGTRUNGCHUYEN"), dùng chung cho cả 2 section.
 // ─────────────────────────────────────────────
-const DashNhapPut = ({ onNavigate }) => {
+const DashHangTrungChuyen = ({ onNavigate }) => {
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -541,10 +635,16 @@ const DashNhapPut = ({ onNavigate }) => {
           page: 1,
           limit: FETCH_LIMIT,
           loai_hinh: "Nhập",
+          sku: SKU_HANG_TRUNG_CHUYEN,
         });
-        setRawData(res?.data || []);
+        // Lọc lại lần nữa ở client phòng trường hợp backend search theo
+        // kiểu "chứa chuỗi" trả về nhầm SKU khác có chứa cùng chuỗi con.
+        const data = (res?.data || []).filter(
+          (r) => r.sku === SKU_HANG_TRUNG_CHUYEN,
+        );
+        setRawData(data);
       } catch (err) {
-        console.error("Lỗi tải dữ liệu Nhập hàng:", err);
+        console.error("Lỗi tải dữ liệu Hàng Trung Chuyển:", err);
       } finally {
         setLoading(false);
       }
@@ -554,13 +654,13 @@ const DashNhapPut = ({ onNavigate }) => {
 
   return (
     <div className="space-y-8">
-      <NhapHangSection
+      <TrungChuyenNhapSection
         rawData={rawData}
         loading={loading}
         onNavigate={onNavigate}
       />
       <div className="border-t border-slate-200" />
-      <PutHangSection
+      <TrungChuyenPutSection
         rawData={rawData}
         loading={loading}
         onNavigate={onNavigate}
@@ -569,4 +669,4 @@ const DashNhapPut = ({ onNavigate }) => {
   );
 };
 
-export default DashNhapPut;
+export default DashHangTrungChuyen;

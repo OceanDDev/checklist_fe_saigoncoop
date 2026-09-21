@@ -5,11 +5,15 @@ import {
   PackagePlus,
   List,
   ClipboardCheck,
+  Gauge,
+  Truck,
 } from "lucide-react";
 import NhapHangForm from "./kiennhap";
 import LetForm from "./let";
 import QcDacThuForm from "./qcdacthu";
 import DashboardNhapHang from "./dash/dashboard";
+import DashKPI from "./dash/DashKpi";
+import ASNForm from "./asn";
 
 // Các bảng con — nằm trong các thư mục theo đúng cấu trúc hiện tại của bạn.
 // Chỉnh lại đường dẫn nếu tên file thực tế khác.
@@ -18,7 +22,9 @@ import DashboardNhapHang from "./dash/dashboard";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { key: "kpi", label: "KPI Năng Suất", icon: Gauge },
   { key: "nhap", label: "Nhập", icon: PackagePlus },
+  { key: "asn", label: "ASN", icon: Truck },
   { key: "let", label: "Let", icon: List },
   { key: "qcdacthu", label: "QC Đặc Thù", icon: ClipboardCheck },
 ];
@@ -36,12 +42,15 @@ const HomeNhapHangDash = () => {
   const [letInitialFilters, setLetInitialFilters] = useState(null);
   const [letInitialFiltersToken, setLetInitialFiltersToken] = useState(0);
 
+  // Tương tự cho tab ASN — bơm filter khi click donut liên quan ASN bên Dashboard (nếu có).
+  const [asnInitialFilters, setAsnInitialFilters] = useState(null);
+  const [asnInitialFiltersToken, setAsnInitialFiltersToken] = useState(0);
+
   // Nhận từ DashboardNhapHang khi click vào lát donut. Mỗi section trong
-  // Dashboard gửi kèm `tab` ("nhap" hoặc "let") để biết chuyển đúng tab nào
-  // và bơm filter vào đúng bảng dữ liệu tương ứng — tránh việc donut của
-  // Let Hàng bị điều hướng nhầm qua bảng Nhập.
+  // Dashboard gửi kèm `tab` ("nhap", "let" hoặc "asn") để biết chuyển đúng
+  // tab nào và bơm filter vào đúng bảng dữ liệu tương ứng.
   const handleNavigateFromDashboard = (params = {}) => {
-    const { tab, viTri, kho, trang_thai } = params;
+    const { tab, viTri, kho, trang_thai, sku, asn, po, ma_ncc } = params;
 
     if (tab === "let") {
       const filters = {};
@@ -54,11 +63,25 @@ const HomeNhapHangDash = () => {
       return;
     }
 
+    if (tab === "asn") {
+      const filters = {};
+      if (asn) filters.asn = asn;
+      if (po) filters.po = po;
+      if (ma_ncc) filters.ma_ncc = String(ma_ncc);
+
+      setAsnInitialFilters(filters);
+      setAsnInitialFiltersToken((t) => t + 1);
+      setActiveTab("asn");
+      return;
+    }
+
     // mặc định (tab === "nhap"): donut Nhập Hàng hoặc Put Hàng, cùng dùng
-    // chung bảng dữ liệu loai_hinh "Nhập"
+    // chung bảng dữ liệu loai_hinh "Nhập" (bao gồm cả donut của dashboard
+    // Hàng Trung Chuyển, gửi kèm sku để lọc đúng)
     const filters = {};
     if (viTri) filters.vi_tri = viTri;
     if (kho) filters.kho = String(kho);
+    if (sku) filters.sku = sku;
 
     setNhapInitialFilters(filters);
     setNhapInitialFiltersToken((t) => t + 1);
@@ -106,10 +129,17 @@ const HomeNhapHangDash = () => {
           {activeTab === "dashboard" && (
             <DashboardNhapHang onNavigate={handleNavigateFromDashboard} />
           )}
+          {activeTab === "kpi" && <DashKPI />}
           {activeTab === "nhap" && (
             <NhapHangForm
               initialFilters={nhapInitialFilters}
               initialFiltersToken={nhapInitialFiltersToken}
+            />
+          )}
+          {activeTab === "asn" && (
+            <ASNForm
+              initialFilters={asnInitialFilters}
+              initialFiltersToken={asnInitialFiltersToken}
             />
           )}
           {/* {activeTab === "put" && <CapNhatNhapHang />} */}
