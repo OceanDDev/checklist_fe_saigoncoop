@@ -115,12 +115,14 @@ const URL = {
   bookxe: {
     bookxe: ENDPOINT_PREFIX + "/bookxe",
     historybookxe: ENDPOINT_PREFIX + "/historybookxe",
+    nhaxe: ENDPOINT_PREFIX + "/nhaxe",
   },
   tonkho: {
     tonkho: ENDPOINT_PREFIX + "/tonkho",
   },
   nhaphang: {
     nhaphang: ENDPOINT_PREFIX + "/nhaphang",
+    asn: ENDPOINT_PREFIX + "/asn",
   },
   qcdacthu: {
     qcdacthu: ENDPOINT_PREFIX + "/qcdacthu",

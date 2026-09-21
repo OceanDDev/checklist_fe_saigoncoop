@@ -33,11 +33,15 @@ const LoginPage = () => {
       localStorage.setItem("name", res.user.name);
       localStorage.setItem("token", res.token);
 
-      const role = res.user.role;
+      // ⚠️ Ép kiểu Number để tránh lỗi so sánh khi backend trả role dạng string
+      const role = Number(res.user.role);
       console.log("✅ [LOGIN] Role:", role, "| Type:", typeof role);
 
       let target = "/";
-      if (role === 20 || role === 26 || role === 19) {
+      if (role === 500) {
+        // ✅ Admin tổng -> trang chọn phần mềm
+        target = "/administrator";
+      } else if (role === 20 || role === 26 || role === 19) {
         target = "/phieusoan";
       } else if (role === 52 || role === 57 || role === 58 || role === 76) {
         target = "/nhansusoan";

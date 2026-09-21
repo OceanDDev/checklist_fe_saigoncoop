@@ -84,7 +84,7 @@ const Header = () => {
       76: "QUẢN LÝ PHIẾU SOẠN",
       77: "NHẬP XUẤT BAO BÌ",
     };
-    return roles[role] || "CHECKLIST";
+    return roles[role] || "ADMINISTRATOR";
   };
 
   return (
@@ -102,7 +102,7 @@ const Header = () => {
       <div className="mx-auto max-w-7xl flex items-center justify-between gap-4 relative">
         {/* LOGO NỔI BẬT */}
         <Link
-          to="/"
+          to="/administrator"
           className="group relative flex items-center justify-center rounded-2xl bg-white p-1.5 shadow-[0_0_15px_rgba(59,130,246,0.5)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_25px_rgba(59,130,246,0.8)]"
         >
           <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-tr from-blue-500 to-cyan-400 opacity-30 blur group-hover:opacity-60 transition duration-300"></div>

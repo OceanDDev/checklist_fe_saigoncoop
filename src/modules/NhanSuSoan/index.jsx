@@ -735,8 +735,10 @@ const NhanSuSoanTable = forwardRef(
     }));
 
     // Chỉ role 57 mới được thấy/dùng nút Xoá.
-    const canDelete = useMemo(() => getCurrentUserRole() === 57, []);
-    // Role 58: chỉ xem — không tick chọn, không sửa Chuyến, không thao tác
+const canDelete = useMemo(
+  () => [57, 500].includes(getCurrentUserRole()),
+  [],
+);    // Role 58: chỉ xem — không tick chọn, không sửa Chuyến, không thao tác
     // gộp/giao/huỷ giao/hoàn thành/import/xoá, không xem tab Năng suất NV.
     // Chỉ được: xem Bảng dữ liệu (read-only), xem Dashboard, Xuất Excel.
     const isViewerRole = useMemo(() => getCurrentUserRole() === 58, []);

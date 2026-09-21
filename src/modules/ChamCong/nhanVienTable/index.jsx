@@ -7,6 +7,7 @@ import XuatExcelButton from "./export";
 
 const ROLE_FULL = 28;
 const ROLE_NGOC_PHU = 30; // thêm dòng này
+const ROLE_ADMIN = 500; // admin tổng - toàn quyền
 // ✅ Single source of truth — phải khớp với schema backend
 const BO_PHAN_CHUC_VU = {
   "Nhà Cung Cấp": ["Kiểm chéo", "Soạn hàng", "Hỗ trợ xuất", "Tăng Ca Soạn"],
@@ -285,7 +286,8 @@ const ImportModal = ({ onClose, onDone }) => (
 export default function NhanVienTable() {
   // SAU
   const role = getRoleFromStorage();
-  const isFullAccess = role === ROLE_FULL || role === ROLE_NGOC_PHU;
+  const isFullAccess =
+    role === ROLE_ADMIN || role === ROLE_FULL || role === ROLE_NGOC_PHU;
 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
