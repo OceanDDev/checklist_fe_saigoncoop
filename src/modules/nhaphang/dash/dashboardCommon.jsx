@@ -90,18 +90,21 @@ export const computePieLabelLayout = (
   const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
   const labelRadius = outerRadius + 22;
   const anchorRadius = outerRadius + 4;
-  const rowHeight = 18;
+  const rowHeight = 24;
 
   const minY = 14;
   const maxY = chartHeight - bottomReserve;
 
-  const nonZeroCount = data.filter((d) => d.value > 0).length;
-  const realTotalAngle = Math.max(0, 360 - nonZeroCount * minAngle);
+  // Recharts (<Pie minAngle={...}>) luôn dành tối thiểu `minAngle` độ cho
+  // MỌI lát, kể cả lát có value = 0 — nếu không tính như vậy ở đây, lát
+  // 0% sẽ bị dồn về đúng góc biên giữa 2 lát bên cạnh (sweep = 0), khiến
+  // nhãn của nó rơi trúng vị trí nhãn lát kế bên và đè chữ lên nhau.
+  const sliceCount = data.length;
+  const realTotalAngle = Math.max(0, 360 - sliceCount * minAngle);
 
   let cumulated = 0;
   const positioned = data.map((d) => {
-    const sweep =
-      d.value > 0 ? minAngle + (d.value / total) * realTotalAngle : 0;
+    const sweep = minAngle + (d.value / total) * realTotalAngle;
     const midAngle = cumulated + sweep / 2;
     cumulated += sweep;
 
@@ -148,6 +151,22 @@ export const computePieLabelLayout = (
     });
   });
 
+  // Bước chống đè CHÉO 2 bên — 2 nhãn nằm sát trục dọc (gần đỉnh 90° hoặc
+  // đáy 270° của donut) có x gần trùng cx dù cos lệch dấu khác nhau, nên
+  // 1 nhãn rơi vào group "left", nhãn kia rơi vào group "right". Bước xử
+  // lý theo side ở trên chỉ so trong cùng 1 group nên không phát hiện ra
+  // cặp này — đây chính là trường hợp 2 lát rất nhỏ (vd 0.3% và 0.0%)
+  // đứng sát đáy donut bị dính chữ vào nhau. Ở đây so toàn bộ nhãn theo
+  // x gần nhau (bất kể side) rồi đẩy giãn theo y.
+  const sortedByY = [...positioned].sort((a, b) => a.y - b.y);
+  for (let i = 1; i < sortedByY.length; i++) {
+    const prev = sortedByY[i - 1];
+    const cur = sortedByY[i];
+    if (Math.abs(cur.x - prev.x) < 56 && cur.y - prev.y < rowHeight) {
+      cur.y = Math.min(maxY, prev.y + rowHeight);
+    }
+  }
+
   return positioned;
 };
 
@@ -183,7 +202,12 @@ export const usePieLabelRenderer = (
       }
 
       const pos = layoutCache[index];
-      if (!pos) return null;
+      // Lát giá trị = 0 (vd "Nhập VAS" = 0.0%) không vẽ nhãn — hiển thị
+      // "0.0%"/"0" không có giá trị thông tin, mà lại hay là nguyên nhân
+      // đè chữ lên lát nhỏ kế bên (vd 0.3%). Cách này chắc chắn triệt để
+      // hơn việc chỉ né bằng khoảng cách, vì không phụ thuộc vào góc/tọa
+      // độ tính toán được bao nhiêu.
+      if (!pos || pos.value <= 0) return null;
 
       const isRight = pos.side === "right";
       const textX = pos.x + (isRight ? 6 : -6);
@@ -281,7 +305,8 @@ export const getEmpColor = (index) =>
 // Label formatter dùng cho các donut cần hiển thị % thay vì số thật (vd:
 // donut "Kiện theo kho" / "Đã put - Chưa put" — tránh trùng lặp trực quan
 // với biểu đồ cột năng suất nhân viên đặt gần đó).
-export const percentLabelFormatter = (pos) => `${(pos.percent * 100).toFixed(1)}%`;
+export const percentLabelFormatter = (pos) =>
+  `${(pos.percent * 100).toFixed(1)}%`;
 
 // Gộp kiện theo nhân viên cho biểu đồ cột năng suất — dùng chung cho cả
 // NV Nhận (Nhập) và NV Putaway (Put). Kiện = 0 trên bảng vẫn tính là 1

@@ -21,10 +21,14 @@ import "react-date-range/dist/theme/default.css";
 import { baoBiService } from "@/services/baobi.service";
 import { dataCHService } from "@/services/phieusoan/dataCH.service";
 import PhieuXuatKho from "./phieuxuatkho";
+import ExportExcelTmsButton from "./xuattms";
 
 const emptyForm = {
   ma_ch: "",
   ten_ch: "",
+  so_kien: "", // chỉ nhập số, chữ "Kiện" set cứng khi ghép thành ghi_chu
+  ghi_chu_note: "",
+  ten_nguoi_xac_nhan: "", // người lập phiếu
   items: [], // được nạp từ tonKho khi mở modal
 };
 
@@ -34,6 +38,10 @@ const emptyEditForm = {
   ma_ch: "",
   ten_ch: "",
   luong_xuat: "",
+  so_phieu: "",
+  so_kien: "",
+  ghi_chu_note: "",
+  ten_nguoi_xac_nhan: "",
 };
 
 const emptyFilters = {
@@ -41,8 +49,8 @@ const emptyFilters = {
   name: "",
   ma_ch: "",
   ten_ch: "",
-  startDate: dayjs().startOf("month").format("YYYY-MM-DD"), // mặc định đầu tháng hiện tại
-  endDate: dayjs().endOf("month").format("YYYY-MM-DD"), // mặc định cuối tháng hiện tại
+  startDate: dayjs().startOf("month").format("YYYY-MM-DD"),
+  endDate: dayjs().endOf("month").format("YYYY-MM-DD"),
 };
 const formatDate = (date) => {
   if (!date) return "";
@@ -50,7 +58,6 @@ const formatDate = (date) => {
   return d.toLocaleDateString("vi-VN");
 };
 
-// Class dùng chung cho mọi input trong hàng filter của table
 const filterInputCls =
   "w-full rounded border border-slate-200 px-2 py-1 text-xs font-normal text-slate-700 focus:border-blue-400 focus:outline-none";
 
@@ -112,7 +119,6 @@ const DateRangeFilter = ({ startValue, endValue, onChange, onClear }) => {
     setShow((v) => !v);
   };
 
-  // Filter ngay mỗi lần chọn — kể cả click 1 ngày (start = end)
   const handleRangeChange = (item) => {
     const { startDate, endDate } = item.selection;
     setRange([item.selection]);
@@ -178,6 +184,7 @@ const DateRangeFilter = ({ startValue, endValue, onChange, onClear }) => {
     </div>
   );
 };
+
 const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -200,12 +207,16 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
   const [maChFound, setMaChFound] = useState(null);
   const maChCheckTimer = useRef(null);
 
-  // ---------- Phiếu xuất kho (in) ----------
   const [phieuData, setPhieuData] = useState(null);
 
-  // ---------- Xuất Excel ----------
   const [exportingExcel, setExportingExcel] = useState(false);
 
+  const buildGhiChu = (soKien, ghiChuNote) => {
+    const parts = [];
+    if (soKien) parts.push(`${soKien} Kiện`);
+    if (ghiChuNote?.trim()) parts.push(ghiChuNote.trim());
+    return parts.length ? parts.join(" - ") : undefined;
+  };
   useEffect(() => {
     if (!phieuData) return;
     const timer = setTimeout(() => window.print(), 200);
@@ -218,7 +229,6 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     return () => window.removeEventListener("afterprint", clear);
   }, []);
 
-  // ---------- Filter trong table ----------
   const [filters, setFilters] = useState(emptyFilters);
   const filterDebounceRef = useRef(null);
 
@@ -273,7 +283,6 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     fetchTonKho();
   }, [fetchTonKho]);
 
-  // Đổi filter chữ -> debounce 400ms, reset về trang 1
   const handleFilterChange = (field, value) => {
     setFilters((prev) => ({ ...prev, [field]: value }));
     if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
@@ -282,7 +291,6 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     }, 400);
   };
 
-  // Filter ngày áp dụng ngay khi chọn xong (không debounce, vì DateRange tự chốt giá trị)
   const handleDateFilterChange = (startDate, endDate) => {
     setFilters((prev) => ({ ...prev, startDate, endDate }));
     setPage(1);
@@ -310,7 +318,6 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     filters.startDate !== emptyFilters.startDate ||
     filters.endDate !== emptyFilters.endDate;
 
-  // ---------- Tra cứu tên cửa hàng theo mã CH (dùng chung) ----------
   const checkMaCh = useCallback(async (ma_ch, isEdit) => {
     if (!ma_ch) {
       setMaChFound(null);
@@ -372,7 +379,6 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     }, 400);
   };
 
-  // ---------- Cập nhật lượng xuất / dvt cho 1 dòng SKU (lấy sẵn từ tồn kho) ----------
   const updateItem = (itemId, field, value) => {
     setForm((prev) => ({
       ...prev,
@@ -399,13 +405,10 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     });
   };
 
-  // ---------- Modal open/close ----------
   const openAddModal = () => {
     setEditingId(null);
     setForm({
       ...emptyForm,
-      // Nạp sẵn toàn bộ SKU đang có trong tồn kho, chỉ chờ nhập lượng xuất
-      // Sắp xếp theo tên để các SKU cùng nhãn hàng (Cheers, Csmiles...) đứng gần nhau
       items: [...tonKho]
         .sort((a, b) =>
           (a.name || "").localeCompare(b.name || "", "vi", {
@@ -430,12 +433,21 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
 
   const openEditModal = (row) => {
     setEditingId(row._id);
+    const ghiChuMatch = row.ghi_chu?.match(/^(\d+)\s*Kiện(?:\s*-\s*(.*))?$/);
     setEditForm({
       sku: row.sku || "",
       name: row.name || "",
       ma_ch: row.ma_ch || "",
       ten_ch: row.ten_ch || "",
       luong_xuat: row.luong_xuat ?? "",
+      so_phieu: row.so_phieu || "",
+      ten_nguoi_xac_nhan: row.ten_nguoi_xac_nhan || "",
+      so_kien: ghiChuMatch
+        ? ghiChuMatch[1]
+        : row.ghi_chu
+          ? row.ghi_chu.replace(/\D/g, "")
+          : "",
+      ghi_chu_note: ghiChuMatch ? ghiChuMatch[2] || "" : "",
     });
     setErrors({});
     setMaChFound(null);
@@ -452,7 +464,6 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     setMaChFound(null);
   };
 
-  // ---------- Validate ----------
   const validateAddForm = () => {
     const newErrors = { items: {} };
 
@@ -462,7 +473,10 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       newErrors.ma_ch = "Không tìm thấy cửa hàng với mã này";
     }
 
-    // Chỉ những dòng có nhập lượng xuất mới được coi là chọn xuất
+    if (!form.ten_nguoi_xac_nhan?.trim()) {
+      newErrors.ten_nguoi_xac_nhan = "Vui lòng nhập người lập phiếu";
+    }
+
     const selectedItems = form.items.filter(
       (it) => it.luong_xuat !== "" && it.luong_xuat !== null,
     );
@@ -488,6 +502,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     setErrors(newErrors);
     return (
       !newErrors.ma_ch &&
+      !newErrors.ten_nguoi_xac_nhan &&
       !newErrors.submit &&
       Object.keys(newErrors.items).length === 0
     );
@@ -512,11 +527,14 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       newErrors.luong_xuat = "Lượng xuất phải lớn hơn 0";
     }
 
+    if (!editForm.ten_nguoi_xac_nhan?.trim()) {
+      newErrors.ten_nguoi_xac_nhan = "Vui lòng nhập người lập phiếu";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // ---------- Submit ----------
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -530,6 +548,9 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
           ma_ch: editForm.ma_ch.trim(),
           ten_ch: editForm.ten_ch?.trim() || undefined,
           luong_xuat: Number(editForm.luong_xuat),
+          so_phieu: editForm.so_phieu?.trim() || undefined,
+          ghi_chu: buildGhiChu(editForm.so_kien, editForm.ghi_chu_note),
+          ten_nguoi_xac_nhan: editForm.ten_nguoi_xac_nhan?.trim() || undefined,
         };
         await baoBiService.updateBaoBi(editingId, payload);
         closeModal();
@@ -552,9 +573,11 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     try {
       const ma_ch = form.ma_ch.trim();
       const ten_ch = form.ten_ch?.trim() || undefined;
+      const ghi_chu = buildGhiChu(form.so_kien, form.ghi_chu_note);
+      const ten_nguoi_xac_nhan = form.ten_nguoi_xac_nhan?.trim() || undefined;
       const tg_xuat = new Date().toISOString();
+      const so_phieu = `PXK-BBCS-${dayjs(tg_xuat).format("YYYYMD")}${ma_ch}`;
 
-      // Chỉ gửi các SKU có nhập lượng xuất, SKU nào để trống coi như không xuất
       const selectedItems = form.items.filter(
         (it) => it.luong_xuat !== "" && it.luong_xuat !== null,
       );
@@ -570,6 +593,9 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
             ten_ch,
             luong_xuat: Number(item.luong_xuat),
             tg_xuat,
+            so_phieu,
+            ghi_chu,
+            ten_nguoi_xac_nhan,
           });
           succeededItems.push(item);
         } catch (err) {
@@ -593,11 +619,13 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
         return;
       }
 
-      // Toàn bộ SKU xuất thành công -> chuẩn bị dữ liệu để in phiếu xuất kho
       setPhieuData({
+        soPhieu: so_phieu,
         ngay: dayjs(tg_xuat).format("DD/MM/YYYY"),
         tenCH: ten_ch || form.ten_ch,
         maCH: ma_ch,
+        ghiChu: ghi_chu,
+        tenNguoiLap: ten_nguoi_xac_nhan,
         items: succeededItems.map((it) => ({
           sku: it.sku.trim(),
           name: it.name,
@@ -625,7 +653,6 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     }
   };
 
-  // ---------- In lại phiếu từ 1 dòng trong table ----------
   const handlePrintRow = async (row) => {
     try {
       const dateStr = dayjs(row.tg_xuat).format("YYYY-MM-DD");
@@ -637,7 +664,6 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
         limit: 200,
       });
 
-      // Gộp các dòng cùng 1 lần xuất (cùng ma_ch + cùng tg_xuat chính xác)
       const sameBatch = (res?.data || []).filter(
         (r) => r.tg_xuat === row.tg_xuat && r.ma_ch === row.ma_ch,
       );
@@ -645,9 +671,12 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       const source = sameBatch.length ? sameBatch : [row];
 
       setPhieuData({
+        soPhieu: row.so_phieu,
         ngay: dayjs(row.tg_xuat).format("DD/MM/YYYY"),
         tenCH: row.ten_ch,
         maCH: row.ma_ch,
+        ghiChu: row.ghi_chu,
+        tenNguoiLap: row.ten_nguoi_xac_nhan,
         items: source.map((r) => ({
           sku: r.sku,
           name: r.name,
@@ -657,11 +686,13 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       });
     } catch (err) {
       console.error("Lỗi khi tải lại dữ liệu để in phiếu:", err);
-      // Fallback: in tạm với đúng dòng đang bấm, phòng khi API lỗi
       setPhieuData({
+        soPhieu: row.so_phieu,
         ngay: dayjs(row.tg_xuat).format("DD/MM/YYYY"),
         tenCH: row.ten_ch,
         maCH: row.ma_ch,
+        ghiChu: row.ghi_chu,
+        tenNguoiLap: row.ten_nguoi_xac_nhan,
         items: [
           {
             sku: row.sku,
@@ -674,11 +705,9 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
     }
   };
 
-  // ---------- Xuất Excel theo bộ lọc (ngày + các filter khác) đang chọn ----------
   const handleExportExcel = async () => {
     setExportingExcel(true);
     try {
-      // Lấy toàn bộ dữ liệu khớp filter hiện tại, gom hết các trang (không chỉ trang đang xem)
       let allRows = [];
       let currentPage = 1;
       let fetchedTotalPages = 1;
@@ -704,6 +733,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       const sheet = workbook.addWorksheet("Xuất Bao Bì");
 
       sheet.columns = [
+        { header: "Số Phiếu", key: "so_phieu", width: 26 },
         { header: "SKU", key: "sku", width: 14 },
         { header: "Tên Bao Bì", key: "name", width: 34 },
         { header: "Mã CH", key: "ma_ch", width: 12 },
@@ -711,6 +741,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
         { header: "Lượng Xuất", key: "luong_xuat", width: 14 },
         { header: "Dvt", key: "dvt", width: 8 },
         { header: "TG Xuất", key: "tg_xuat", width: 14 },
+        { header: "Ghi Chú", key: "ghi_chu", width: 16 },
       ];
 
       const headerRow = sheet.getRow(1);
@@ -732,6 +763,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
 
       allRows.forEach((row) => {
         const dataRow = sheet.addRow({
+          so_phieu: row.so_phieu || "",
           sku: row.sku,
           name: row.name,
           ma_ch: row.ma_ch,
@@ -739,6 +771,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
           luong_xuat: row.luong_xuat ?? "",
           dvt: row.dvt || "EA",
           tg_xuat: formatDate(row.tg_xuat),
+          ghi_chu: row.ghi_chu || "",
         });
         dataRow.eachCell((cell) => {
           cell.border = {
@@ -751,7 +784,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
       });
 
       sheet.getColumn("luong_xuat").alignment = { horizontal: "right" };
-      sheet.autoFilter = { from: "A1", to: "G1" };
+      sheet.autoFilter = { from: "A1", to: "I1" };
       sheet.views = [{ state: "frozen", ySplit: 1 }];
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -810,6 +843,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
             )}
             {exportingExcel ? "Đang xuất..." : "Xuất Excel"}
           </button>
+          <ExportExcelTmsButton buildQueryParams={buildQueryParams} />
           <button
             type="button"
             onClick={openAddModal}
@@ -863,6 +897,9 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
           <thead className="bg-slate-100">
             <tr>
               <th className="px-3 py-2 text-left font-medium text-slate-600">
+                Số Phiếu
+              </th>
+              <th className="px-3 py-2 text-left font-medium text-slate-600">
                 SKU
               </th>
               <th className="px-3 py-2 text-left font-medium text-slate-600">
@@ -880,12 +917,18 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
               <th className="px-3 py-2 text-left font-medium text-slate-600">
                 TG Xuất
               </th>
+              <th className="px-3 py-2 text-left font-medium text-slate-600">
+                Ghi Chú
+              </th>
+              <th className="px-3 py-2 text-left font-medium text-slate-600">
+                Người Lập Phiếu
+              </th>
               <th className="px-3 py-2 text-center font-medium text-slate-600">
                 Thao Tác
               </th>
             </tr>
-            {/* Hàng filter — nằm trong chính table, ngay dưới header */}
             <tr className="bg-white">
+              <th className="px-3 py-1.5"></th>
               <th className="px-3 py-1.5">
                 <input
                   type="text"
@@ -922,9 +965,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
                   className={filterInputCls}
                 />
               </th>
-              <th className="px-3 py-1.5">
-                {/* Không filter theo số lượng, để trống cho thẳng cột */}
-              </th>
+              <th className="px-3 py-1.5"></th>
               <th className="px-3 py-1.5">
                 <DateRangeFilter
                   startValue={filters.startDate}
@@ -934,13 +975,15 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
                 />
               </th>
               <th className="px-3 py-1.5"></th>
+              <th className="px-3 py-1.5"></th>
+              <th className="px-3 py-1.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
             {loading ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={10}
                   className="px-3 py-6 text-center text-slate-400"
                 >
                   Đang tải...
@@ -949,7 +992,7 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
             ) : rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={9}
                   className="px-3 py-6 text-center text-slate-400"
                 >
                   Không có dữ liệu
@@ -958,6 +1001,9 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
             ) : (
               rows.map((row) => (
                 <tr key={row._id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 text-slate-500">
+                    {row.so_phieu || "-"}
+                  </td>
                   <td className="px-3 py-2 font-medium text-slate-700">
                     {row.sku}
                   </td>
@@ -971,6 +1017,12 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
                   </td>
                   <td className="px-3 py-2 text-slate-600">
                     {formatDate(row.tg_xuat)}
+                  </td>
+                  <td className="px-3 py-2 text-slate-500">
+                    {row.ghi_chu || "-"}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {row.ten_nguoi_xac_nhan || "-"}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-center gap-2">
@@ -1127,7 +1179,24 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
                     />
                   </div>
 
-                  <div className="col-span-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600">
+                      Số Phiếu
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.so_phieu}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          so_phieu: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                    />
+                  </div>
+
+                  <div>
                     <label className="mb-1 block text-xs font-medium text-slate-600">
                       Lượng Xuất *
                     </label>
@@ -1150,6 +1219,76 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
                     {errors.luong_xuat && (
                       <p className="mt-1 text-xs text-red-500">
                         {errors.luong_xuat}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600">
+                      Số Kiện
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        value={editForm.so_kien}
+                        onChange={(e) =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            so_kien: e.target.value,
+                          }))
+                        }
+                        placeholder="0"
+                        className="w-20 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                      />
+                      <span className="text-sm text-slate-600">Kiện</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600">
+                      Ghi Chú Thêm
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ghi_chu_note}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          ghi_chu_note: e.target.value,
+                        }))
+                      }
+                      placeholder="VD: V15"
+                      className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600">
+                      Người Lập Phiếu *
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ten_nguoi_xac_nhan}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setEditForm((prev) => ({
+                          ...prev,
+                          ten_nguoi_xac_nhan: val,
+                        }));
+                        clearFieldError("ten_nguoi_xac_nhan");
+                      }}
+                      placeholder="VD: NGUYEN VAN A"
+                      required
+                      className={`w-full rounded-md border px-2.5 py-1.5 text-sm uppercase ${
+                        errors.ten_nguoi_xac_nhan
+                          ? "border-red-400"
+                          : "border-slate-300"
+                      }`}
+                    />
+                    {errors.ten_nguoi_xac_nhan && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {errors.ten_nguoi_xac_nhan}
                       </p>
                     )}
                   </div>
@@ -1200,6 +1339,88 @@ const XuatBaoBiForm = ({ initialFilters, initialFiltersToken }) => {
                         disabled
                         className="w-full rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1.5 text-sm"
                       />
+                    </div>
+                  </div>
+
+                  <div className="mb-4 flex items-end justify-between gap-3">
+                    <div>
+                      {form.ma_ch.trim() && (
+                        <p className="text-xs text-slate-400">
+                          Số phiếu:{" "}
+                          <span className="font-medium text-slate-600">
+                            {`PXK-BBCS-${dayjs().format("YYYYMD")}${form.ma_ch.trim()}`}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-end gap-3">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600">
+                          Số Kiện
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={form.so_kien}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                so_kien: e.target.value,
+                              }))
+                            }
+                            placeholder="0"
+                            className="w-20 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                          />
+                          <span className="text-sm text-slate-600">Kiện</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600">
+                          Ghi Chú Thêm
+                        </label>
+                        <input
+                          type="text"
+                          value={form.ghi_chu_note}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              ghi_chu_note: e.target.value,
+                            }))
+                          }
+                          placeholder=""
+                          className="w-32 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600">
+                          Người Lập Phiếu *
+                        </label>
+                        <input
+                          type="text"
+                          value={form.ten_nguoi_xac_nhan}
+                          onChange={(e) => {
+                            const val = e.target.value.toUpperCase();
+                            setForm((prev) => ({
+                              ...prev,
+                              ten_nguoi_xac_nhan: val,
+                            }));
+                            clearFieldError("ten_nguoi_xac_nhan");
+                          }}
+                          placeholder="VD: NGUYEN VAN A"
+                          required
+                          className={`w-40 rounded-md border px-2.5 py-1.5 text-sm uppercase ${
+                            errors.ten_nguoi_xac_nhan
+                              ? "border-red-400"
+                              : "border-slate-300"
+                          }`}
+                        />
+                        {errors.ten_nguoi_xac_nhan && (
+                          <p className="mt-1 text-xs text-red-500">
+                            {errors.ten_nguoi_xac_nhan}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
 

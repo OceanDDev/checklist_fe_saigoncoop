@@ -19,7 +19,6 @@ import {
   usePieLabelRenderer,
   percentLabelFormatter,
   KhoFilter,
-  StatCard,
   formatNumber,
   toDateKeyUTC,
   getDefaultDateRange,
@@ -43,11 +42,58 @@ const TRANG_THAI_LIST = [
 // khác (viết hoa/thường, thừa khoảng trắng khác kiểu) thì sửa lại đây
 const normalizeTrangThai = (v) => String(v || "").trim();
 
-// Cùng thứ tự với TRANG_THAI_LIST: Chờ lệnh -> Sẵn sàng -> Hoàn thành
-const statTones = ["bg-rose-600", "bg-blue-600", "bg-emerald-600"];
+// Tone riêng cho từng stat card — cùng thứ tự với TRANG_THAI_LIST: Chờ
+// lệnh -> Sẵn sàng -> Hoàn thành. Card "Tổng số kiện" dùng tone "slate".
+const statTones = ["rose", "blue", "emerald"];
 const statIcons = [PackageX, Boxes, PackageCheck];
 
+// Màu theo tone — class tĩnh (không nối chuỗi động) để Tailwind không
+// purge mất khi build. Cùng bảng tone với DashASN để 2 dashboard đồng bộ
+// phong cách, có thêm "slate" và "rose" cho card Let.
+const STAT_TONES = {
+  slate: {
+    icon: "bg-slate-100 text-slate-600",
+    value: "text-slate-700",
+    ring: "ring-slate-100",
+  },
+  rose: {
+    icon: "bg-rose-100 text-rose-600",
+    value: "text-rose-700",
+    ring: "ring-rose-100",
+  },
+  blue: {
+    icon: "bg-blue-100 text-blue-600",
+    value: "text-blue-700",
+    ring: "ring-blue-100",
+  },
+  emerald: {
+    icon: "bg-emerald-100 text-emerald-600",
+    value: "text-emerald-700",
+    ring: "ring-emerald-100",
+  },
+};
 
+// Card riêng cho tab Let — số to, đậm, có màu rõ theo từng loại, tách khỏi
+// StatCard dùng chung (dashboardCommon) để không ảnh hưởng dashboard khác,
+// cùng phong cách với ASNStatCard bên tab ASN.
+const LetStatCard = ({ icon: Icon, label, value, tone }) => {
+  const t = STAT_TONES[tone] || STAT_TONES.slate;
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 ring-4 ${t.ring}`}
+    >
+      <span className={`shrink-0 rounded-lg p-2.5 ${t.icon}`}>
+        <Icon size={22} />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium text-slate-500">{label}</p>
+        <p className={`text-2xl font-extrabold leading-tight ${t.value}`}>
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+};
 
 const LetHangSection = ({ rawData, loading, onNavigate }) => {
   useDonutFonts();
@@ -149,7 +195,6 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
     percentLabelFormatter,
   );
 
-
   // Click vào lát donut -> báo lên component cha để chuyển qua tab Bảng dữ
   // liệu + áp bộ lọc theo đúng trạng thái đó.
   const handleSliceClick = (name) => {
@@ -165,7 +210,10 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-800">Let Hàng</h2>
+        <h2 className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-amber-700 md:text-2xl">
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-600" />
+          Let Hàng
+        </h2>
         <KhoFilter selected={selectedKho} onToggle={toggleKho} />
       </div>
 
@@ -203,18 +251,18 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <StatCard
+        <LetStatCard
           icon={Boxes}
           label="Tổng số kiện"
-          value={totalKien.toLocaleString("vi-VN")}
-          tone="bg-slate-600"
+          value={formatNumber(totalKien)}
+          tone="slate"
         />
         {TRANG_THAI_LIST.map(({ key, label }, i) => (
-          <StatCard
+          <LetStatCard
             key={key}
             icon={statIcons[i]}
             label={label}
-            value={(byTrangThai[key] || 0).toLocaleString("vi-VN")}
+            value={formatNumber(byTrangThai[key] || 0)}
             tone={statTones[i]}
           />
         ))}
@@ -241,7 +289,15 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
                   // (nhất là cột "Hoàn thành" cao nhất) không bị sát viền.
                   layout: { padding: { top: 24 } },
                   plugins: {
-                    legend: { position: "bottom" },
+                    legend: {
+                      position: "bottom",
+                      labels: {
+                        font: { size: 12, weight: "600" },
+                        color: "#334155",
+                        boxWidth: 12,
+                        boxHeight: 12,
+                      },
+                    },
                     tooltip: {
                       callbacks: {
                         label: (ctx) =>
@@ -257,21 +313,36 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
                     datalabels: {
                       anchor: "end",
                       align: "end",
-                      offset: 2,
+                      offset: 4,
                       clamp: true,
-                      color: "#334155",
-                      font: { weight: "bold", size: 11 },
+                      color: "#1e1b4b",
+                      backgroundColor: "rgba(255,255,255,0.85)",
+                      borderRadius: 4,
+                      padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                      font: { weight: "bold", size: 13 },
                       formatter: (value) =>
                         value > 0 ? formatNumber(value) : "",
                     },
                   },
                   scales: {
-                    x: { stacked: false },
+                    x: {
+                      stacked: false,
+                      grid: { display: false },
+                      ticks: {
+                        font: { size: 12, weight: "600" },
+                        color: "#334155",
+                      },
+                    },
                     y: {
                       stacked: false,
                       beginAtZero: true,
+                      grid: { color: "#f1f5f9" },
+                      ticks: {
+                        font: { size: 12 },
+                        color: "#64748b",
+                      },
                       suggestedMax:
-                        khoBarMax > 0 ? khoBarMax * 1.15 : undefined,
+                        khoBarMax > 0 ? khoBarMax * 1.25 : undefined,
                     },
                   },
                 }}

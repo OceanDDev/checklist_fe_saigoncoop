@@ -23,7 +23,6 @@ const KHO_LIST = [
 // Map cột trong file Excel (Cxnk_ton_kho) -> field trong DB
 // Tên cột lấy đúng theo header thật của file export (Cxnk_ton_kho-Export_Excel_Custom):
 // Ngày Nhập, Mã Hàng, Tên Hàng, Vị trí, Số kiện nhập, Tổng SL nhập, Trạng Thái,
-// Số LPN, NV nhận, NV Putaway
 const mapRow = (row, kho) => ({
   sku: String(row["Mã Hàng"] ?? "").trim(),
   name: String(row["Tên Hàng"] ?? "").trim(),
@@ -34,11 +33,16 @@ const mapRow = (row, kho) => ({
   lpn: String(row["Số LPN"] ?? "").trim(),
   trang_thai: String(row["Trạng Thái"] ?? "").trim(),
   loai_hinh: "Nhập",
+  // MỚI — dùng để xác định trùng dòng khi import
+  so_phieu_nhap: String(row["Số phiếu nhập"] ?? "").trim(),
+  loai_hinh_nhap: String(row["Loại hình nhập"] ?? "").trim(),
+  so_po: String(row["Số Po"] ?? "").trim(),
   nhan_vien_nhap: String(row["NV nhận"] ?? "").trim(),
   nhan_vien_put: String(row["NV Putaway"] ?? "").trim(),
   ngay_nhap_kho: parseExcelDate(row["Ngày Nhập"]),
+  ngay_san_xuat: parseExcelDate(row["Ngày Sản Xuất"]),
+  ngay_het_han: parseExcelDate(row["Ngày Hết Hạn"]),
 });
-
 // Ghim date-only value về 12:00 trưa UTC — giữ đúng ngày Excel, không lệch theo timezone máy chạy
 const toDateOnlyUTC = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
 

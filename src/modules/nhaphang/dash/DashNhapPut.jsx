@@ -20,23 +20,82 @@ import {
   FONT_SANS,
   useDonutFonts,
   formatNumber,
-  usePieLabelRenderer,  
+  usePieLabelRenderer,
   percentLabelFormatter,
   getDefaultDateRange,
   KhoFilter,
-  StatCard,
-  barDataLabelsOptions,
 } from "./dashboardCommon";
 
 const NHAP_MIN_ANGLE = 6;
 const PUT_MIN_ANGLE = 8;
 
-// ─────────────────────────────────────────────
-// BIỂU ĐỒ CỘT NĂNG SUẤT NHÂN VIÊN — mỗi nhân viên 1 cột, giá trị = tổng
-// kiện xử lý (kiện = 0 trên bảng tính là 1). Dùng chung cho NV Nhận &
-// NV Putaway, chỉ khác field nguồn và tiêu đề.
-// ─────────────────────────────────────────────
+// Màu theo tone — class tĩnh (không nối chuỗi động) để Tailwind không
+// purge mất khi build. Cùng bảng tone với DashASN / DashLet để 3 dashboard
+// đồng bộ phong cách.
+const STAT_TONES = {
+  blue: {
+    icon: "bg-blue-100 text-blue-600",
+    value: "text-blue-700",
+    ring: "ring-blue-100",
+  },
+  emerald: {
+    icon: "bg-emerald-100 text-emerald-600",
+    value: "text-emerald-700",
+    ring: "ring-emerald-100",
+  },
+  rose: {
+    icon: "bg-rose-100 text-rose-600",
+    value: "text-rose-700",
+    ring: "ring-rose-100",
+  },
+};
 
+// Card riêng cho Nhập/Put Hàng — số to, đậm, có màu rõ theo từng loại,
+// tách khỏi StatCard dùng chung (dashboardCommon) để không ảnh hưởng
+// dashboard khác, cùng phong cách với ASNStatCard / LetStatCard.
+const NhapPutStatCard = ({ icon: Icon, label, value, tone }) => {
+  const t = STAT_TONES[tone] || STAT_TONES.blue;
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 ring-4 ${t.ring}`}
+    >
+      <span className={`shrink-0 rounded-lg p-2.5 ${t.icon}`}>
+        <Icon size={22} />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium text-slate-500">{label}</p>
+        <p className={`text-2xl font-extrabold leading-tight ${t.value}`}>
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// datalabels dùng chung cho các biểu đồ cột ở đây — số to, đậm, có nền
+// trắng mờ phía sau để nổi rõ trên mọi màu cột (thay cho
+// barDataLabelsOptions dùng chung, vốn cỡ chữ nhỏ hơn).
+const bigBarDataLabels = {
+  anchor: "end",
+  align: "end",
+  offset: 4,
+  clamp: true,
+  color: "#1e1b4b",
+  backgroundColor: "rgba(255,255,255,0.85)",
+  borderRadius: 4,
+  padding: { top: 2, bottom: 2, left: 5, right: 5 },
+  font: { weight: "bold", size: 12 },
+  formatter: (value) => (value > 0 ? formatNumber(value) : ""),
+};
+
+const axisTicksBold = { font: { size: 12, weight: "600" }, color: "#334155" };
+const axisTicksNormal = { font: { size: 12 }, color: "#64748b" };
+const legendLabelsBold = {
+  font: { size: 12, weight: "600" },
+  color: "#334155",
+  boxWidth: 12,
+  boxHeight: 12,
+};
 
 const NhapHangSection = ({ rawData, loading, onNavigate }) => {
   useDonutFonts();
@@ -130,8 +189,6 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
     percentLabelFormatter,
   );
 
-
-
   const handleKhoSliceClick = (data) => {
     if (!onNavigate) return;
     onNavigate({ tab: "nhap", kho: data.kho });
@@ -140,7 +197,10 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-800">Nhập Hàng</h2>
+        <h2 className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-blue-700 md:text-2xl">
+          <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
+          Nhập Hàng
+        </h2>
         <KhoFilter selected={selectedKho} onToggle={toggleKho} />
       </div>
 
@@ -178,17 +238,17 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <StatCard
+        <NhapPutStatCard
           icon={Boxes}
           label="Tổng số kiện"
-          value={totalKien.toLocaleString("vi-VN")}
-          tone="bg-blue-600"
+          value={formatNumber(totalKien)}
+          tone="blue"
         />
-        <StatCard
+        <NhapPutStatCard
           icon={PackageCheck}
           label="Số SKU"
-          value={totalSku.toLocaleString("vi-VN")}
-          tone="bg-emerald-600"
+          value={formatNumber(totalSku)}
+          tone="emerald"
         />
       </div>
 
@@ -209,13 +269,23 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
+                  layout: { padding: { top: 24 } },
                   plugins: {
-                    legend: { position: "bottom" },
-                    datalabels: barDataLabelsOptions,
+                    legend: { position: "bottom", labels: legendLabelsBold },
+                    datalabels: bigBarDataLabels,
                   },
                   scales: {
-                    x: { stacked: false },
-                    y: { stacked: false, beginAtZero: true },
+                    x: {
+                      stacked: false,
+                      ticks: axisTicksBold,
+                      grid: { display: false },
+                    },
+                    y: {
+                      stacked: false,
+                      beginAtZero: true,
+                      ticks: axisTicksNormal,
+                      grid: { color: "#f1f5f9" },
+                    },
                   },
                 }}
               />
@@ -309,7 +379,13 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
       const kho = Number(r.kho);
       if (!byKho[kho]) byKho[kho] = { daPut: 0, chuaPut: 0 };
 
-      if (isChuaPut(r.vi_tri)) {
+      // Hàng trung chuyển (SKU "HANGTRUNGCHUYEN") không cần putaway thật sự
+      // -> dù vị trí đang ở RZ* (thường tính là "chưa put") vẫn coi là "đã
+      // put" luôn, không tính vào chưa put.
+      const isHangTrungChuyen =
+        String(r.sku || "").trim() === "HANGTRUNGCHUYEN";
+
+      if (!isHangTrungChuyen && isChuaPut(r.vi_tri)) {
         chuaPut += kien;
         byKho[kho].chuaPut += kien;
       } else {
@@ -361,7 +437,6 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
     percentLabelFormatter,
   );
 
-
   const handleSliceClick = (name) => {
     if (!onNavigate) return;
     const isChuaPutSlice = name.startsWith("Chưa put");
@@ -376,7 +451,10 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-800">Put Hàng</h2>
+        <h2 className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-cyan-700 md:text-2xl">
+          <span className="h-2.5 w-2.5 rounded-full bg-cyan-600" />
+          Put Hàng
+        </h2>
         <KhoFilter selected={selectedKho} onToggle={toggleKho} />
       </div>
 
@@ -418,26 +496,26 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
           const k = byKho[kho] || { daPut: 0, chuaPut: 0 };
           const total = k.daPut + k.chuaPut;
           return (
-            <StatCard
+            <NhapPutStatCard
               key={kho}
               icon={Boxes}
               label={`Tổng kiện - ${label}`}
-              value={total.toLocaleString("vi-VN")}
-              tone="bg-blue-600"
+              value={formatNumber(total)}
+              tone="blue"
             />
           );
         })}
-        <StatCard
+        <NhapPutStatCard
           icon={PackageCheck}
           label="Đã put"
-          value={daPut.toLocaleString("vi-VN")}
-          tone="bg-emerald-600"
+          value={formatNumber(daPut)}
+          tone="emerald"
         />
-        <StatCard
+        <NhapPutStatCard
           icon={PackageX}
           label="Chưa put (RZ*)"
-          value={chuaPut.toLocaleString("vi-VN")}
-          tone="bg-rose-600"
+          value={formatNumber(chuaPut)}
+          tone="rose"
         />
       </div>
 
@@ -458,13 +536,23 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
+                  layout: { padding: { top: 24 } },
                   plugins: {
-                    legend: { position: "bottom" },
-                    datalabels: barDataLabelsOptions,
+                    legend: { position: "bottom", labels: legendLabelsBold },
+                    datalabels: bigBarDataLabels,
                   },
                   scales: {
-                    x: { stacked: false },
-                    y: { stacked: false, beginAtZero: true },
+                    x: {
+                      stacked: false,
+                      ticks: axisTicksBold,
+                      grid: { display: false },
+                    },
+                    y: {
+                      stacked: false,
+                      beginAtZero: true,
+                      ticks: axisTicksNormal,
+                      grid: { color: "#f1f5f9" },
+                    },
                   },
                 }}
               />

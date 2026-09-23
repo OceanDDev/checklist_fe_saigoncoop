@@ -13,11 +13,13 @@ import NhapHangImportModal from "./import";
 
 const PAGE_SIZE = 20;
 
-// Cột của bảng + key filter tương ứng gửi lên backend qua query string
 const COLUMNS = [
   { key: "sku", label: "SKU" },
   { key: "name", label: "Tên SP" },
+  { key: "so_phieu_nhap", label: "Số phiếu nhập" },
   { key: "vi_tri", label: "Vị trí" },
+  { key: "loai_hinh_nhap", label: "Loại hình nhập" },
+  { key: "so_po", label: "Số Po" },
   { key: "kien", label: "Kiện" },
   { key: "lpn", label: "Số LPN" },
   { key: "kho", label: "Kho" },
@@ -26,6 +28,8 @@ const COLUMNS = [
   { key: "nhan_vien_nhap", label: "NV Nhận" },
   { key: "nhan_vien_put", label: "NV Putaway" },
   { key: "ngay_nhap_kho", label: "Ngày nhập kho" },
+  { key: "ngay_san_xuat", label: "Ngày Sản Xuất" },
+  { key: "ngay_het_han", label: "Ngày Hết Hạn" },
   { key: "ngay_import", label: "Ngày import" },
 ];
 
@@ -210,8 +214,12 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
                     className="border-b border-slate-100 last:border-0"
                   >
                     <td className="px-3 py-2">{r.sku}</td>
+
                     <td className="px-3 py-2">{r.name}</td>
+                    <td className="px-3 py-2">{r.so_phieu_nhap}</td>
                     <td className="px-3 py-2">{r.vi_tri}</td>
+                    <td className="px-3 py-2">{r.loai_hinh_nhap}</td>
+                    <td className="px-3 py-2">{r.so_po}</td>
                     <td className="px-3 py-2">{r.kien}</td>
                     <td className="px-3 py-2">{r.lpn}</td>
                     <td className="px-3 py-2">{r.kho}</td>
@@ -221,6 +229,12 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
                     <td className="px-3 py-2">{r.nhan_vien_put}</td>
                     <td className="px-3 py-2">
                       {formatDateOnly(r.ngay_nhap_kho)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {formatDateOnly(r.ngay_san_xuat)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {formatDateOnly(r.ngay_het_han)}
                     </td>
                     <td className="px-3 py-2">
                       {r.ngay_import
