@@ -24,7 +24,7 @@ const TABS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "kpi", label: "KPI Năng Suất", icon: Gauge },
   { key: "nhap", label: "Nhập", icon: PackagePlus },
-  { key: "asn", label: "ASN", icon: Truck },
+  { key: "asn", label: "Booking", icon: Truck },
   { key: "let", label: "Let", icon: List },
   { key: "qcdacthu", label: "QC Đặc Thù", icon: ClipboardCheck },
 ];

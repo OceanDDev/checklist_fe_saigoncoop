@@ -119,6 +119,30 @@ const parseExcelFile = (file) =>
 // ─────────────────────────────────────────────
 const SKU_KHONG_AP_QC_DAC_THU = ["HANGTRUNGCHUYEN"];
 
+// ─────────────────────────────────────────────
+// CHỈ NHẬN 3 LOẠI HÌNH NHẬP HỢP LỆ — các dòng có "Loại hình nhập" khác
+// (vd Nhập trả hàng, Nhập điều chỉnh, v.v.) sẽ bị loại bỏ ngay khi đọc
+// file, không đưa vào danh sách để tra QC/import.
+// So khớp không phân biệt hoa/thường, bỏ khoảng trắng thừa, để tránh sót
+// dòng vì lỗi gõ dấu cách/viết hoa trong file Excel.
+// ─────────────────────────────────────────────
+const LOAI_HINH_NHAP_HOP_LE = [
+  "Nhập NCC",
+  "Nhập nội bộ",
+  "Nhập hàng trung chuyển",
+];
+
+const chuanHoaLoaiHinh = (s) =>
+  String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+const LOAI_HINH_NHAP_HOP_LE_NORM = LOAI_HINH_NHAP_HOP_LE.map(chuanHoaLoaiHinh);
+
+const isLoaiHinhNhapHopLe = (item) =>
+  LOAI_HINH_NHAP_HOP_LE_NORM.includes(chuanHoaLoaiHinh(item.loai_hinh_nhap));
+
 const isKienBangTongSl = (item) =>
   !SKU_KHONG_AP_QC_DAC_THU.includes(item.sku) &&
   Number(item.kien) > 0 &&
@@ -220,9 +244,24 @@ const NhapHangImportModal = ({ onClose, onImported }) => {
       // vẫn được giữ nguyên là các dòng riêng biệt. Việc 1 dòng là "cập
       // nhật" hay "thêm mới" do backend (nhapHangService.importNhieu) xử lý
       // dựa trên so khớp dữ liệu, không xử lý ở đây nữa.
-      const rawItems = rows
+      const mappedItems = rows
         .map((row) => mapRow(row, kho))
         .filter((item) => item.sku);
+
+      // Chỉ giữ lại 3 loại hình nhập hợp lệ (Nhập NCC / Nhập nội bộ / Nhập
+      // hàng trung chuyển) — các dòng loại hình khác bị loại bỏ, không đưa
+      // vào tra quy cách/import.
+      const rawItems = mappedItems.filter(isLoaiHinhNhapHopLe);
+      const skippedCount = mappedItems.length - rawItems.length;
+
+      if (!rawItems.length) {
+        setSlot(kho, {
+          loading: false,
+          error: "File không có dòng thuộc 3 loại hình nhập hợp lệ",
+          items: null,
+        });
+        return;
+      }
 
       // Đang tra QC Đặc Thù để tự tính lại kiện cho các SKU bị kiện = tổng SL
       setSlot(kho, { checking: true });
@@ -233,6 +272,7 @@ const NhapHangImportModal = ({ onClose, onImported }) => {
         checking: false,
         items,
         missingSkus,
+        skippedCount,
         fileName: file.name,
       });
     } catch (err) {
@@ -361,7 +401,11 @@ const NhapHangImportModal = ({ onClose, onImported }) => {
                         <FileCheck2 size={14} className="shrink-0" />
                         <span className="truncate">{slot.fileName}</span>
                         <span className="shrink-0 text-slate-400">
-                          ({slot.items.length} dòng)
+                          ({slot.items.length} dòng
+                          {slot.skippedCount > 0
+                            ? `, bỏ qua ${slot.skippedCount} dòng khác loại hình`
+                            : ""}
+                          )
                         </span>
                       </span>
                     </div>

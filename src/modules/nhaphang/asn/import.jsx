@@ -19,48 +19,57 @@ const KHO_LIST = [
 ];
 
 // ─────────────────────────────────────────────
-// Map cột trong file Excel (Cxnk_nhap_kho / ASN) -> field trong DB, ĐỌC
-// THEO VỊ TRÍ CỘT (index), KHÔNG đọc theo tên cột.
+// Map cột trong file "BẢNG TỔNG HỢP BOOKING HÀNG PHÂN PHỐI TẬP TRUNG" ->
+// field trong DB, ĐỌC THEO VỊ TRÍ CỘT (index), KHÔNG đọc theo tên cột.
 //
-// Lý do: header thật của file có 2 nhóm cột "Kế Hoạch" và "Còn Lại", mỗi
-// nhóm đều có 1 cột tên là "Kiện" (SheetJS ở chế độ đọc theo object sẽ bị
-// trùng/ghi đè tên cột "Kiện" nếu đọc theo tên) — nên phải đọc bằng
-// header: 1 (mảng thô theo hàng) rồi lấy đúng theo index cột dưới đây:
+// Header thật nằm ở dòng 5-6 (merge dọc), dữ liệu bắt đầu từ dòng 7 ->
+// đọc bằng header: 1 (mảng thô theo hàng) rồi bỏ 6 hàng đầu.
 //
-//  0  Số ASN            -> asn
-//  1  Ngày ASN           -> ngay_asn
-//  3  Document No        -> po
-//  4  Mã NCC             -> ma_ncc
-//  5  Tên NCC            -> ten_ncc
-//  6  Loại Hình          -> loai_hinh
-//  8  Kiện (Kế Hoạch)    -> kien_ke_hoach
-//  12 Kiện (Còn Lại)     -> kien_con_lai
-//  39 Tên Ngành Hàng     -> ten_nganh_hang
+//  1  Ngày NCC gửi Booking -> ngay_asn
+//  2  Mã NCC               -> ma_ncc
+//  3  NCC                  -> ten_ncc
+//  4  Số PO                -> po
+//  5  Số BOOKING           -> so_booking
+//  6  Số lượng SKUs        -> so_luong_sku
+//  7  Số Kiện              -> so_kien
+//  17 Ghi Chú               -> loai_hinh (để trống = "KHÔ", còn lại có thể
+//                             là "ĐÔNG", "SLL"... lấy nguyên giá trị trong
+//                             file, chỉ default "KHÔ" khi ô này trống)
+//  18 NGÀNH HÀNG            -> ten_nganh_hang
 //
-// Dòng dữ liệu thật bắt đầu từ hàng thứ 3 trong file (2 hàng đầu là
-// header nhóm + header cột).
+// Dữ liệu phải lấy ĐỦ, kể cả dòng thiếu Số BOOKING (vẫn có thể thiếu do
+// lỗi nhập liệu ở nguồn) — KHÔNG lọc theo so_booking nữa. Cuối file có
+// các dòng tổng hợp (TOTAL, HÀNG (KHÔ), HÀNG (ĐÔNG)...) không phải dữ
+// liệu thật -> lọc các dòng này bằng cột STT (chỉ dòng dữ liệu thật mới
+// có STT dạng số, dòng tổng hợp luôn để trống STT).
 // ─────────────────────────────────────────────
 const COL = {
-  asn: 0,
+  stt: 0,
   ngay_asn: 1,
-  po: 3,
-  ma_ncc: 4,
-  ten_ncc: 5,
-  loai_hinh: 6,
-  kien_ke_hoach: 8,
-  kien_con_lai: 12,
-  ten_nganh_hang: 39,
+  ma_ncc: 2,
+  ten_ncc: 3,
+  po: 4,
+  so_booking: 5,
+  so_luong_sku: 6,
+  so_kien: 7,
+  loai_hinh: 16,
+  ten_nganh_hang: 17,
 };
 
 const mapRow = (row, kho) => ({
-  asn: String(row[COL.asn] ?? "").trim(),
   po: String(row[COL.po] ?? "").trim(),
   ngay_asn: parseExcelDate(row[COL.ngay_asn]),
+  so_booking: String(row[COL.so_booking] ?? "").trim(),
   ma_ncc: row[COL.ma_ncc] !== "" ? Number(row[COL.ma_ncc]) : undefined,
   ten_ncc: String(row[COL.ten_ncc] ?? "").trim(),
-  loai_hinh: String(row[COL.loai_hinh] ?? "").trim(),
-  kien_ke_hoach: String(row[COL.kien_ke_hoach] ?? "").trim(),
-  kien_con_lai: String(row[COL.kien_con_lai] ?? "").trim(),
+  so_luong_sku: String(row[COL.so_luong_sku] ?? "").trim(),
+  so_kien:
+    row[COL.so_kien] !== "" && row[COL.so_kien] !== undefined
+      ? Number(row[COL.so_kien])
+      : undefined,
+  // Cột "Ghi Chú" trong file: để trống -> mặc định KHÔ, có giá trị (ĐÔNG,
+  // SLL...) thì lấy đúng giá trị đó.
+  loai_hinh: String(row[COL.loai_hinh] ?? "").trim() || "KHÔ",
   ten_nganh_hang: String(row[COL.ten_nganh_hang] ?? "").trim(),
   kho: String(kho),
   ngay_import: new Date(),
@@ -102,8 +111,9 @@ const parseExcelDate = (value) => {
   );
 };
 
-// Đọc file theo header: 1 -> mảng thô từng hàng, bỏ 2 hàng header đầu
-// (hàng 0: header nhóm "Kế Hoạch"/"Còn Lại", hàng 1: header cột con)
+// Đọc file theo header: 1 -> mảng thô từng hàng, bỏ 6 hàng đầu (title +
+// header nhóm/cột, xem chi tiết ở comment map cột phía trên) — dữ liệu
+// thật bắt đầu từ hàng thứ 7 trong file.
 const parseExcelFile = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -117,8 +127,8 @@ const parseExcelFile = (file) =>
           header: 1,
           defval: "",
         });
-        // bỏ 2 hàng header, chỉ lấy hàng dữ liệu
-        resolve(rows.slice(2));
+        // bỏ 6 hàng header, chỉ lấy hàng dữ liệu
+        resolve(rows.slice(6));
       } catch (err) {
         reject(err);
       }
@@ -164,11 +174,12 @@ const ASNImportModal = ({ onClose, onImported }) => {
         return;
       }
 
-      // Chỉ giữ dòng có "Số ASN", loại dòng trống và dòng tổng cuối file
-      // (thường có Số ASN = "Total")
+      // Giữ ĐỦ mọi dòng dữ liệu thật, kể cả dòng thiếu Số BOOKING — chỉ
+      // loại các dòng tổng hợp cuối file (TOTAL, HÀNG (KHÔ)/(ĐÔNG)...)
+      // bằng cách kiểm tra cột STT (dòng tổng hợp không có STT dạng số).
       const items = rows
-        .map((row) => mapRow(row, kho))
-        .filter((item) => item.asn && item.asn.toLowerCase() !== "total");
+        .filter((row) => typeof row[COL.stt] === "number")
+        .map((row) => mapRow(row, kho));
 
       setSlot(kho, { loading: false, items, fileName: file.name });
     } catch (err) {
@@ -205,8 +216,10 @@ const ASNImportModal = ({ onClose, onImported }) => {
 
     try {
       // Mỗi item đã gắn sẵn field kho riêng -> gộp tất cả kho đã chọn.
-      // Dùng importCapNhat (upsert theo asn + po + kho): file cũ đã có sẽ
-      // được cập nhật thay vì tạo trùng bản ghi khi import lại.
+      // Dùng importCapNhat: nếu 1 dòng có ĐỦ cả NCC + Số PO + Số BOOKING
+      // và trùng với bản ghi đã có (cùng kho) -> cập nhật lại bản ghi đó.
+      // Thiếu 1 trong 3 field trên -> luôn tạo bản ghi mới (không bị mất
+      // dữ liệu, không bị gộp nhầm với bản ghi khác).
       const allItems = selectedKhoList.flatMap(({ kho }) => slots[kho].items);
       const res = await asnService.importCapNhat(allItems);
       const khoLabel = selectedKhoList.map(({ label }) => label).join(", ");

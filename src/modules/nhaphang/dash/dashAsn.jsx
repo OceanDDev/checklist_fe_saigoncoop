@@ -13,9 +13,8 @@ import {
   Loader2,
   FileStack,
   Package,
-  PackageCheck,
-  Truck,
   Building2,
+  ClipboardList,
 } from "lucide-react";
 import { asnService } from "@/services/nhaphang/asn.service";
 import {
@@ -56,7 +55,7 @@ const FALLBACK_COLORS = [
   "#6366f1",
 ];
 
-// Bảng màu cho các cột "Kiện kế hoạch theo ngành hàng" — lặp vòng nếu
+// Bảng màu cho các cột "Số kiện theo ngành hàng" — lặp vòng nếu
 // nhiều ngành hàng hơn số màu
 const NGANH_HANG_COLORS = [
   "#6366f1",
@@ -119,13 +118,8 @@ const normalizeNganhHang = (raw) => {
   return "Thực phẩm công nghệ";
 };
 
-// Màu cố định cho 3 cột Kế hoạch / Đã nhận / Còn lại — dùng chung cho cả
-// chú thích lẫn dataset của biểu đồ, tránh lặp lại màu ở 2 chỗ
-const KIEN_SERIES = [
-  { key: "keHoach", label: "Kiện kế hoạch", color: "#6366f1" },
-  { key: "daNhan", label: "Kiện đã nhận", color: "#10b981" },
-  { key: "conLai", label: "Kiện còn lại", color: "#f59e0b" },
-];
+// Màu cố định cho cột "Số kiện" theo ngày ASN
+const SO_KIEN_COLOR = "#6366f1";
 
 // Màu theo tone — class tĩnh (không nối chuỗi động) để Tailwind không
 // purge mất khi build.
@@ -207,33 +201,32 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
   const {
     totalPO,
     totalNCC,
-    totalKienKeHoach,
-    totalKienConLai,
-    totalKienDaNhan,
+    totalBooking,
+    totalSoKien,
     byLoaiHinh,
     byNganhHang,
+    totalSoKienNganhHang,
     last7DaysPO,
     last7DaysKien,
   } = useMemo(() => {
     const poSet = new Set();
     const nccSet = new Set();
-    let totalKienKeHoach = 0;
-    let totalKienConLai = 0;
+    const bookingSet = new Set();
+    let totalSoKien = 0;
     const loaiHinhPoSets = {}; // { loai_hinh: Set(po) }
-    const nganhHangKien = {}; // { ten_nganh_hang_chuẩn_hóa: tổng kien_ke_hoach }
+    const nganhHangKien = {}; // { ten_nganh_hang_chuẩn_hóa: tổng so_kien }
     const dayPoSets = {}; // { 'YYYY-MM-DD': Set(po) }
-    const dayKien = {}; // { 'YYYY-MM-DD': { keHoach, conLai } }
+    const daySoKien = {}; // { 'YYYY-MM-DD': tổng so_kien }
 
     filtered.forEach((r) => {
       if (r.po) poSet.add(r.po);
+      if (r.so_booking) bookingSet.add(r.so_booking);
       if (r.ma_ncc !== undefined && r.ma_ncc !== null && r.ma_ncc !== "") {
         nccSet.add(r.ma_ncc);
       }
 
-      const kienKeHoach = parseNum(r.kien_ke_hoach);
-      const kienConLai = parseNum(r.kien_con_lai);
-      totalKienKeHoach += kienKeHoach;
-      totalKienConLai += kienConLai;
+      const soKien = parseNum(r.so_kien);
+      totalSoKien += soKien;
 
       const lh = String(r.loai_hinh || "").trim() || "Khác";
       if (!loaiHinhPoSets[lh]) loaiHinhPoSets[lh] = new Set();
@@ -244,7 +237,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       // trả về null -> bỏ qua, không tính vào biểu đồ ngành hàng.
       const nh = normalizeNganhHang(r.ten_nganh_hang);
       if (nh !== null) {
-        nganhHangKien[nh] = (nganhHangKien[nh] || 0) + kienKeHoach;
+        nganhHangKien[nh] = (nganhHangKien[nh] || 0) + soKien;
       }
 
       const dayKey = toDateKeyUTC(r.ngay_asn);
@@ -253,9 +246,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
           if (!dayPoSets[dayKey]) dayPoSets[dayKey] = new Set();
           dayPoSets[dayKey].add(r.po);
         }
-        if (!dayKien[dayKey]) dayKien[dayKey] = { keHoach: 0, conLai: 0 };
-        dayKien[dayKey].keHoach += kienKeHoach;
-        dayKien[dayKey].conLai += kienConLai;
+        daySoKien[dayKey] = (daySoKien[dayKey] || 0) + soKien;
       }
     });
 
@@ -284,11 +275,9 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       count: dayPoSets[key]?.size || 0,
     }));
 
-    const last7DaysKien = buildLast7((key) => {
-      const keHoach = dayKien[key]?.keHoach || 0;
-      const conLai = dayKien[key]?.conLai || 0;
-      return { keHoach, conLai, daNhan: Math.max(0, keHoach - conLai) };
-    });
+    const last7DaysKien = buildLast7((key) => ({
+      soKien: daySoKien[key] || 0,
+    }));
 
     // Ngành hàng theo tổng kiện kế hoạch, giảm dần — chỉ giữ top 9, phần
     // còn lại gộp vào "Khác" để biểu đồ không bị vỡ vụn quá nhiều cột nhỏ
@@ -311,13 +300,16 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         fill: "#94a3b8",
       });
     }
+    const totalSoKienNganhHang = nganhHangEntries.reduce(
+      (sum, [, v]) => sum + v,
+      0,
+    );
 
     return {
       totalPO: poSet.size,
       totalNCC: nccSet.size,
-      totalKienKeHoach,
-      totalKienConLai,
-      totalKienDaNhan: Math.max(0, totalKienKeHoach - totalKienConLai),
+      totalBooking: bookingSet.size,
+      totalSoKien,
       byLoaiHinh: Object.entries(loaiHinhPoSets).map(([name, set], i) => ({
         name,
         value: set.size,
@@ -325,6 +317,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
           LOAI_HINH_COLORS[name] || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
       })),
       byNganhHang,
+      totalSoKienNganhHang,
       last7DaysPO,
       last7DaysKien,
     };
@@ -361,29 +354,29 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
     [last7DaysPO],
   );
 
-  // 3 cột nhóm mỗi ngày: Kế hoạch / Đã nhận / Còn lại
+  // 1 cột mỗi ngày: Số kiện (field thật có trong model ASN là so_kien)
   const kienBarData = useMemo(
     () => ({
       labels: last7DaysKien.map((d) => d.label),
-      datasets: KIEN_SERIES.map(({ key, label, color }) => ({
-        label,
-        data: last7DaysKien.map((d) => d[key]),
-        backgroundColor: color,
-        borderRadius: 6,
-        minBarLength: 3,
-        maxBarThickness: 22,
-      })),
+      datasets: [
+        {
+          label: "Số kiện",
+          data: last7DaysKien.map((d) => d.soKien),
+          backgroundColor: SO_KIEN_COLOR,
+          hoverBackgroundColor: "#4338ca",
+          borderRadius: 8,
+          minBarLength: 4,
+          maxBarThickness: 46,
+        },
+      ],
     }),
     [last7DaysKien],
   );
 
-  const kienBarMax = useMemo(() => {
-    let max = 0;
-    last7DaysKien.forEach((d) => {
-      max = Math.max(max, d.keHoach, d.daNhan, d.conLai);
-    });
-    return max;
-  }, [last7DaysKien]);
+  const kienBarMax = useMemo(
+    () => Math.max(0, ...last7DaysKien.map((d) => d.soKien)),
+    [last7DaysKien],
+  );
 
   // Biểu đồ cột ngang xếp hạng ngành hàng theo kiện kế hoạch — đảo ngược
   // thứ tự vì Chart.js horizontal bar vẽ từ dưới lên, muốn ngành nhiều
@@ -394,7 +387,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       labels: rows.map((d) => d.name),
       datasets: [
         {
-          label: "Kiện kế hoạch",
+          label: "Số kiện",
           data: rows.map((d) => d.value),
           backgroundColor: rows.map((d) => d.fill),
           borderRadius: 6,
@@ -412,7 +405,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
   const handleSliceClick = (name) => {
     if (!onNavigate) return;
     onNavigate({
-      tab: "asn",
+      tab: "Booking",
       loai_hinh: name,
       kho: selectedKho.length === 1 ? String(selectedKho[0]) : undefined,
     });
@@ -461,12 +454,18 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <ASNStatCard
           icon={FileStack}
           label="Tổng số PO"
           value={formatNumber(totalPO)}
           tone="indigo"
+        />
+        <ASNStatCard
+          icon={ClipboardList}
+          label="Tổng số BOOKING"
+          value={formatNumber(totalBooking)}
+          tone="emerald"
         />
         <ASNStatCard
           icon={Building2}
@@ -476,21 +475,9 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         />
         <ASNStatCard
           icon={Package}
-          label="Kiện kế hoạch"
-          value={formatNumber(totalKienKeHoach)}
+          label="Tổng số kiện"
+          value={formatNumber(totalSoKien)}
           tone="violet"
-        />
-        <ASNStatCard
-          icon={PackageCheck}
-          label="Kiện đã nhận"
-          value={formatNumber(totalKienDaNhan)}
-          tone="emerald"
-        />
-        <ASNStatCard
-          icon={Truck}
-          label="Kiện còn lại"
-          value={formatNumber(totalKienConLai)}
-          tone="amber"
         />
       </div>
 
@@ -611,23 +598,12 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         </div>
       </div>
 
-      {/* Kiện kế hoạch / đã nhận / còn lại theo ngày ASN — 7 ngày gần nhất */}
+      {/* Số kiện theo ngày ASN — 7 ngày gần nhất */}
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-medium text-slate-600">
-            Kiện Kế hoạch / Đã nhận / Còn lại theo ngày ASN (7 ngày gần nhất)
+            Số kiện theo ngày ASN (7 ngày gần nhất)
           </p>
-          <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-600">
-            {KIEN_SERIES.map(({ key, label, color }) => (
-              <span key={key} className="flex items-center gap-1.5">
-                <span
-                  className="inline-block h-3 w-3 rounded-sm"
-                  style={{ backgroundColor: color }}
-                />
-                {label}
-              </span>
-            ))}
-          </div>
         </div>
         {loading ? (
           <div className="flex h-72 items-center justify-center text-slate-400">
@@ -690,11 +666,11 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         )}
       </div>
 
-      {/* Kiện kế hoạch theo ngành hàng — cột ngang xếp hạng, ngành nhiều
+      {/* Số kiện theo ngành hàng — cột ngang xếp hạng, ngành nhiều
           kiện nhất nằm trên cùng; tên ngành hàng dài vẫn đọc trọn vẹn */}
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <p className="mb-2 text-sm font-medium text-slate-600">
-          Kiện kế hoạch theo ngành hàng
+          Số kiện theo ngành hàng
         </p>
         {loading ? (
           <div className="flex h-80 items-center justify-center text-slate-400">
@@ -719,10 +695,11 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
                     callbacks: {
                       label: (ctx) =>
                         `${formatNumber(ctx.parsed.x)} kiện (${
-                          totalKienKeHoach
-                            ? ((ctx.parsed.x / totalKienKeHoach) * 100).toFixed(
-                                1,
-                              )
+                          totalSoKienNganhHang
+                            ? (
+                                (ctx.parsed.x / totalSoKienNganhHang) *
+                                100
+                              ).toFixed(1)
                             : 0
                         }%)`,
                     },

@@ -15,18 +15,18 @@ import DateRangeFilter from "../dash/date";
 const PAGE_SIZE = 20;
 
 // Cột của bảng + key filter tương ứng gửi lên backend qua query string.
-// "ngay_asn" không có key filter text riêng — cột này lọc bằng khoảng
-// ngày (ngay_asn_from / ngay_asn_to), xử lý riêng bên dưới, không đi qua
-// input text chung như các cột khác.
+// "ngay_asn" và "ngay_import" không có key filter text riêng — 2 cột này
+// lọc bằng khoảng ngày (vd ngay_asn_from / ngay_asn_to), xử lý riêng bên
+// dưới, không đi qua input text chung như các cột khác.
 const COLUMNS = [
-  { key: "asn", label: "ASN" },
   { key: "po", label: "PO" },
   { key: "ngay_asn", label: "Ngày ASN", isDateRange: true },
+  { key: "so_booking", label: "Số Booking" },
   { key: "ma_ncc", label: "Mã NCC" },
   { key: "ten_ncc", label: "Tên NCC" },
-  { key: "loai_hinh", label: "Loại hình" },
-  { key: "kien_ke_hoach", label: "Kiện kế hoạch" },
-  { key: "kien_con_lai", label: "Kiện còn lại" },
+  { key: "so_luong_sku", label: "SL SKUs" },
+  { key: "so_kien", label: "Số Kiện" },
+  { key: "loai_hinh", label: "Ghi chú" },
   { key: "ten_nganh_hang", label: "Ngành hàng" },
   { key: "kho", label: "Kho" },
   { key: "ngay_import", label: "Ngày import", isDateRange: true },
@@ -60,8 +60,9 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // filter theo từng field, key khớp với COLUMNS — riêng "ngay_asn" dùng 2
-  // key "ngay_asn_from" / "ngay_asn_to" thay vì 1 key text như các cột khác
+  // filter theo từng field, key khớp với COLUMNS — riêng "ngay_asn" và
+  // "ngay_import" dùng 2 key "<field>_from" / "<field>_to" thay vì 1 key
+  // text như các cột khác
   const [filters, setFilters] = useState({});
   const debounceRef = useRef(null);
 
@@ -245,14 +246,14 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
                     key={r._id}
                     className="border-b border-slate-100 last:border-0"
                   >
-                    <td className="px-3 py-2">{r.asn}</td>
                     <td className="px-3 py-2">{r.po}</td>
                     <td className="px-3 py-2">{formatDateOnly(r.ngay_asn)}</td>
+                    <td className="px-3 py-2">{r.so_booking}</td>
                     <td className="px-3 py-2">{r.ma_ncc}</td>
                     <td className="px-3 py-2">{r.ten_ncc}</td>
+                    <td className="px-3 py-2">{r.so_luong_sku}</td>
+                    <td className="px-3 py-2">{r.so_kien}</td>
                     <td className="px-3 py-2">{r.loai_hinh}</td>
-                    <td className="px-3 py-2">{r.kien_ke_hoach}</td>
-                    <td className="px-3 py-2">{r.kien_con_lai}</td>
                     <td className="px-3 py-2">{r.ten_nganh_hang}</td>
                     <td className="px-3 py-2">{r.kho}</td>
                     <td className="px-3 py-2">
