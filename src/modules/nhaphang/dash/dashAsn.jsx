@@ -1,6 +1,13 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from "react";
-import { Bar } from "react-chartjs-2";
+import { Bar, Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  LineElement,
+  PointElement,
+  LineController,
+  Filler,
+} from "chart.js";
 import {
   PieChart,
   Pie,
@@ -30,6 +37,10 @@ import {
   getDefaultDateRange,
 } from "./dashboardCommon";
 
+// Đăng ký thêm các thành phần Line/Area cho Chart.js — an toàn khi gọi
+// lại (Chart.js tự bỏ qua nếu đã được đăng ký ở nơi khác trong app).
+ChartJS.register(LineElement, PointElement, LineController, Filler);
+
 const ASN_MIN_ANGLE = 6;
 
 // Màu theo loại hình — khai đúng theo TÊN LOẠI HÌNH THẬT xuất hiện trong dữ
@@ -43,6 +54,11 @@ const LOAI_HINH_COLORS = {
   "Nhập mua CSH": "#8b5cf6",
   "Nhập nội bộ": "#f43f5e",
   "Nhập trả từ nơi xuất đến": "#0ea5e9",
+  // Loại hình theo cột "Ghi Chú" của file Booking: mặc định KHÔ khi để
+  // trống, còn lại là ĐÔNG / SLL lấy nguyên giá trị trong file.
+  KHÔ: "#6366f1",
+  ĐÔNG: "#0ea5e9",
+  SLL: "#f59e0b",
 };
 const FALLBACK_COLORS = [
   "#2563eb",
@@ -54,6 +70,11 @@ const FALLBACK_COLORS = [
   "#84cc16",
   "#6366f1",
 ];
+
+// Thứ tự ưu tiên hiển thị 3 loại hình chính trong biểu đồ "Số kiện theo
+// ngày Booking" — loại hình lạ khác (nếu phát sinh) sẽ xếp sau theo thứ
+// tự xuất hiện trong dữ liệu.
+const LOAI_HINH_KIEN_ORDER = ["KHÔ", "ĐÔNG", "SLL"];
 
 // Bảng màu cho các cột "Số kiện theo ngành hàng" — lặp vòng nếu
 // nhiều ngành hàng hơn số màu
@@ -75,6 +96,24 @@ const NGANH_HANG_COLORS = [
 const parseNum = (v) => {
   const n = Number(String(v ?? "").replace(/[.,\s]/g, ""));
   return Number.isFinite(n) ? n : 0;
+};
+
+// Chuyển hex "#RRGGBB" (hoặc "#RGB") -> "rgba(r,g,b,alpha)" — dùng để dựng
+// gradient mượt cho biểu đồ vùng (area chart)
+const hexToRgba = (hex, alpha) => {
+  const h = String(hex || "#6366f1").replace("#", "");
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
+  const bigint = parseInt(full, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
 // ─────────────────────────────────────────────
@@ -117,9 +156,6 @@ const normalizeNganhHang = (raw) => {
   // Toàn bộ là mã số, không có tên chữ -> mặc định thuộc Thực phẩm công nghệ
   return "Thực phẩm công nghệ";
 };
-
-// Màu cố định cho cột "Số kiện" theo ngày ASN
-const SO_KIEN_COLOR = "#6366f1";
 
 // Màu theo tone — class tĩnh (không nối chuỗi động) để Tailwind không
 // purge mất khi build.
@@ -208,15 +244,17 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
     totalSoKienNganhHang,
     last7DaysPO,
     last7DaysKien,
+    loaiHinhKienTypes,
   } = useMemo(() => {
     const poSet = new Set();
     const nccSet = new Set();
     const bookingSet = new Set();
     let totalSoKien = 0;
-    const loaiHinhPoSets = {}; // { loai_hinh: Set(po) }
+    const loaiHinhKien = {}; // { loai_hinh: tổng so_kien } -> dùng cho donut
     const nganhHangKien = {}; // { ten_nganh_hang_chuẩn_hóa: tổng so_kien }
     const dayPoSets = {}; // { 'YYYY-MM-DD': Set(po) }
-    const daySoKien = {}; // { 'YYYY-MM-DD': tổng so_kien }
+    const daySoKienByLoai = {}; // { 'YYYY-MM-DD': { [loai_hinh]: tổng so_kien } }
+    const loaiHinhTypesSeen = new Set();
 
     filtered.forEach((r) => {
       if (r.po) poSet.add(r.po);
@@ -229,8 +267,8 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       totalSoKien += soKien;
 
       const lh = String(r.loai_hinh || "").trim() || "Khác";
-      if (!loaiHinhPoSets[lh]) loaiHinhPoSets[lh] = new Set();
-      if (r.po) loaiHinhPoSets[lh].add(r.po);
+      loaiHinhKien[lh] = (loaiHinhKien[lh] || 0) + soKien;
+      loaiHinhTypesSeen.add(lh);
 
       // Chuẩn hóa ngành hàng: gộp các biến thể có mã số (005, 010, 001,
       // 030, 050...) về đúng tên ngành hàng; dòng bị nhập nhầm mã ASN thì
@@ -246,7 +284,9 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
           if (!dayPoSets[dayKey]) dayPoSets[dayKey] = new Set();
           dayPoSets[dayKey].add(r.po);
         }
-        daySoKien[dayKey] = (daySoKien[dayKey] || 0) + soKien;
+        if (!daySoKienByLoai[dayKey]) daySoKienByLoai[dayKey] = {};
+        daySoKienByLoai[dayKey][lh] =
+          (daySoKienByLoai[dayKey][lh] || 0) + soKien;
       }
     });
 
@@ -276,8 +316,18 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
     }));
 
     const last7DaysKien = buildLast7((key) => ({
-      soKien: daySoKien[key] || 0,
+      byLoai: daySoKienByLoai[key] || {},
     }));
+
+    // Thứ tự các loại hình cho biểu đồ "Số kiện theo ngày": ưu tiên
+    // KHÔ / ĐÔNG / SLL trước, loại hình lạ khác xếp theo sau.
+    const knownTypes = LOAI_HINH_KIEN_ORDER.filter((lh) =>
+      loaiHinhTypesSeen.has(lh),
+    );
+    const extraTypes = [...loaiHinhTypesSeen]
+      .filter((lh) => !LOAI_HINH_KIEN_ORDER.includes(lh))
+      .sort();
+    const loaiHinhKienTypes = [...knownTypes, ...extraTypes];
 
     // Ngành hàng theo tổng kiện kế hoạch, giảm dần — chỉ giữ top 9, phần
     // còn lại gộp vào "Khác" để biểu đồ không bị vỡ vụn quá nhiều cột nhỏ
@@ -310,9 +360,10 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       totalNCC: nccSet.size,
       totalBooking: bookingSet.size,
       totalSoKien,
-      byLoaiHinh: Object.entries(loaiHinhPoSets).map(([name, set], i) => ({
+      // Donut "Theo loại hình" hiển thị theo TỔNG SỐ KIỆN (không phải số PO)
+      byLoaiHinh: Object.entries(loaiHinhKien).map(([name, value], i) => ({
         name,
-        value: set.size,
+        value,
         fill:
           LOAI_HINH_COLORS[name] || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
       })),
@@ -320,6 +371,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       totalSoKienNganhHang,
       last7DaysPO,
       last7DaysKien,
+      loaiHinhKienTypes,
     };
   }, [filtered]);
 
@@ -354,27 +406,73 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
     [last7DaysPO],
   );
 
-  // 1 cột mỗi ngày: Số kiện (field thật có trong model ASN là so_kien)
-  const kienBarData = useMemo(
-    () => ({
+  const kienAreaData = useMemo(() => {
+    const colors = { KHÔ: "#6366f1", ĐÔNG: "#0ea5e9", SLL: "#f59e0b" };
+    return {
       labels: last7DaysKien.map((d) => d.label),
-      datasets: [
-        {
-          label: "Số kiện",
-          data: last7DaysKien.map((d) => d.soKien),
-          backgroundColor: SO_KIEN_COLOR,
-          hoverBackgroundColor: "#4338ca",
-          borderRadius: 8,
-          minBarLength: 4,
-          maxBarThickness: 46,
-        },
-      ],
-    }),
+      datasets: loaiHinhKienTypes.map((lh, i) => {
+        const color =
+          colors[lh] ||
+          LOAI_HINH_COLORS[lh] ||
+          FALLBACK_COLORS[i % FALLBACK_COLORS.length];
+        const isDong = lh === "ĐÔNG";
+
+        return {
+          label: lh,
+          data: last7DaysKien.map((d) => d.byLoai[lh] || 0),
+          borderColor: color,
+          backgroundColor: isDong
+            ? "transparent"
+            : (context) => {
+                const { chart } = context;
+                const { ctx, chartArea } = chart;
+                if (!chartArea) return hexToRgba(color, 0.25);
+                const gradient = ctx.createLinearGradient(
+                  0,
+                  chartArea.top,
+                  0,
+                  chartArea.bottom,
+                );
+                gradient.addColorStop(0, hexToRgba(color, 0.6));
+                gradient.addColorStop(1, hexToRgba(color, 0.03));
+                return gradient;
+              },
+          borderWidth: isDong ? 3 : 2.5,
+          borderDash: isDong ? [6, 3] : undefined,
+          pointRadius: isDong ? 4 : 3,
+          pointHoverRadius: isDong ? 7 : 6,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: color,
+          pointBorderWidth: 2,
+          pointHoverBackgroundColor: color,
+          pointHoverBorderColor: "#ffffff",
+          pointHoverBorderWidth: 2,
+          tension: 0.42,
+          fill: !isDong,
+          stack: isDong ? undefined : "kien",
+          yAxisID: isDong ? "yDong" : "y",
+          // Bỏ order ép ĐÔNG lên đầu — giữ đúng thứ tự tự nhiên
+          // KHÔ -> ĐÔNG -> SLL theo vị trí trong mảng loaiHinhKienTypes,
+          // nên tooltip/legend sẽ hiện ĐÔNG ngay sau KHÔ như mong muốn.
+          order: i,
+        };
+      }),
+    };
+  }, [last7DaysKien, loaiHinhKienTypes]);
+
+  const dongMax = useMemo(
+    () => Math.max(0, ...last7DaysKien.map((d) => d.byLoai["ĐÔNG"] || 0)),
     [last7DaysKien],
   );
 
-  const kienBarMax = useMemo(
-    () => Math.max(0, ...last7DaysKien.map((d) => d.soKien)),
+  const kienAreaMax = useMemo(
+    () =>
+      Math.max(
+        0,
+        ...last7DaysKien.map((d) =>
+          Object.values(d.byLoai).reduce((sum, v) => sum + v, 0),
+        ),
+      ),
     [last7DaysKien],
   );
 
@@ -423,7 +521,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
 
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-xs text-slate-500">
-          Từ ngày ASN
+          Từ ngày Booking
           <input
             type="date"
             value={dateFrom}
@@ -432,7 +530,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
           />
         </label>
         <label className="flex items-center gap-2 text-xs text-slate-500">
-          Đến ngày ASN
+          Đến ngày Booking
           <input
             type="date"
             value={dateTo}
@@ -482,10 +580,10 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Số PO theo ngày ASN — 7 ngày gần nhất */}
+        {/* Số PO theo ngày Booking — 7 ngày gần nhất */}
         <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2">
           <p className="mb-2 text-sm font-medium text-slate-600">
-            Số PO theo ngày ASN (7 ngày gần nhất)
+            Số PO theo ngày Booking (7 ngày gần nhất)
           </p>
           {loading ? (
             <div className="flex h-64 items-center justify-center text-slate-400">
@@ -545,7 +643,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
           )}
         </div>
 
-        {/* Donut theo loại hình */}
+        {/* Donut theo loại hình — tính theo TỔNG SỐ KIỆN */}
         <div
           className="rounded-lg border border-slate-200 bg-white p-4"
           style={{ fontFamily: FONT_SANS }}
@@ -553,7 +651,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
           <p className="mb-2 text-sm font-medium text-slate-600">
             Theo loại hình
           </p>
-          {loading || totalPO === 0 ? (
+          {loading || totalSoKien === 0 ? (
             <div className="flex h-64 items-center justify-center text-slate-400">
               {loading ? (
                 <Loader2 size={20} className="animate-spin" />
@@ -584,8 +682,10 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
                   </Pie>
                   <RechartsTooltip
                     formatter={(value, name) => [
-                      `${formatNumber(value)} PO (${
-                        totalPO ? ((value / totalPO) * 100).toFixed(1) : 0
+                      `${formatNumber(value)} kiện (${
+                        totalSoKien
+                          ? ((value / totalSoKien) * 100).toFixed(1)
+                          : 0
                       }%)`,
                       name,
                     ]}
@@ -598,50 +698,106 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         </div>
       </div>
 
-      {/* Số kiện theo ngày ASN — 7 ngày gần nhất */}
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
+      {/* Số kiện theo ngày Booking — 7 ngày gần nhất, dạng vùng (area)
+          mượt, xếp chồng theo Khô/Đông/SLL */}
+      <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-indigo-50/40 p-4 shadow-sm">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-medium text-slate-600">
-            Số kiện theo ngày ASN (7 ngày gần nhất)
+            Số kiện theo ngày Booking (7 ngày gần nhất)
           </p>
         </div>
         {loading ? (
-          <div className="flex h-72 items-center justify-center text-slate-400">
+          <div className="flex h-80 items-center justify-center text-slate-400">
             <Loader2 size={20} className="animate-spin" />
           </div>
         ) : (
-          <div className="h-72">
-            <Bar
-              data={kienBarData}
+          <div className="h-80">
+            <Line
+              data={kienAreaData}
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
-                layout: { padding: { top: 24 } },
+                interaction: { mode: "index", intersect: false },
+                layout: { padding: { top: 30, right: 12 } },
                 plugins: {
-                  legend: { display: false },
+                  legend: {
+                    display: true,
+                    position: "top",
+                    align: "end",
+                    labels: {
+                      usePointStyle: true,
+                      pointStyle: "circle",
+                      boxWidth: 8,
+                      padding: 16,
+                      font: { size: 12, weight: "600" },
+                      color: "#475569",
+                    },
+                  },
                   tooltip: {
+                    backgroundColor: "rgba(30, 27, 75, 0.92)",
+                    titleColor: "#e0e7ff",
+                    titleFont: { weight: "700" },
+                    bodyColor: "#ffffff",
+                    padding: 10,
+                    cornerRadius: 8,
+                    boxPadding: 4,
                     callbacks: {
                       label: (ctx) =>
                         `${ctx.dataset.label}: ${formatNumber(ctx.parsed.y)} kiện`,
+                      footer: (items) => {
+                        const total = items.reduce(
+                          (sum, it) => sum + (it.parsed.y || 0),
+                          0,
+                        );
+                        return `Tổng: ${formatNumber(total)} kiện`;
+                      },
                     },
                   },
-                  datalabels: {
-                    anchor: "end",
-                    align: "end",
-                    offset: 4,
-                    clamp: true,
-                    color: "#1e1b4b",
-                    backgroundColor: "rgba(255,255,255,0.85)",
-                    borderRadius: 4,
-                    padding: { top: 1, bottom: 1, left: 4, right: 4 },
-                    font: { weight: "bold", size: 12 },
-                    formatter: (value) =>
-                      value > 0 ? formatNumber(value) : "",
-                  },
+               datalabels: {
+  display: (context) => {
+    const value = context.dataset.data[context.dataIndex] || 0;
+    return value > 0;
+  },
+  anchor: "end",
+  align: "top",
+  offset: (context) => (context.dataset.label === "ĐÔNG" ? 8 : 10),
+  color: (context) => {
+    if (context.dataset.label === "ĐÔNG") return "#0284c7";
+    if (context.dataset.label === "KHÔ") return "#4338ca";
+    return "#3730a3"; // SLL / loại hình khác — hiện tổng
+  },
+  backgroundColor: (context) =>
+    context.dataset.label === "ĐÔNG"
+      ? "rgba(224,242,254,0.95)"
+      : "rgba(255,255,255,0.92)",
+  borderColor: (context) =>
+    context.dataset.label === "ĐÔNG" ? "#7dd3fc" : "#c7d2fe",
+  borderWidth: 1,
+  borderRadius: 6,
+  padding: { top: 3, bottom: 3, left: 6, right: 6 },
+  font: { weight: "bold", size: 11 },
+  formatter: (value, context) => {
+    const label = context.dataset.label;
+    const stackedTypes = loaiHinhKienTypes.filter((lh) => lh !== "ĐÔNG");
+    const isTopOfStack = label === stackedTypes[stackedTypes.length - 1];
+
+    if (isTopOfStack) {
+      // Dataset trên cùng của stack (ví dụ SLL) -> hiện TỔNG cộng dồn,
+      // vì vị trí đường của nó trên biểu đồ đã là điểm cộng dồn
+      const total = Object.values(
+        last7DaysKien[context.dataIndex]?.byLoai || {},
+      ).reduce((sum, v) => sum + v, 0);
+      return total > 0 ? formatNumber(total) : "";
+    }
+
+    // Các dataset còn lại (KHÔ, ĐÔNG...) -> hiện đúng giá trị riêng
+    // của chính nó tại điểm đó
+    return value > 0 ? formatNumber(value) : "";
+  },
+},
                 },
                 scales: {
                   x: {
-                    stacked: false,
                     grid: { display: false },
                     ticks: {
                       font: { size: 12, weight: "600" },
@@ -649,15 +805,32 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
                     },
                   },
                   y: {
-                    stacked: false,
+                    stacked: true,
                     beginAtZero: true,
-                    grid: { color: "#f1f5f9" },
-                    ticks: {
-                      font: { size: 12 },
-                      color: "#64748b",
-                    },
+                    grid: { color: "#eef2ff" },
+                    ticks: { font: { size: 12 }, color: "#64748b" },
                     suggestedMax:
-                      kienBarMax > 0 ? kienBarMax * 1.25 : undefined,
+                      kienAreaMax > 0 ? kienAreaMax * 1.3 : undefined,
+                  },
+                  yDong: {
+                    position: "right",
+                    beginAtZero: true,
+                    grid: { display: false },
+                    ticks: {
+                      font: { size: 11 },
+                      color: "#0ea5e9",
+                      callback: (v) => formatNumber(v),
+                    },
+                    // Nhân hệ số lớn hơn hẳn (thử 6-8 lần) để đường ĐÔNG luôn nằm
+                    // thấp hơn KHÔ/SLL trên màn hình dù 2 trục độc lập nhau — vì
+                    // ĐÔNG có giá trị nhỏ nhất trong 3 loại hình.
+                    suggestedMax: dongMax > 0 ? dongMax * 7 : undefined,
+                    title: {
+                      display: true,
+                      text: "ĐÔNG (kiện)",
+                      color: "#0ea5e9",
+                      font: { size: 11, weight: "600" },
+                    },
                   },
                 },
               }}
