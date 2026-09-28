@@ -10,7 +10,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Loader2, PackageCheck, PackageX, Boxes } from "lucide-react";
+import dayjs from "dayjs";
 import { nhapHangService } from "@/services/nhaphang/nhaphang.service";
+import { asnService } from "@/services/nhaphang/asn.service";
 import {
   KHO_LIST,
   FETCH_LIMIT,
@@ -22,12 +24,38 @@ import {
   formatNumber,
   usePieLabelRenderer,
   percentLabelFormatter,
-  getDefaultDateRange,
   KhoFilter,
 } from "./dashboardCommon";
+import { bucketKey, lastBuckets, PERIOD_LIMIT } from "@/utils/period";
+import DateRangeFilter from "./date";
+import PeriodToggle from "./PeriodToggle";
 
 const NHAP_MIN_ANGLE = 6;
 const PUT_MIN_ANGLE = 8;
+
+// Khoảng ngày mặc định: cả tháng hiện tại (vd tháng 9 -> 01/09 đến 30/09)
+const getCurrentMonthRange = () => ({
+  from: dayjs().startOf("month").format("YYYY-MM-DD"),
+  to: dayjs().endOf("month").format("YYYY-MM-DD"),
+});
+
+// Text hiển thị theo chế độ Ngày / Tháng / Năm
+const PERIOD_TEXT = {
+  day: "theo khoảng ngày đang lọc",
+  month: "12 tháng gần nhất",
+  year: "5 năm gần nhất",
+};
+const PERIOD_UNIT = { day: "ngày", month: "tháng", year: "năm" };
+
+// Định dạng số bình quân: tối đa 1 số lẻ, kiểu Việt Nam (1.234,5)
+const formatAvg = (n) =>
+  (Number(n) || 0).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+
+// so_kien của ASN/Booking lưu dạng String trong DB -> parse an toàn về số
+const parseNum = (v) => {
+  const n = Number(String(v ?? "").replace(/[.,\s]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+};
 
 // Màu theo tone — class tĩnh (không nối chuỗi động) để Tailwind không
 // purge mất khi build. Cùng bảng tone với DashASN / DashLet để 3 dashboard
@@ -53,7 +81,8 @@ const STAT_TONES = {
 // Card riêng cho Nhập/Put Hàng — số to, đậm, có màu rõ theo từng loại,
 // tách khỏi StatCard dùng chung (dashboardCommon) để không ảnh hưởng
 // dashboard khác, cùng phong cách với ASNStatCard / LetStatCard.
-const NhapPutStatCard = ({ icon: Icon, label, value, tone }) => {
+// avgValue (tùy chọn): hiện thêm ô "TB / ngày" bên phải.
+const NhapPutStatCard = ({ icon: Icon, label, value, avgValue, tone }) => {
   const t = STAT_TONES[tone] || STAT_TONES.blue;
   return (
     <div
@@ -62,12 +91,20 @@ const NhapPutStatCard = ({ icon: Icon, label, value, tone }) => {
       <span className={`shrink-0 rounded-lg p-2.5 ${t.icon}`}>
         <Icon size={22} />
       </span>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-slate-500">{label}</p>
         <p className={`text-2xl font-extrabold leading-tight ${t.value}`}>
           {value}
         </p>
       </div>
+      {avgValue !== undefined && (
+        <div className="shrink-0 border-l border-slate-200 pl-3 text-right">
+          <p className="text-xs font-medium text-slate-500">TB / ngày</p>
+          <p className={`text-xl font-bold leading-tight ${t.value}`}>
+            {avgValue}
+          </p>
+        </div>
+      )}
     </div>
   );
 };
@@ -97,11 +134,13 @@ const legendLabelsBold = {
   boxHeight: 12,
 };
 
-const NhapHangSection = ({ rawData, loading, onNavigate }) => {
+const NhapHangSection = ({ rawData, asnData, loading, onNavigate }) => {
   useDonutFonts();
   const [selectedKho, setSelectedKho] = useState(KHO_LIST.map((k) => k.kho));
-  const [dateFrom, setDateFrom] = useState(() => getDefaultDateRange().from);
-  const [dateTo, setDateTo] = useState(() => getDefaultDateRange().to);
+  const [dateFrom, setDateFrom] = useState(() => getCurrentMonthRange().from);
+  const [dateTo, setDateTo] = useState(() => getCurrentMonthRange().to);
+  // Chế độ xem biểu đồ cột theo thời gian: day | month | year
+  const [period, setPeriod] = useState("day");
 
   const toggleKho = (kho) => {
     setSelectedKho((prev) =>
@@ -120,53 +159,123 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
     });
   }, [rawData, selectedKho, dateFrom, dateTo]);
 
+  // Tổng kiện BOOKING D-1 tương ứng: hàng nhập kho ngày D là hàng đã booking
+  // ngày D-1 (vd nhập ngày 28 so với booking ngày 27). Với khoảng lọc
+  // [từ, đến] thì lấy booking của [từ-1, đến-1]; "đến" bị chặn ở hôm nay
+  // để không cộng booking của những ngày chưa tới. Cùng lọc theo kho.
+  const bookingKien = useMemo(() => {
+    const fmt = "YYYY-MM-DD";
+    const today = dayjs().format(fmt);
+    const toEff = dateTo && dateTo < today ? dateTo : today;
+    const bookTo = dayjs(toEff).subtract(1, "day").format(fmt);
+    const bookFrom = dateFrom
+      ? dayjs(dateFrom).subtract(1, "day").format(fmt)
+      : "";
+
+    let sum = 0;
+    (asnData || []).forEach((r) => {
+      if (!selectedKho.includes(Number(r.kho))) return;
+      const key = toDateKeyUTC(r.ngay_asn);
+      if (!key) return;
+      if (bookFrom && key < bookFrom) return;
+      if (key > bookTo) return;
+      sum += parseNum(r.so_kien);
+    });
+    return sum;
+  }, [asnData, selectedKho, dateFrom, dateTo]);
+
   // totalKien / totalSku luôn là TỔNG của toàn bộ khoảng ngày đang lọc
   // (không phải theo từng ngày riêng lẻ) vì tính trực tiếp từ `filtered`.
-  const { labels, khoBarData, totalKien, totalSku, byKho } = useMemo(() => {
-    const dateKeys = [
-      ...new Set(filtered.map((r) => toDateKeyUTC(r.ngay_nhap_kho))),
-    ].sort();
+  // Bình quân/ngày chỉ tính trên các ngày có dữ liệu.
+  const { totalKien, totalSku, byKho, soNgayCoData, avgKien, avgSku } =
+    useMemo(() => {
+      const skuSet = new Set();
+      const dayKeys = new Set();
+      const daySku = {}; // { 'YYYY-MM-DD': Set(sku) }
+      let totalKien = 0;
+      const byKho = {};
 
-    const skuSet = new Set();
-    let totalKien = 0;
-    const byKho = {};
+      filtered.forEach((r) => {
+        const kien = Number(r.kien) || 0;
+        const kho = Number(r.kho);
+        totalKien += kien;
+        skuSet.add(r.sku);
+        byKho[kho] = (byKho[kho] || 0) + kien;
 
-    filtered.forEach((r) => {
-      const kien = Number(r.kien) || 0;
+        const dk = toDateKeyUTC(r.ngay_nhap_kho);
+        if (dk) {
+          dayKeys.add(dk);
+          if (r.sku) (daySku[dk] ||= new Set()).add(r.sku);
+        }
+      });
+
+      const soNgayCoData = dayKeys.size;
+      // TB SKU/ngày = trung bình số SKU KHÁC NHAU của từng ngày
+      const avgSku =
+        soNgayCoData > 0
+          ? Object.values(daySku).reduce((sum, set) => sum + set.size, 0) /
+            soNgayCoData
+          : 0;
+
+      return {
+        totalKien,
+        totalSku: skuSet.size,
+        byKho,
+        soNgayCoData,
+        avgKien: soNgayCoData > 0 ? totalKien / soNgayCoData : 0,
+        avgSku,
+      };
+    }, [filtered]);
+
+  // Dữ liệu biểu đồ cột: chế độ Ngày tôn trọng bộ lọc ngày; Tháng / Năm bỏ
+  // lọc ngày (chỉ lọc kho) để thấy được toàn bộ lịch sử.
+  const trendRows = useMemo(
+    () =>
+      period === "day"
+        ? filtered
+        : rawData.filter((r) => selectedKho.includes(Number(r.kho))),
+    [period, filtered, rawData, selectedKho],
+  );
+
+  const { labels, khoBarData } = useMemo(() => {
+    const sums = {}; // { kho: { key: tổng kiện } }
+    const dayKeys = new Set();
+
+    trendRows.forEach((r) => {
+      const key =
+        period === "day"
+          ? toDateKeyUTC(r.ngay_nhap_kho)
+          : bucketKey(r.ngay_nhap_kho, period);
+      if (!key) return;
       const kho = Number(r.kho);
-      totalKien += kien;
-      skuSet.add(r.sku);
-      byKho[kho] = (byKho[kho] || 0) + kien;
+      if (!sums[kho]) sums[kho] = {};
+      sums[kho][key] = (sums[kho][key] || 0) + (Number(r.kien) || 0);
+      dayKeys.add(key);
     });
 
-    const khoBarData = {
-      labels: dateKeys.map(formatDateLabel),
-      datasets: KHO_LIST.filter(({ kho }) => selectedKho.includes(kho)).map(
-        ({ kho, label, color }) => ({
-          label,
-          data: dateKeys.map((key) =>
-            filtered
-              .filter(
-                (r) =>
-                  Number(r.kho) === kho &&
-                  toDateKeyUTC(r.ngay_nhap_kho) === key,
-              )
-              .reduce((sum, r) => sum + (Number(r.kien) || 0), 0),
-          ),
-          backgroundColor: color,
-          borderRadius: 4,
-        }),
-      ),
-    };
+    const buckets =
+      period === "day"
+        ? [...dayKeys].sort().map((key) => ({
+            key,
+            label: formatDateLabel(key),
+          }))
+        : lastBuckets(period, PERIOD_LIMIT[period]);
 
     return {
-      labels: dateKeys.map(formatDateLabel),
-      khoBarData,
-      totalKien,
-      totalSku: skuSet.size,
-      byKho,
+      labels: buckets.map((b) => b.label),
+      khoBarData: {
+        labels: buckets.map((b) => b.label),
+        datasets: KHO_LIST.filter(({ kho }) => selectedKho.includes(kho)).map(
+          ({ kho, label, color }) => ({
+            label,
+            data: buckets.map((b) => sums[kho]?.[b.key] || 0),
+            backgroundColor: color,
+            borderRadius: 4,
+          }),
+        ),
+      },
     };
-  }, [filtered, selectedKho]);
+  }, [trendRows, period, selectedKho]);
 
   const khoPieData = useMemo(
     () =>
@@ -204,56 +313,60 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
         <KhoFilter selected={selectedKho} onToggle={toggleKho} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-xs text-slate-500">
-          Từ ngày
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-blue-400"
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs text-slate-500">
-          Đến ngày
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-blue-400"
-          />
-        </label>
-        {(dateFrom || dateTo) && (
-          <button
-            type="button"
-            onClick={() => {
-              setDateFrom("");
-              setDateTo("");
-            }}
-            className="text-xs text-blue-600 hover:underline"
-          >
-            Xóa lọc ngày
-          </button>
-        )}
+      <div className="w-full sm:w-72">
+        <DateRangeFilter
+          label="Lọc theo Ngày nhập kho"
+          startValue={dateFrom}
+          endValue={dateTo}
+          onChange={(start, end) => {
+            setDateFrom(start);
+            setDateTo(end);
+          }}
+          onClear={() => {
+            setDateFrom("");
+            setDateTo("");
+          }}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <NhapPutStatCard
           icon={Boxes}
-          label="Tổng số kiện"
-          value={formatNumber(totalKien)}
+          label="Tổng số kiện / Kiện Booking (D-1)"
+          value={`${formatNumber(totalKien)} / ${formatNumber(bookingKien)}`}
+          avgValue={formatAvg(avgKien)}
           tone="blue"
         />
         <NhapPutStatCard
           icon={PackageCheck}
           label="Số SKU"
           value={formatNumber(totalSku)}
+          avgValue={formatAvg(avgSku)}
           tone="emerald"
         />
       </div>
+      <p className="-mt-2 text-xs text-slate-400">
+        Bình quân tính trên {soNgayCoData} ngày có dữ liệu trong bộ lọc.
+      </p>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-slate-600">
+              Số kiện nhập theo {PERIOD_UNIT[period]} ({PERIOD_TEXT[period]})
+            </p>
+            <PeriodToggle
+              value={period}
+              onChange={setPeriod}
+              activeClass="text-blue-600"
+            />
+          </div>
+          {period !== "day" && (
+            <p className="mb-2 text-xs text-slate-400">
+              {PERIOD_TEXT[period]} trên toàn bộ dữ liệu (không áp dụng bộ lọc
+              ngày phía trên)
+            </p>
+          )}
           {loading ? (
             <div className="flex h-72 items-center justify-center text-slate-400">
               <Loader2 size={20} className="animate-spin" />
@@ -348,8 +461,8 @@ const NhapHangSection = ({ rawData, loading, onNavigate }) => {
 const PutHangSection = ({ rawData, loading, onNavigate }) => {
   useDonutFonts();
   const [selectedKho, setSelectedKho] = useState(KHO_LIST.map((k) => k.kho));
-  const [dateFrom, setDateFrom] = useState(() => getDefaultDateRange().from);
-  const [dateTo, setDateTo] = useState(() => getDefaultDateRange().to);
+  const [dateFrom, setDateFrom] = useState(() => getCurrentMonthRange().from);
+  const [dateTo, setDateTo] = useState(() => getCurrentMonthRange().to);
 
   const toggleKho = (kho) => {
     setSelectedKho((prev) =>
@@ -368,16 +481,20 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
     });
   }, [rawData, selectedKho, dateFrom, dateTo]);
 
-  const { totalKien, chuaPut, daPut, byKho } = useMemo(() => {
+  const { totalKien, chuaPut, daPut, byKho, soNgayCoData } = useMemo(() => {
     let totalKien = 0;
     let chuaPut = 0;
     const byKho = {};
+    const dayKeys = new Set();
 
     filtered.forEach((r) => {
       const kien = Number(r.kien) || 0;
       totalKien += kien;
       const kho = Number(r.kho);
       if (!byKho[kho]) byKho[kho] = { daPut: 0, chuaPut: 0 };
+
+      const dk = toDateKeyUTC(r.ngay_nhap_kho);
+      if (dk) dayKeys.add(dk);
 
       // Hàng trung chuyển (SKU "HANGTRUNGCHUYEN") không cần putaway thật sự
       // -> dù vị trí đang ở RZ* (thường tính là "chưa put") vẫn coi là "đã
@@ -393,8 +510,17 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
       }
     });
 
-    return { totalKien, chuaPut, daPut: totalKien - chuaPut, byKho };
+    return {
+      totalKien,
+      chuaPut,
+      daPut: totalKien - chuaPut,
+      byKho,
+      soNgayCoData: dayKeys.size,
+    };
   }, [filtered]);
+
+  // Bình quân/ngày = tổng kiện ÷ số ngày có dữ liệu trong bộ lọc
+  const perDay = (n) => (soNgayCoData > 0 ? n / soNgayCoData : 0);
 
   const khoActive = useMemo(
     () => KHO_LIST.filter(({ kho }) => selectedKho.includes(kho)),
@@ -458,40 +584,23 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
         <KhoFilter selected={selectedKho} onToggle={toggleKho} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-xs text-slate-500">
-          Từ ngày
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-blue-400"
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs text-slate-500">
-          Đến ngày
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-blue-400"
-          />
-        </label>
-        {(dateFrom || dateTo) && (
-          <button
-            type="button"
-            onClick={() => {
-              setDateFrom("");
-              setDateTo("");
-            }}
-            className="text-xs text-blue-600 hover:underline"
-          >
-            Xóa lọc ngày
-          </button>
-        )}
+      <div className="w-full sm:w-72">
+        <DateRangeFilter
+          label="Lọc theo Ngày nhập kho"
+          startValue={dateFrom}
+          endValue={dateTo}
+          onChange={(start, end) => {
+            setDateFrom(start);
+            setDateTo(end);
+          }}
+          onClear={() => {
+            setDateFrom("");
+            setDateTo("");
+          }}
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {khoActive.map(({ kho, label }) => {
           const k = byKho[kho] || { daPut: 0, chuaPut: 0 };
           const total = k.daPut + k.chuaPut;
@@ -501,6 +610,7 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
               icon={Boxes}
               label={`Tổng kiện - ${label}`}
               value={formatNumber(total)}
+              avgValue={formatAvg(perDay(total))}
               tone="blue"
             />
           );
@@ -509,15 +619,20 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
           icon={PackageCheck}
           label="Đã put"
           value={formatNumber(daPut)}
+          avgValue={formatAvg(perDay(daPut))}
           tone="emerald"
         />
         <NhapPutStatCard
           icon={PackageX}
           label="Chưa put (RZ*)"
           value={formatNumber(chuaPut)}
+          avgValue={formatAvg(perDay(chuaPut))}
           tone="rose"
         />
       </div>
+      <p className="-mt-2 text-xs text-slate-400">
+        Bình quân tính trên {soNgayCoData} ngày có dữ liệu trong bộ lọc.
+      </p>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2">
@@ -619,7 +734,25 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
 // ─────────────────────────────────────────────
 const DashNhapPut = ({ onNavigate }) => {
   const [rawData, setRawData] = useState([]);
+  const [asnData, setAsnData] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Booking (ASN) chỉ để đối chiếu "kiện nhập / kiện booking D-1" — lỗi
+  // thì bỏ qua, không làm hỏng dashboard Nhập/Put.
+  useEffect(() => {
+    const fetchAsn = async () => {
+      try {
+        const res = await asnService.getDanhSach({
+          page: 1,
+          limit: FETCH_LIMIT,
+        });
+        setAsnData(res?.data || []);
+      } catch (err) {
+        console.error("Lỗi tải dữ liệu Booking (ASN):", err);
+      }
+    };
+    fetchAsn();
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -644,6 +777,7 @@ const DashNhapPut = ({ onNavigate }) => {
     <div className="space-y-8">
       <NhapHangSection
         rawData={rawData}
+        asnData={asnData}
         loading={loading}
         onNavigate={onNavigate}
       />

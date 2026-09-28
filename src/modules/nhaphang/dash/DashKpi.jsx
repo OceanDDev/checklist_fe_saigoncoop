@@ -21,15 +21,16 @@ import {
 // Giờ làm việc chuẩn 1 ca — dùng để quy đổi tổng kiện (trong khoảng đang
 // lọc) -> kiện/giờ. Dù lọc 1 ngày hay nhiều ngày, công thức vẫn là tổng
 // kiện / 7,5 (không nhân thêm số ngày).
-const GIO_LAM_VIEC = 7.5;
 
-// Định mức KPI (kiện/giờ) BẮT BUỘC cho từng loại công việc + field nhân
-// viên tương ứng trong bản ghi + icon/màu nhấn cho tab tương ứng.
+// Giờ làm việc chuẩn 1 ca theo từng loại công việc — dùng để quy đổi
+// tổng kiện (trong khoảng đang lọc) -> kiện/giờ. NV Nhận tính theo 7,5
+// giờ, NV Putaway và NV Châm hàng (Let) tính theo 6,5 giờ.
 const KPI_TARGETS = {
   nhan: {
     key: "nhan",
     label: "NV Nhận",
     target: 200,
+    gioLamViec: 7.5,
     field: "nhan_vien_nhap",
     icon: PackageCheck,
     accent: "blue",
@@ -38,6 +39,7 @@ const KPI_TARGETS = {
     key: "put",
     label: "NV Putaway",
     target: 100,
+    gioLamViec: 6.5,
     field: "nhan_vien_put",
     icon: Boxes,
     accent: "violet",
@@ -46,6 +48,7 @@ const KPI_TARGETS = {
     key: "let",
     label: "NV Châm hàng (Let)",
     target: 35,
+    gioLamViec: 6.5,
     field: "nhan_vien_let",
     icon: Send,
     accent: "amber",
@@ -96,13 +99,13 @@ const groupKienByEmployee = (rows, field) => {
 // — Thanh tiến độ ngắn bên cạnh thể hiện % so với định mức bắt buộc.
 // ─────────────────────────────────────────────
 const KpiTable = ({ config, rows, loading }) => {
-  const { label, target, icon: Icon, accent } = config;
+  const { label, target, gioLamViec, icon: Icon, accent } = config;
   const a = ACCENT[accent];
 
   const computed = useMemo(() => {
     return rows
       .map((r) => {
-        const kienPerHour = r.kien / GIO_LAM_VIEC;
+        const kienPerHour = r.kien / gioLamViec;
         return {
           ...r,
           kienPerHour,
@@ -111,7 +114,7 @@ const KpiTable = ({ config, rows, loading }) => {
         };
       })
       .sort((a, b) => b.kienPerHour - a.kienPerHour);
-  }, [rows, target]);
+  }, [rows, target, gioLamViec]);
 
   const soDat = computed.filter((r) => r.dat).length;
   const soKhongDat = computed.length - soDat;
@@ -425,7 +428,8 @@ const DashKPI = () => {
       <p className="text-xs text-slate-400">
         Chọn đúng 1 ngày (Từ ngày = Đến ngày) để xem KPI ngày đó, hoặc để khoảng
         dài hơn để xem KPI trung bình cả khoảng — công thức luôn là tổng kiện
-        trong khoảng đang lọc chia cho 7,5.
+        trong khoảng đang lọc chia cho số giờ làm việc chuẩn: NV Nhận 7,5 giờ,
+        NV Putaway và NV Châm hàng (Let) 6,5 giờ.
       </p>
 
       <KpiTable

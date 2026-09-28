@@ -4,6 +4,7 @@ import {
   Truck,
   Clock,
   PackageSearch,
+  PackageCheck,
   ClipboardList,
   GraduationCap,
   Car,
@@ -43,6 +44,14 @@ const MODULES = [
     roles: [72],
     icon: PackageSearch,
     color: "from-cyan-400 to-sky-500",
+  },
+  {
+    title: "Xuất Hàng",
+    desc: "Theo dõi và quản lý dashboard xuất hàng",
+    path: "/xuathang",
+    roles: [78],
+    icon: PackageCheck,
+    color: "from-teal-400 to-emerald-600",
   },
   {
     title: "Quản Lý Phiếu Soạn",
@@ -101,17 +110,16 @@ export default function SelectSoftware() {
       />
 
       {/* Lớp phủ gradient: Cân bằng lại độ tối để làm nổi bật các card phía trên */}
-      <div 
-        className="fixed inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/45 to-slate-950/80 pointer-events-none" 
-        aria-hidden="true" 
+      <div
+        className="fixed inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/45 to-slate-950/80 pointer-events-none"
+        aria-hidden="true"
       />
 
       {/* Nội dung chính */}
-      <div 
+      <div
         className="relative z-10 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 pb-10 flex flex-col"
         style={{ paddingTop: "calc(var(--header-h, 70px) + 16px)" }}
       >
-        
         {/* Header tiêu đề khu vực chọn phần mềm */}
         <div className="mb-6 text-center">
           {isSuperAdmin && (
@@ -158,7 +166,9 @@ export default function SelectSoftware() {
 
                 {/* Đường dẫn mở */}
                 <div className="relative mt-4 flex items-center justify-between border-t border-white/5 pt-3 text-xs font-semibold text-slate-400">
-                  <span className="group-hover:text-blue-400 transition-colors">Truy cập</span>
+                  <span className="group-hover:text-blue-400 transition-colors">
+                    Truy cập
+                  </span>
                   <span className="transition-transform duration-300 group-hover:translate-x-1 text-blue-400">
                     →
                   </span>
@@ -183,7 +193,9 @@ export default function SelectSoftware() {
 
       {/* Footer nhỏ phía dưới */}
       <footer className="relative z-10 py-3 text-center text-xs text-slate-500 border-t border-white/5 bg-slate-950/40 backdrop-blur-md">
-        <span>SC Logistics &copy; {new Date().getFullYear()} — Internal Portal</span>
+        <span>
+          SC Logistics &copy; {new Date().getFullYear()} — Internal Portal
+        </span>
       </footer>
     </div>
   );

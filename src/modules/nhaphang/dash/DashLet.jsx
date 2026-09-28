@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Loader2, PackageCheck, PackageX, Boxes } from "lucide-react";
+import dayjs from "dayjs";
 import { nhapHangService } from "@/services/nhaphang/nhaphang.service";
 import {
   KHO_LIST,
@@ -21,10 +22,31 @@ import {
   KhoFilter,
   formatNumber,
   toDateKeyUTC,
-  getDefaultDateRange,
+  formatDateLabel,
 } from "./dashboardCommon";
+import DateRangeFilter from "./date";
+import { bucketKey, lastBuckets, PERIOD_LIMIT } from "@/utils/period";
+import PeriodToggle from "./PeriodToggle";
 
-const LET_MIN_ANGLE = 6;
+const LET_MIN_ANGLE = 6;  
+
+// Khoảng ngày mặc định: cả tháng hiện tại (vd tháng 9 -> 01/09 đến 30/09)
+const getCurrentMonthRange = () => ({
+  from: dayjs().startOf("month").format("YYYY-MM-DD"),
+  to: dayjs().endOf("month").format("YYYY-MM-DD"),
+});
+
+// Định dạng số bình quân: tối đa 1 số lẻ, kiểu Việt Nam (1.234,5)
+const formatAvg = (n) =>
+  (Number(n) || 0).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+
+// Text hiển thị theo chế độ Ngày / Tháng / Năm
+const PERIOD_TEXT = {
+  day: "theo khoảng ngày đang lọc",
+  month: "12 tháng gần nhất",
+  year: "5 năm gần nhất",
+};
+const PERIOD_UNIT = { day: "ngày", month: "tháng", year: "năm" };
 
 // ─────────────────────────────────────────────
 // LET HÀNG (Châm hàng) — theo trạng thái
@@ -76,7 +98,8 @@ const STAT_TONES = {
 // Card riêng cho tab Let — số to, đậm, có màu rõ theo từng loại, tách khỏi
 // StatCard dùng chung (dashboardCommon) để không ảnh hưởng dashboard khác,
 // cùng phong cách với ASNStatCard bên tab ASN.
-const LetStatCard = ({ icon: Icon, label, value, tone }) => {
+// avgValue (tùy chọn): hiện thêm ô "TB / ngày" bên phải.
+const LetStatCard = ({ icon: Icon, label, value, avgValue, tone }) => {
   const t = STAT_TONES[tone] || STAT_TONES.slate;
   return (
     <div
@@ -85,12 +108,20 @@ const LetStatCard = ({ icon: Icon, label, value, tone }) => {
       <span className={`shrink-0 rounded-lg p-2.5 ${t.icon}`}>
         <Icon size={22} />
       </span>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-slate-500">{label}</p>
         <p className={`text-2xl font-extrabold leading-tight ${t.value}`}>
           {value}
         </p>
       </div>
+      {avgValue !== undefined && (
+        <div className="shrink-0 border-l border-slate-200 pl-3 text-right">
+          <p className="text-xs font-medium text-slate-500">TB / ngày</p>
+          <p className={`text-xl font-bold leading-tight ${t.value}`}>
+            {avgValue}
+          </p>
+        </div>
+      )}
     </div>
   );
 };
@@ -98,8 +129,10 @@ const LetStatCard = ({ icon: Icon, label, value, tone }) => {
 const LetHangSection = ({ rawData, loading, onNavigate }) => {
   useDonutFonts();
   const [selectedKho, setSelectedKho] = useState(KHO_LIST.map((k) => k.kho));
-  const [dateFrom, setDateFrom] = useState(() => getDefaultDateRange().from);
-  const [dateTo, setDateTo] = useState(() => getDefaultDateRange().to);
+  const [dateFrom, setDateFrom] = useState(() => getCurrentMonthRange().from);
+  const [dateTo, setDateTo] = useState(() => getCurrentMonthRange().to);
+  // Chế độ xem biểu đồ xu hướng: day | month | year
+  const [period, setPeriod] = useState("day");
 
   const toggleKho = (kho) => {
     setSelectedKho((prev) =>
@@ -123,10 +156,12 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
     });
   }, [rawData, selectedKho, dateFrom, dateTo]);
 
-  const { totalKien, byTrangThai, byKho } = useMemo(() => {
+  // Bình quân/ngày chỉ tính trên các ngày có dữ liệu trong bộ lọc
+  const { totalKien, byTrangThai, byKho, soNgayCoData } = useMemo(() => {
     let totalKien = 0;
     const byTrangThai = {};
     const byKho = {};
+    const dayKeys = new Set();
 
     TRANG_THAI_LIST.forEach(({ key }) => (byTrangThai[key] = 0));
 
@@ -136,6 +171,9 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
       const tt = normalizeTrangThai(r.trang_thai);
 
       totalKien += kien;
+
+      const dk = toDateKeyUTC(r.ngay_gio_tao_let);
+      if (dk) dayKeys.add(dk);
 
       if (!byKho[kho]) {
         byKho[kho] = {};
@@ -148,8 +186,10 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
       }
     });
 
-    return { totalKien, byTrangThai, byKho };
+    return { totalKien, byTrangThai, byKho, soNgayCoData: dayKeys.size };
   }, [filtered]);
+
+  const perDay = (n) => (soNgayCoData > 0 ? n / soNgayCoData : 0);
 
   const khoBarData = useMemo(() => {
     const khoActive = KHO_LIST.filter(({ kho }) => selectedKho.includes(kho));
@@ -177,6 +217,61 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
     );
     return max;
   }, [khoBarData]);
+
+  // Biểu đồ xu hướng số kiện theo thời gian, chia theo trạng thái.
+  // Ngày: theo bộ lọc ngày; Tháng / Năm: bỏ lọc ngày (chỉ lọc kho).
+  const trendRows = useMemo(
+    () =>
+      period === "day"
+        ? filtered
+        : rawData.filter((r) => selectedKho.includes(Number(r.kho))),
+    [period, filtered, rawData, selectedKho],
+  );
+
+  const trendData = useMemo(() => {
+    const sums = {}; // { trang_thai: { key: tổng kiện } }
+    const keys = new Set();
+    TRANG_THAI_LIST.forEach(({ key }) => (sums[key] = {}));
+
+    trendRows.forEach((r) => {
+      const key =
+        period === "day"
+          ? toDateKeyUTC(r.ngay_gio_tao_let)
+          : bucketKey(r.ngay_gio_tao_let, period);
+      if (!key) return;
+      const tt = normalizeTrangThai(r.trang_thai);
+      if (!sums[tt]) return;
+      sums[tt][key] = (sums[tt][key] || 0) + (Number(r.kien) || 0);
+      keys.add(key);
+    });
+
+    const buckets =
+      period === "day"
+        ? [...keys].sort().map((key) => ({ key, label: formatDateLabel(key) }))
+        : lastBuckets(period, PERIOD_LIMIT[period]);
+
+    return {
+      labels: buckets.map((b) => b.label),
+      datasets: TRANG_THAI_LIST.map(({ key, label, color }) => ({
+        label,
+        data: buckets.map((b) => sums[key][b.key] || 0),
+        backgroundColor: color,
+        borderRadius: 4,
+        minBarLength: 4,
+      })),
+    };
+  }, [trendRows, period]);
+
+  const trendMax = useMemo(() => {
+    let max = 0;
+    trendData.datasets.forEach((ds) =>
+      ds.data.forEach((v) => {
+        if (v > max) max = v;
+      }),
+    );
+    return max;
+  }, [trendData]);
+
   const pieData = useMemo(
     () =>
       TRANG_THAI_LIST.map(({ key, label, color }) => ({
@@ -217,44 +312,28 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
         <KhoFilter selected={selectedKho} onToggle={toggleKho} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-xs text-slate-500">
-          Từ ngày
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-amber-400"
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs text-slate-500">
-          Đến ngày
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-amber-400"
-          />
-        </label>
-        {(dateFrom || dateTo) && (
-          <button
-            type="button"
-            onClick={() => {
-              setDateFrom("");
-              setDateTo("");
-            }}
-            className="text-xs text-amber-600 hover:underline"
-          >
-            Xóa lọc ngày
-          </button>
-        )}
+      <div className="w-full sm:w-72">
+        <DateRangeFilter
+          label="Lọc theo Ngày tạo Let"
+          startValue={dateFrom}
+          endValue={dateTo}
+          onChange={(start, end) => {
+            setDateFrom(start);
+            setDateTo(end);
+          }}
+          onClear={() => {
+            setDateFrom("");
+            setDateTo("");
+          }}
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <LetStatCard
           icon={Boxes}
           label="Tổng số kiện"
           value={formatNumber(totalKien)}
+          avgValue={formatAvg(perDay(totalKien))}
           tone="slate"
         />
         {TRANG_THAI_LIST.map(({ key, label }, i) => (
@@ -263,10 +342,14 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
             icon={statIcons[i]}
             label={label}
             value={formatNumber(byTrangThai[key] || 0)}
+            avgValue={formatAvg(perDay(byTrangThai[key] || 0))}
             tone={statTones[i]}
           />
         ))}
       </div>
+      <p className="-mt-2 text-xs text-slate-400">
+        Bình quân tính trên {soNgayCoData} ngày có dữ liệu trong bộ lọc.
+      </p>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2">
@@ -398,6 +481,93 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Xu hướng số kiện theo Ngày / Tháng / Năm, chia theo trạng thái */}
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-medium text-slate-600">
+            Số kiện Let theo {PERIOD_UNIT[period]} ({PERIOD_TEXT[period]})
+          </p>
+          <PeriodToggle
+            value={period}
+            onChange={setPeriod}
+            activeClass="text-amber-600"
+          />
+        </div>
+        {period !== "day" && (
+          <p className="mb-2 text-xs text-slate-400">
+            {PERIOD_TEXT[period]} trên toàn bộ dữ liệu (không áp dụng bộ lọc
+            ngày phía trên)
+          </p>
+        )}
+        {loading ? (
+          <div className="flex h-72 items-center justify-center text-slate-400">
+            <Loader2 size={20} className="animate-spin" />
+          </div>
+        ) : trendMax === 0 ? (
+          <div className="flex h-72 items-center justify-center text-slate-400">
+            Không có dữ liệu
+          </div>
+        ) : (
+          <div className="h-72">
+            <Bar
+              data={trendData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 24 } },
+                plugins: {
+                  legend: {
+                    position: "bottom",
+                    labels: {
+                      font: { size: 12, weight: "600" },
+                      color: "#334155",
+                      boxWidth: 12,
+                      boxHeight: 12,
+                    },
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: (ctx) =>
+                        `${ctx.dataset.label}: ${formatNumber(ctx.parsed.y)} kiện`,
+                    },
+                  },
+                  datalabels: {
+                    anchor: "end",
+                    align: "end",
+                    offset: 4,
+                    clamp: true,
+                    color: "#1e1b4b",
+                    backgroundColor: "rgba(255,255,255,0.85)",
+                    borderRadius: 4,
+                    padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                    font: { weight: "bold", size: 12 },
+                    formatter: (value) =>
+                      value > 0 ? formatNumber(value) : "",
+                  },
+                },
+                scales: {
+                  x: {
+                    stacked: false,
+                    grid: { display: false },
+                    ticks: {
+                      font: { size: 12, weight: "600" },
+                      color: "#334155",
+                    },
+                  },
+                  y: {
+                    stacked: false,
+                    beginAtZero: true,
+                    grid: { color: "#f1f5f9" },
+                    ticks: { font: { size: 12 }, color: "#64748b" },
+                    suggestedMax: trendMax > 0 ? trendMax * 1.25 : undefined,
+                  },
+                },
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

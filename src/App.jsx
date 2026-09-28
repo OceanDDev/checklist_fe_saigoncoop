@@ -51,6 +51,7 @@ import HomeNhapHangDash from "./modules/nhaphang";
 import BaoTaiDieuVan from "./modules/baotai/dieuvan";
 import HomeBaoBiDash from "./modules/baobi";
 import SelectSoftware from "./modules/Login/selectsofware";
+import HomeXuatHangDash from "./modules/xuathang";
 
 function App() {
   return (
@@ -539,6 +540,18 @@ function App() {
             <PrivateRoute allowRoles={[77]}>
               <MainLayout>
                 <HomeBaoBiDash />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+         {/* XUAT HANG */}
+          <Route
+          path="/xuathang"
+          element={
+            <PrivateRoute allowRoles={[78]}>
+              <MainLayout>
+                <HomeXuatHangDash />
               </MainLayout>
             </PrivateRoute>
           }

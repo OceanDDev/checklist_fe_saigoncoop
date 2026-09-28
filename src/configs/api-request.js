@@ -81,7 +81,7 @@ const URL = {
     phanbo: ENDPOINT_PREFIX + "/phanbo",
     phanbocs: ENDPOINT_PREFIX + "/phanbo-cs",
     nhansusoan: ENDPOINT_PREFIX + "/nhansusoan",
-    ngungnangsuat:ENDPOINT_PREFIX + "/ngungnangsuat"
+    ngungnangsuat: ENDPOINT_PREFIX + "/ngungnangsuat",
   },
   ttb: {
     ttb: ENDPOINT_PREFIX + "/ttb",
@@ -130,8 +130,11 @@ const URL = {
   baotai: {
     baotai: ENDPOINT_PREFIX + "/baotai",
   },
-   baobi: {
+  baobi: {
     baobi: ENDPOINT_PREFIX + "/baobi",
+  },
+  xuathang: {
+    xuathang: ENDPOINT_PREFIX + "/xuathang",
   },
 };
 
