@@ -57,6 +57,11 @@ const parseNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+// Hàng trung chuyển (SKU "HANGTRUNGCHUYEN") không cần putaway thật sự
+// -> dù vị trí đang ở RZ* vẫn coi là "đã put", không tính vào chưa put.
+const isChuaPutRow = (r) =>
+  String(r.sku || "").trim() !== "HANGTRUNGCHUYEN" && isChuaPut(r.vi_tri);
+
 // Màu theo tone — class tĩnh (không nối chuỗi động) để Tailwind không
 // purge mất khi build. Cùng bảng tone với DashASN / DashLet để 3 dashboard
 // đồng bộ phong cách.
@@ -133,6 +138,28 @@ const legendLabelsBold = {
   boxWidth: 12,
   boxHeight: 12,
 };
+
+// Khối tiêu đề + nút Ngày/Tháng/Năm dùng chung cho biểu đồ cột theo thời gian
+const TrendHeader = ({ period, setPeriod, activeClass, prefix }) => (
+  <>
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm font-medium text-slate-600">
+        {prefix} theo {PERIOD_UNIT[period]} ({PERIOD_TEXT[period]})
+      </p>
+      <PeriodToggle
+        value={period}
+        onChange={setPeriod}
+        activeClass={activeClass}
+      />
+    </div>
+    {period !== "day" && (
+      <p className="mb-2 text-xs text-slate-400">
+        {PERIOD_TEXT[period]} trên toàn bộ dữ liệu (không áp dụng bộ lọc ngày
+        phía trên)
+      </p>
+    )}
+  </>
+);
 
 const NhapHangSection = ({ rawData, asnData, loading, onNavigate }) => {
   useDonutFonts();
@@ -463,6 +490,8 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
   const [selectedKho, setSelectedKho] = useState(KHO_LIST.map((k) => k.kho));
   const [dateFrom, setDateFrom] = useState(() => getCurrentMonthRange().from);
   const [dateTo, setDateTo] = useState(() => getCurrentMonthRange().to);
+  // Chế độ xem biểu đồ cột theo thời gian: day | month | year
+  const [period, setPeriod] = useState("day");
 
   const toggleKho = (kho) => {
     setSelectedKho((prev) =>
@@ -496,13 +525,7 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
       const dk = toDateKeyUTC(r.ngay_nhap_kho);
       if (dk) dayKeys.add(dk);
 
-      // Hàng trung chuyển (SKU "HANGTRUNGCHUYEN") không cần putaway thật sự
-      // -> dù vị trí đang ở RZ* (thường tính là "chưa put") vẫn coi là "đã
-      // put" luôn, không tính vào chưa put.
-      const isHangTrungChuyen =
-        String(r.sku || "").trim() === "HANGTRUNGCHUYEN";
-
-      if (!isHangTrungChuyen && isChuaPut(r.vi_tri)) {
+      if (isChuaPutRow(r)) {
         chuaPut += kien;
         byKho[kho].chuaPut += kien;
       } else {
@@ -527,25 +550,71 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
     [selectedKho],
   );
 
-  const khoBarData = useMemo(() => {
+  // Ngày: theo bộ lọc ngày; Tháng / Năm: chỉ lọc kho (bỏ lọc ngày)
+  const trendRows = useMemo(
+    () =>
+      period === "day"
+        ? filtered
+        : rawData.filter((r) => selectedKho.includes(Number(r.kho))),
+    [period, filtered, rawData, selectedKho],
+  );
+
+  // Biểu đồ cột: mỗi mốc thời gian có 2 cột "Đã put" / "Chưa put (RZ*)"
+  const putBarData = useMemo(() => {
+    const sums = {}; // { key: { daPut, chuaPut } }
+    const dayKeys = new Set();
+
+    trendRows.forEach((r) => {
+      const key =
+        period === "day"
+          ? toDateKeyUTC(r.ngay_nhap_kho)
+          : bucketKey(r.ngay_nhap_kho, period);
+      if (!key) return;
+      const kien = Number(r.kien) || 0;
+      if (!sums[key]) sums[key] = { daPut: 0, chuaPut: 0 };
+      if (isChuaPutRow(r)) sums[key].chuaPut += kien;
+      else sums[key].daPut += kien;
+      dayKeys.add(key);
+    });
+
+    const buckets =
+      period === "day"
+        ? [...dayKeys]
+            .sort()
+            .map((key) => ({ key, label: formatDateLabel(key) }))
+        : lastBuckets(period, PERIOD_LIMIT[period]);
+
     return {
-      labels: khoActive.map((k) => k.label),
+      labels: buckets.map((b) => b.label),
       datasets: [
         {
           label: "Đã put",
-          data: khoActive.map((k) => byKho[k.kho]?.daPut || 0),
+          data: buckets.map((b) => sums[b.key]?.daPut || 0),
           backgroundColor: "#10b981",
           borderRadius: 4,
+          minBarLength: 4,
         },
         {
           label: "Chưa put (RZ*)",
-          data: khoActive.map((k) => byKho[k.kho]?.chuaPut || 0),
+          data: buckets.map((b) => sums[b.key]?.chuaPut || 0),
           backgroundColor: "#f43f5e",
           borderRadius: 4,
+          minBarLength: 4,
         },
       ],
     };
-  }, [byKho, khoActive]);
+  }, [trendRows, period]);
+
+  // Chừa khoảng trống phía trên (suggestedMax) cho nhãn số ở đỉnh cột
+  const barMax = useMemo(() => {
+    let max = 0;
+    putBarData.datasets.forEach((ds) =>
+      ds.data.forEach((v) => {
+        if (v > max) max = v;
+      }),
+    );
+    return max;
+  }, [putBarData]);
 
   const pieData = useMemo(
     () => [
@@ -636,18 +705,24 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2">
+          <TrendHeader
+            period={period}
+            setPeriod={setPeriod}
+            activeClass="text-cyan-600"
+            prefix="Số kiện put"
+          />
           {loading ? (
             <div className="flex h-72 items-center justify-center text-slate-400">
               <Loader2 size={20} className="animate-spin" />
             </div>
-          ) : totalKien === 0 ? (
+          ) : barMax === 0 ? (
             <div className="flex h-72 items-center justify-center text-slate-400">
               Không có dữ liệu
             </div>
           ) : (
             <div className="h-72">
               <Bar
-                data={khoBarData}
+                data={putBarData}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
@@ -667,6 +742,7 @@ const PutHangSection = ({ rawData, loading, onNavigate }) => {
                       beginAtZero: true,
                       ticks: axisTicksNormal,
                       grid: { color: "#f1f5f9" },
+                      suggestedMax: barMax > 0 ? barMax * 1.25 : undefined,
                     },
                   },
                 }}

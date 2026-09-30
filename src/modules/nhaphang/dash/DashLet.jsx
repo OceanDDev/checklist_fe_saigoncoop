@@ -28,7 +28,7 @@ import DateRangeFilter from "./date";
 import { bucketKey, lastBuckets, PERIOD_LIMIT } from "@/utils/period";
 import PeriodToggle from "./PeriodToggle";
 
-const LET_MIN_ANGLE = 6;  
+const LET_MIN_ANGLE = 6;
 
 // Khoảng ngày mặc định: cả tháng hiện tại (vd tháng 9 -> 01/09 đến 30/09)
 const getCurrentMonthRange = () => ({
@@ -131,7 +131,7 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
   const [selectedKho, setSelectedKho] = useState(KHO_LIST.map((k) => k.kho));
   const [dateFrom, setDateFrom] = useState(() => getCurrentMonthRange().from);
   const [dateTo, setDateTo] = useState(() => getCurrentMonthRange().to);
-  // Chế độ xem biểu đồ xu hướng: day | month | year
+  // Chế độ xem biểu đồ cột theo thời gian: day | month | year
   const [period, setPeriod] = useState("day");
 
   const toggleKho = (kho) => {
@@ -157,17 +157,15 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
   }, [rawData, selectedKho, dateFrom, dateTo]);
 
   // Bình quân/ngày chỉ tính trên các ngày có dữ liệu trong bộ lọc
-  const { totalKien, byTrangThai, byKho, soNgayCoData } = useMemo(() => {
+  const { totalKien, byTrangThai, soNgayCoData } = useMemo(() => {
     let totalKien = 0;
     const byTrangThai = {};
-    const byKho = {};
     const dayKeys = new Set();
 
     TRANG_THAI_LIST.forEach(({ key }) => (byTrangThai[key] = 0));
 
     filtered.forEach((r) => {
       const kien = Number(r.kien) || 0;
-      const kho = Number(r.kho);
       const tt = normalizeTrangThai(r.trang_thai);
 
       totalKien += kien;
@@ -175,50 +173,17 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
       const dk = toDateKeyUTC(r.ngay_gio_tao_let);
       if (dk) dayKeys.add(dk);
 
-      if (!byKho[kho]) {
-        byKho[kho] = {};
-        TRANG_THAI_LIST.forEach(({ key }) => (byKho[kho][key] = 0));
-      }
-
       if (Object.prototype.hasOwnProperty.call(byTrangThai, tt)) {
         byTrangThai[tt] += kien;
-        byKho[kho][tt] += kien;
       }
     });
 
-    return { totalKien, byTrangThai, byKho, soNgayCoData: dayKeys.size };
+    return { totalKien, byTrangThai, soNgayCoData: dayKeys.size };
   }, [filtered]);
 
   const perDay = (n) => (soNgayCoData > 0 ? n / soNgayCoData : 0);
 
-  const khoBarData = useMemo(() => {
-    const khoActive = KHO_LIST.filter(({ kho }) => selectedKho.includes(kho));
-    return {
-      labels: khoActive.map((k) => k.label),
-      datasets: TRANG_THAI_LIST.map(({ key, label, color }) => ({
-        label,
-        data: khoActive.map((k) => byKho[k.kho]?.[key] || 0),
-        backgroundColor: color,
-        borderRadius: 4,
-        minBarLength: 4, // ép mỗi cột tối thiểu 4px để luôn thấy được, dù giá trị rất nhỏ
-      })),
-    };
-  }, [byKho, selectedKho]);
-
-  // Chiều cao lớn nhất trong toàn biểu đồ -> dùng để chừa khoảng trống
-  // phía trên (suggestedMax) cho nhãn số đặt ở đỉnh mỗi cột không bị cắt
-  // hoặc dính sát viền trên của biểu đồ.
-  const khoBarMax = useMemo(() => {
-    let max = 0;
-    khoBarData.datasets.forEach((ds) =>
-      ds.data.forEach((v) => {
-        if (v > max) max = v;
-      }),
-    );
-    return max;
-  }, [khoBarData]);
-
-  // Biểu đồ xu hướng số kiện theo thời gian, chia theo trạng thái.
+  // Biểu đồ cột theo thời gian, chia theo trạng thái.
   // Ngày: theo bộ lọc ngày; Tháng / Năm: bỏ lọc ngày (chỉ lọc kho).
   const trendRows = useMemo(
     () =>
@@ -254,21 +219,29 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
       labels: buckets.map((b) => b.label),
       datasets: TRANG_THAI_LIST.map(({ key, label, color }) => ({
         label,
-        data: buckets.map((b) => sums[key][b.key] || 0),
+        // Giá trị 0 -> null để không vẽ cột giả (minBarLength chỉ giúp
+        // các giá trị nhỏ nhưng > 0 vẫn nhìn thấy được)
+        data: buckets.map((b) => sums[key][b.key] || null),
         backgroundColor: color,
-        borderRadius: 4,
+        borderRadius: 2,
         minBarLength: 4,
+        barPercentage: 0.9,
+        categoryPercentage: 0.9,
       })),
     };
   }, [trendRows, period]);
 
+  // Chừa khoảng trống phía trên (suggestedMax) cho nhãn số ở đỉnh cột
+  // Cột chồng -> chiều cao mỗi cột = tổng các trạng thái trong mốc đó
   const trendMax = useMemo(() => {
     let max = 0;
-    trendData.datasets.forEach((ds) =>
-      ds.data.forEach((v) => {
-        if (v > max) max = v;
-      }),
-    );
+    trendData.labels.forEach((_, i) => {
+      const total = trendData.datasets.reduce(
+        (s, ds) => s + (ds.data[i] || 0),
+        0,
+      );
+      if (total > max) max = total;
+    });
     return max;
   }, [trendData]);
 
@@ -353,24 +326,39 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-slate-600">
+              Số kiện Let theo {PERIOD_UNIT[period]} ({PERIOD_TEXT[period]})
+            </p>
+            <PeriodToggle
+              value={period}
+              onChange={setPeriod}
+              activeClass="text-amber-600"
+            />
+          </div>
+          {period !== "day" && (
+            <p className="mb-2 text-xs text-slate-400">
+              {PERIOD_TEXT[period]} trên toàn bộ dữ liệu (không áp dụng bộ lọc
+              ngày phía trên)
+            </p>
+          )}
           {loading ? (
             <div className="flex h-72 items-center justify-center text-slate-400">
               <Loader2 size={20} className="animate-spin" />
             </div>
-          ) : totalKien === 0 ? (
+          ) : trendMax === 0 ? (
             <div className="flex h-72 items-center justify-center text-slate-400">
               Không có dữ liệu
             </div>
           ) : (
-            <div className="h-72">
+            <div className="h-80">
               <Bar
-                data={khoBarData}
+                data={trendData}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
-                  // Chừa khoảng trống phía trên để số đặt trên đỉnh cột
-                  // (nhất là cột "Hoàn thành" cao nhất) không bị sát viền.
-                  layout: { padding: { top: 24 } },
+                  layout: { padding: { top: 8 } },
+                  interaction: { mode: "index", intersect: false },
                   plugins: {
                     legend: {
                       position: "bottom",
@@ -385,47 +373,64 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
                       callbacks: {
                         label: (ctx) =>
                           `${ctx.dataset.label}: ${formatNumber(ctx.parsed.y)} kiện`,
+                        footer: (items) =>
+                          `Tổng: ${formatNumber(
+                            items.reduce((s, it) => s + (it.parsed.y || 0), 0),
+                          )} kiện`,
                       },
                     },
-                    // Cột NHÓM (không stacked) -> mỗi trạng thái là 1 cột
-                    // riêng, đứng cạnh nhau -> đặt số ngay TRÊN ĐỈNH mỗi
-                    // cột (anchor:end/align:end) thay vì ở giữa cột. Nhờ
-                    // các cột tách biệt theo trục X nên 3 con số không
-                    // bao giờ đè lên nhau nữa, dù giá trị chênh lệch lớn
-                    // (6 vs 1.038 vs 31.153) — phù hợp để chụp báo cáo.
+                    // Cột CHỒNG: mỗi mốc thời gian 1 cột, chỉ hiện 1 nhãn
+                    // TỔNG ở đỉnh cột (gắn vào segment trên cùng có giá
+                    // trị). Nhiều mốc (> 12) -> xoay dọc để không đè nhau.
                     datalabels: {
                       anchor: "end",
                       align: "end",
-                      offset: 4,
+                      offset: 2,
                       clamp: true,
+                      rotation: trendData.labels.length > 12 ? -90 : 0,
                       color: "#1e1b4b",
-                      backgroundColor: "rgba(255,255,255,0.85)",
-                      borderRadius: 4,
-                      padding: { top: 2, bottom: 2, left: 5, right: 5 },
-                      font: { weight: "bold", size: 13 },
-                      formatter: (value) =>
-                        value > 0 ? formatNumber(value) : "",
+                      font: { weight: "bold", size: 11 },
+                      display: (ctx) => {
+                        const i = ctx.dataIndex;
+                        const sets = ctx.chart.data.datasets;
+                        if (!(sets[ctx.datasetIndex].data[i] > 0)) return false;
+                        for (
+                          let d = sets.length - 1;
+                          d > ctx.datasetIndex;
+                          d--
+                        ) {
+                          if (sets[d].data[i] > 0) return false;
+                        }
+                        return true;
+                      },
+                      formatter: (_, ctx) => {
+                        const i = ctx.dataIndex;
+                        const total = ctx.chart.data.datasets.reduce(
+                          (s, ds) => s + (ds.data[i] || 0),
+                          0,
+                        );
+                        return formatNumber(total);
+                      },
                     },
                   },
                   scales: {
                     x: {
-                      stacked: false,
+                      stacked: true,
                       grid: { display: false },
                       ticks: {
-                        font: { size: 12, weight: "600" },
+                        autoSkip: false,
+                        maxRotation: 60,
+                        font: { size: 11, weight: "600" },
                         color: "#334155",
                       },
                     },
                     y: {
-                      stacked: false,
+                      stacked: true,
                       beginAtZero: true,
                       grid: { color: "#f1f5f9" },
-                      ticks: {
-                        font: { size: 12 },
-                        color: "#64748b",
-                      },
-                      suggestedMax:
-                        khoBarMax > 0 ? khoBarMax * 1.25 : undefined,
+                      ticks: { font: { size: 12 }, color: "#64748b" },
+                      // chừa chỗ phía trên cho nhãn tổng xoay dọc
+                      suggestedMax: trendMax > 0 ? trendMax * 1.3 : undefined,
                     },
                   },
                 }}
@@ -481,93 +486,6 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Xu hướng số kiện theo Ngày / Tháng / Năm, chia theo trạng thái */}
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-medium text-slate-600">
-            Số kiện Let theo {PERIOD_UNIT[period]} ({PERIOD_TEXT[period]})
-          </p>
-          <PeriodToggle
-            value={period}
-            onChange={setPeriod}
-            activeClass="text-amber-600"
-          />
-        </div>
-        {period !== "day" && (
-          <p className="mb-2 text-xs text-slate-400">
-            {PERIOD_TEXT[period]} trên toàn bộ dữ liệu (không áp dụng bộ lọc
-            ngày phía trên)
-          </p>
-        )}
-        {loading ? (
-          <div className="flex h-72 items-center justify-center text-slate-400">
-            <Loader2 size={20} className="animate-spin" />
-          </div>
-        ) : trendMax === 0 ? (
-          <div className="flex h-72 items-center justify-center text-slate-400">
-            Không có dữ liệu
-          </div>
-        ) : (
-          <div className="h-72">
-            <Bar
-              data={trendData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: { padding: { top: 24 } },
-                plugins: {
-                  legend: {
-                    position: "bottom",
-                    labels: {
-                      font: { size: 12, weight: "600" },
-                      color: "#334155",
-                      boxWidth: 12,
-                      boxHeight: 12,
-                    },
-                  },
-                  tooltip: {
-                    callbacks: {
-                      label: (ctx) =>
-                        `${ctx.dataset.label}: ${formatNumber(ctx.parsed.y)} kiện`,
-                    },
-                  },
-                  datalabels: {
-                    anchor: "end",
-                    align: "end",
-                    offset: 4,
-                    clamp: true,
-                    color: "#1e1b4b",
-                    backgroundColor: "rgba(255,255,255,0.85)",
-                    borderRadius: 4,
-                    padding: { top: 2, bottom: 2, left: 5, right: 5 },
-                    font: { weight: "bold", size: 12 },
-                    formatter: (value) =>
-                      value > 0 ? formatNumber(value) : "",
-                  },
-                },
-                scales: {
-                  x: {
-                    stacked: false,
-                    grid: { display: false },
-                    ticks: {
-                      font: { size: 12, weight: "600" },
-                      color: "#334155",
-                    },
-                  },
-                  y: {
-                    stacked: false,
-                    beginAtZero: true,
-                    grid: { color: "#f1f5f9" },
-                    ticks: { font: { size: 12 }, color: "#64748b" },
-                    suggestedMax: trendMax > 0 ? trendMax * 1.25 : undefined,
-                  },
-                },
-              }}
-            />
-          </div>
-        )}
       </div>
     </div>
   );
