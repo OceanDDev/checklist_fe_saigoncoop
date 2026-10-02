@@ -37,8 +37,8 @@ export const CONCEPT_ORDER_HINT = [
 //   Số Lượng Lớn = tất cả phần còn lại (concept khác, hoặc loại hình
 //                  vận chuyển khác)
 // ─────────────────────────────────────────────
-export const CONCEPT_CHINH = ["CoopSmile", "CoopFood"];
-export const LOAI_HINH_CHINH = "TTTP giao hàng";
+export const CONCEPT_CHINH = ["CoopSmile", "CoopFood", "Hợp tác xã"];
+export const LOAI_HINH_CHINH = "TTTP giao hàng"; // sửa TTTP -> TTPP
 
 const normalize = (s) => (s || "").normalize("NFC").trim().toLowerCase();
 

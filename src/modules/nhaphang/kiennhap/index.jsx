@@ -5,13 +5,16 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  Trash2,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { nhapHangService } from "@/services/nhaphang/nhaphang.service";
 import NhapHangImportModal from "./import";
+import DateRangeFilter from "../dash/date";
 
 const PAGE_SIZE = 20;
+const LOAI_HINH = "Nhập";
 
 const COLUMNS = [
   { key: "sku", label: "SKU" },
@@ -33,7 +36,16 @@ const COLUMNS = [
   { key: "ngay_import", label: "Ngày import" },
 ];
 
-// Đọc lại date-only bằng UTC getters — khớp với cách ghim ở NhapHangImportModal, không phụ thuộc timezone
+// Các cột lọc theo khoảng "Từ ngày - Đến ngày" -> gửi ${key}_from / ${key}_to
+const DATE_RANGE_KEYS = [
+  "ngay_nhap_kho",
+  "ngay_san_xuat",
+  "ngay_het_han",
+  "ngay_import",
+];
+// Ngày hết hạn có thể nằm trong tương lai -> cho chọn ngày tương lai
+const FUTURE_DATE_KEYS = ["ngay_het_han"];
+
 const formatDateOnly = (value) => {
   if (!value) return "-";
   const d = new Date(value);
@@ -44,16 +56,6 @@ const formatDateOnly = (value) => {
   return `${dd}/${mm}/${yyyy}`;
 };
 
-// ─────────────────────────────────────────────
-// TABLE + SEARCH + PAGINATION
-//
-// Props MỚI (tuỳ chọn):
-// - initialFilters: object filter muốn áp ngay khi bảng mở ra (ví dụ khi
-//   click từ donut Put Hàng bên Dashboard qua: { vi_tri: "RZ" }).
-// - initialFiltersToken: 1 giá trị (số/tem thời gian) đổi mỗi lần cần áp
-//   lại initialFilters — kể cả khi filter object giống lần trước, để đảm
-//   bảo useEffect chạy lại và bảng luôn phản ánh đúng lần click mới nhất.
-// ─────────────────────────────────────────────
 const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [result, setResult] = useState(null);
@@ -64,14 +66,24 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // filter theo từng field, key khớp với COLUMNS
   const [filters, setFilters] = useState({});
   const debounceRef = useRef(null);
 
+  // ── Chọn & xóa ──
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [selectAllFilter, setSelectAllFilter] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   const fetchTable = async (targetPage = page, activeFilters = filters) => {
     setLoadingTable(true);
+    setSelectedIds(new Set());
+    setSelectAllFilter(false);
     try {
-      const params = { page: targetPage, limit: PAGE_SIZE, loai_hinh: "Nhập" };
+      const params = {
+        page: targetPage,
+        limit: PAGE_SIZE,
+        loai_hinh: LOAI_HINH,
+      };
       Object.entries(activeFilters).forEach(([key, value]) => {
         if (value !== undefined && value !== "") params[key] = value;
       });
@@ -91,8 +103,6 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Áp filter khởi tạo từ bên ngoài (vd click donut Put Hàng ở Dashboard).
-  // Chạy lại mỗi khi initialFiltersToken đổi, kể cả filter giống lần trước.
   useEffect(() => {
     if (!initialFilters || initialFiltersToken === undefined) return;
     setFilters(initialFilters);
@@ -101,7 +111,6 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFiltersToken]);
 
-  // debounce khi gõ filter — reset về trang 1
   const handleFilterChange = (key, value) => {
     const next = { ...filters, [key]: value };
     setFilters(next);
@@ -111,6 +120,23 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
     debounceRef.current = setTimeout(() => {
       fetchTable(1, next);
     }, 400);
+  };
+
+  // Lọc khoảng ngày: set cả _from và _to rồi fetch ngay
+  const handleDateRangeChange = (baseKey, start, end) => {
+    const next = {
+      ...filters,
+      [`${baseKey}_from`]: start,
+      [`${baseKey}_to`]: end,
+    };
+    setFilters(next);
+    setPage(1);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    fetchTable(1, next);
+  };
+
+  const handleDateRangeClear = (baseKey) => {
+    handleDateRangeChange(baseKey, "", "");
   };
 
   const goToPage = (p) => {
@@ -126,20 +152,92 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
     fetchTable(1, filters);
   };
 
+  // ── Logic chọn dòng ──
+  const hasActiveFilter = Object.values(filters).some(
+    (v) => v !== undefined && v !== "",
+  );
+  const allPageChecked =
+    rows.length > 0 && rows.every((r) => selectedIds.has(r._id));
+  const selectedCount = selectAllFilter ? total : selectedIds.size;
+
+  const toggleRow = (id) => {
+    setSelectAllFilter(false);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllPage = () => {
+    setSelectAllFilter(false);
+    setSelectedIds(
+      allPageChecked ? new Set() : new Set(rows.map((r) => r._id)),
+    );
+  };
+
+  const handleDelete = async () => {
+    if (selectedCount === 0) return;
+    const msg = selectAllFilter
+      ? `Xóa TOÀN BỘ ${total} bản ghi khớp bộ lọc hiện tại?\nKhông thể hoàn tác!`
+      : `Xóa ${selectedIds.size} bản ghi đã chọn?\nKhông thể hoàn tác!`;
+    if (!window.confirm(msg)) return;
+
+    setDeleting(true);
+    try {
+      const cleanFilters = Object.fromEntries(
+        Object.entries(filters).filter(([, v]) => v !== undefined && v !== ""),
+      );
+      const res = selectAllFilter
+        ? await nhapHangService.xoaTheoBoLoc(cleanFilters, LOAI_HINH)
+        : await nhapHangService.xoaNhieu({ ids: [...selectedIds] });
+      setResult({ success: true, message: res?.message || "Đã xóa" });
+      setPage(1);
+      fetchTable(1, filters);
+    } catch (err) {
+      console.error("Lỗi xóa:", err);
+      setResult({
+        success: false,
+        message: err?.response?.data?.message || "Xóa thất bại",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="p-4">
       <div className="mb-4 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => {
-            setResult(null);
-            setModalOpen(true);
-          }}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          <UploadCloud size={16} />
-          Import Excel
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setResult(null);
+              setModalOpen(true);
+            }}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <UploadCloud size={16} />
+            Import Excel
+          </button>
+
+          {selectedCount > 0 && (
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={handleDelete}
+              className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Trash2 size={16} />
+              )}
+              Xóa {selectedCount} dòng
+            </button>
+          )}
+        </div>
 
         <span className="text-sm text-slate-500">
           {total > 0 && `${total} bản ghi`}
@@ -160,12 +258,48 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
         </div>
       )}
 
+      {allPageChecked && total > rows.length && hasActiveFilter && (
+        <div className="mb-2 rounded-lg bg-blue-50 px-4 py-2 text-sm text-blue-800">
+          {selectAllFilter ? (
+            <>
+              Đã chọn tất cả <b>{total}</b> bản ghi khớp bộ lọc.{" "}
+              <button
+                type="button"
+                className="font-medium underline"
+                onClick={() => setSelectAllFilter(false)}
+              >
+                Chỉ chọn trang này
+              </button>
+            </>
+          ) : (
+            <>
+              Đã chọn {rows.length} dòng của trang này.{" "}
+              <button
+                type="button"
+                className="font-medium underline"
+                onClick={() => setSelectAllFilter(true)}
+              >
+                Chọn tất cả {total} bản ghi khớp bộ lọc
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <div className="max-h-[500px] overflow-auto">
           <table className="w-full text-left text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm">
               <tr className="border-b border-slate-200 text-slate-500">
+                <th className="w-8 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={allPageChecked}
+                    onChange={toggleAllPage}
+                    disabled={rows.length === 0}
+                  />
+                </th>
                 {COLUMNS.map((col) => (
                   <th key={col.key} className="px-3 py-2 font-medium">
                     {col.label}
@@ -173,26 +307,42 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
                 ))}
               </tr>
               <tr className="border-b border-slate-200 bg-white">
-                {COLUMNS.map((col) => (
-                  <th key={col.key} className="px-2 py-1.5 font-normal">
-                    <input
-                      type="text"
-                      value={filters[col.key] || ""}
-                      onChange={(e) =>
-                        handleFilterChange(col.key, e.target.value)
-                      }
-                      placeholder="Tìm..."
-                      className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-blue-400"
-                    />
-                  </th>
-                ))}
+                <th className="w-8 px-2 py-1.5" />
+                {COLUMNS.map((col) =>
+                  DATE_RANGE_KEYS.includes(col.key) ? (
+                    <th key={col.key} className="px-2 py-1.5 font-normal">
+                      <DateRangeFilter
+                        accent="blue"
+                        allowFuture={FUTURE_DATE_KEYS.includes(col.key)}
+                        startValue={filters[`${col.key}_from`]}
+                        endValue={filters[`${col.key}_to`]}
+                        onChange={(start, end) =>
+                          handleDateRangeChange(col.key, start, end)
+                        }
+                        onClear={() => handleDateRangeClear(col.key)}
+                      />
+                    </th>
+                  ) : (
+                    <th key={col.key} className="px-2 py-1.5 font-normal">
+                      <input
+                        type="text"
+                        value={filters[col.key] || ""}
+                        onChange={(e) =>
+                          handleFilterChange(col.key, e.target.value)
+                        }
+                        placeholder="Tìm..."
+                        className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-blue-400"
+                      />
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
               {loadingTable ? (
                 <tr>
                   <td
-                    colSpan={COLUMNS.length}
+                    colSpan={COLUMNS.length + 1}
                     className="px-3 py-6 text-center text-slate-400"
                   >
                     <Loader2 size={16} className="mx-auto animate-spin" />
@@ -201,7 +351,7 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
               ) : rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={COLUMNS.length}
+                    colSpan={COLUMNS.length + 1}
                     className="px-3 py-6 text-center text-slate-400"
                   >
                     Không có dữ liệu
@@ -211,10 +361,21 @@ const NhapHangForm = ({ initialFilters, initialFiltersToken }) => {
                 rows.map((r) => (
                   <tr
                     key={r._id}
-                    className="border-b border-slate-100 last:border-0"
+                    className={[
+                      "border-b border-slate-100 last:border-0",
+                      selectedIds.has(r._id) || selectAllFilter
+                        ? "bg-blue-50/60"
+                        : "",
+                    ].join(" ")}
                   >
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectAllFilter || selectedIds.has(r._id)}
+                        onChange={() => toggleRow(r._id)}
+                      />
+                    </td>
                     <td className="px-3 py-2">{r.sku}</td>
-
                     <td className="px-3 py-2">{r.name}</td>
                     <td className="px-3 py-2">{r.so_phieu_nhap}</td>
                     <td className="px-3 py-2">{r.vi_tri}</td>

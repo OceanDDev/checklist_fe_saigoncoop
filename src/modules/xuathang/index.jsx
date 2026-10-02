@@ -1,16 +1,18 @@
 // pages/xuathang/index.jsx
 import { useState } from "react";
-import { LayoutDashboard, Database, Award, Boxes } from "lucide-react";
+import { LayoutDashboard, Database, Award, Boxes, Truck } from "lucide-react";
 import XuatHangForm from "./xuat";
 import DashboardSoLuongLon from "./dash/sll";
 import KpiNhanVien from "./kpi";
 import DashboardXuatHang from "./dash";
+import KeHoachXeForm from "./kehoachxe";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "sll", label: "Số Lượng Lớn", icon: Boxes },
   { key: "kpi", label: "KPI Nhân Viên", icon: Award },
   { key: "data", label: "Dữ Liệu", icon: Database },
+  { key: "kehoachxe", label: "Kế Hoạch Xe", icon: Truck },
 ];
 
 const HomeXuatHangDash = () => {
@@ -87,6 +89,7 @@ const HomeXuatHangDash = () => {
             />
           )}
           {activeTab === "kpi" && <KpiNhanVien />}
+          {activeTab === "kehoachxe" && <KeHoachXeForm />}
         </div>
       </div>
     </div>

@@ -43,6 +43,7 @@ import {
   KpiCard,
   BubbleLabel,
 } from "../dash/share";
+import LichXuatHang from "./lich";
 
 const COLOR_DUNG_HAN = "#22c55e";
 const COLOR_TRE_HAN = "#1e3a8a";
@@ -72,6 +73,9 @@ const CHUYEN_ORDER = [
   "Chuyến tối",
   "Chưa xác định",
 ];
+
+// ➕ Chuẩn hoá concept để so sánh không lệ thuộc hoa/thường, Unicode NFC/NFD
+const normConcept = (s) => (s || "").normalize("NFC").trim().toLowerCase();
 
 // Khoảng ngày mặc định = tháng hiện tại (vd hôm nay ở tháng 9 -> 1/9 - 30/9)
 const getDefaultMonthRange = () => {
@@ -155,7 +159,8 @@ const buildLeaderboard = (rows, topN = 8) => {
     .slice(0, topN);
 };
 
-// Đúng hạn / Trễ hạn theo NVC, tách riêng CoopSmile (CS) vs CoopFood (CF)
+// Đúng hạn / Trễ hạn theo NVC, tách riêng CoopSmile (CS), CoopFood (CF)
+// và Hợp tác xã (HT)
 const buildNVCConceptStats = (rows) => {
   const map = new Map();
 
@@ -171,6 +176,8 @@ const buildNVCConceptStats = (rows) => {
         cs_tre: 0,
         cf_dung: 0,
         cf_tre: 0,
+        ht_dung: 0, // ➕
+        ht_tre: 0, // ➕
       });
     }
     const entry = map.get(key);
@@ -179,10 +186,14 @@ const buildNVCConceptStats = (rows) => {
     if (isDung) entry.tong_dung += 1;
     else entry.tong_tre += 1;
 
-    if (r.concept === "CoopSmile") {
+    const concept = normConcept(r.concept);
+    if (concept === "coopsmile") {
       isDung ? (entry.cs_dung += 1) : (entry.cs_tre += 1);
-    } else if (r.concept === "CoopFood") {
+    } else if (concept === "coopfood") {
       isDung ? (entry.cf_dung += 1) : (entry.cf_tre += 1);
+    } else if (concept === "hợp tác xã") {
+      // ➕
+      isDung ? (entry.ht_dung += 1) : (entry.ht_tre += 1);
     }
   });
 
@@ -229,8 +240,8 @@ const DashboardXuatHang = ({ onNavigate }) => {
       const raw = res?.data || [];
       const enriched = dedupeAndEnrich(raw);
 
-      // Dashboard chính CHỈ lấy concept CoopSmile/CoopFood + loại hình vận
-      // chuyển "TTPP giao hàng" — phần còn lại thuộc tab "Số Lượng Lớn".
+      // Dashboard chính CHỈ lấy concept CoopSmile/CoopFood/Hợp tác xã + loại
+      // hình vận chuyển "TTPP giao hàng" — phần còn lại thuộc tab "Số Lượng Lớn".
       setRows(enriched.filter(isChinhRow));
     } catch (err) {
       console.error("Lỗi getDanhSach (dashboard):", err);
@@ -372,10 +383,16 @@ const DashboardXuatHang = ({ onNavigate }) => {
       <h2 className="text-base font-semibold text-slate-800">
         Tổng quan Xuất Hàng
       </h2>
+      {/* ✏️ SỬA: thêm Hợp tác xã, TTPP */}
       <p className="-mt-3 text-xs text-slate-400">
-        Chỉ tính chuyến thuộc Concept CoopSmile/CoopFood + Loại hình vận chuyển
-        &quot;TTPP giao hàng&quot;. Xem các chuyến còn lại ở tab Số Lượng Lớn.
+        Chỉ tính chuyến thuộc Concept CoopSmile/CoopFood/Hợp tác xã + Loại hình
+        vận chuyển &quot;TTPP giao hàng&quot;. Xem các chuyến còn lại ở tab Số
+        Lượng Lớn.
       </p>
+      {/* ➕ Lịch xuất hàng: kế hoạch vs thực tế, dùng luôn data của Dashboard */}
+<div className="rounded-lg border border-slate-200 bg-white">
+  <LichXuatHang actualRows={rows} />
+</div>
       <div className="w-full sm:w-72">
         <DateRangeFilter
           label="Lọc theo Ngày xe vào TTPP"
@@ -837,10 +854,12 @@ const DashboardXuatHang = ({ onNavigate }) => {
           </div>
         </div>
       </div>
-      {/* Đúng hạn / Trễ hạn theo NVC, tách CoopSmile vs CoopFood */}
+
+      {/* Đúng hạn / Trễ hạn theo NVC, tách CoopSmile / CoopFood / Hợp tác xã */}
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <p className="mb-3 text-sm font-semibold text-slate-700">
-          Đúng hạn / Trễ hạn theo Nhà vận chuyển — CoopSmile vs CoopFood
+          Đúng hạn / Trễ hạn theo Nhà vận chuyển — CoopSmile vs CoopFood vs Hợp
+          tác xã
         </p>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
@@ -870,6 +889,13 @@ const DashboardXuatHang = ({ onNavigate }) => {
                 >
                   CoopFood
                 </th>
+                {/* ➕ THÊM MỚI */}
+                <th
+                  colSpan={2}
+                  className="border-l border-slate-100 px-3 py-1.5 text-center font-medium text-blue-600"
+                >
+                  Hợp tác xã
+                </th>
               </tr>
               <tr className="border-b border-slate-200 text-slate-400">
                 <th className="border-l border-slate-100 px-3 py-1.5 text-center">
@@ -881,6 +907,11 @@ const DashboardXuatHang = ({ onNavigate }) => {
                   Đúng
                 </th>
                 <th className="px-3 py-1.5 text-center">Trễ</th>
+                <th className="border-l border-slate-100 px-3 py-1.5 text-center">
+                  Đúng
+                </th>
+                <th className="px-3 py-1.5 text-center">Trễ</th>
+                {/* ➕ THÊM MỚI */}
                 <th className="border-l border-slate-100 px-3 py-1.5 text-center">
                   Đúng
                 </th>
@@ -928,12 +959,19 @@ const DashboardXuatHang = ({ onNavigate }) => {
                   <td className="px-3 py-2 text-center text-blue-900">
                     {r.cf_tre || "-"}
                   </td>
+                  {/* ➕ THÊM MỚI */}
+                  <td className="border-l border-slate-100 px-3 py-2 text-center text-emerald-600">
+                    {r.ht_dung || "-"}
+                  </td>
+                  <td className="px-3 py-2 text-center text-blue-900">
+                    {r.ht_tre || "-"}
+                  </td>
                 </tr>
               ))}
               {nvcConceptStats.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={10} // ✏️ SỬA: 8 -> 10
                     className="px-3 py-6 text-center text-slate-400"
                   >
                     Chưa đủ dữ liệu
@@ -944,6 +982,7 @@ const DashboardXuatHang = ({ onNavigate }) => {
           </table>
         </div>
       </div>
+
       {/* Theo khung giờ / chuyến (5 mốc chi tiết) */}
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <p className="mb-1 text-sm font-semibold text-slate-700">

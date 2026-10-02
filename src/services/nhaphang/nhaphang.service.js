@@ -106,12 +106,12 @@ const capNhatNhieu = async ({ ids, sku_list, filter, update }) => {
   }
 };
 
-// ❌ Xóa nhiều bản ghi
 const xoaNhieu = async ({ ids, sku_list, filter }) => {
   try {
-    return await requestService.del(
+    return await requestService.post(
       `${URL.nhaphang.nhaphang}/delete-many`,
-      { data: { ids, sku_list, filter } },
+      { ids, sku_list, filter },
+      undefined,
       ApiServer,
     );
   } catch (error) {
@@ -120,7 +120,21 @@ const xoaNhieu = async ({ ids, sku_list, filter }) => {
   }
 };
 
+const xoaTheoBoLoc = async (filters, loai_hinh) => {
+  try {
+    return await requestService.post(
+      `${URL.nhaphang.nhaphang}/delete-by-filter`,
+      { filters, loai_hinh },
+      undefined,
+      ApiServer,
+    );
+  } catch (error) {
+    console.error("Lỗi khi gọi xoaTheoBoLoc:", error);
+    throw error;
+  }
+};
 export const nhapHangService = {
+  xoaTheoBoLoc,
   themNhapHang,
   getDanhSach,
   getChiTiet,

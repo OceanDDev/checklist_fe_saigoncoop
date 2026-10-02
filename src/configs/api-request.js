@@ -135,6 +135,7 @@ const URL = {
   },
   xuathang: {
     xuathang: ENDPOINT_PREFIX + "/xuathang",
+    kehoachxe:ENDPOINT_PREFIX + "/kehoachxe",
   },
 };
 

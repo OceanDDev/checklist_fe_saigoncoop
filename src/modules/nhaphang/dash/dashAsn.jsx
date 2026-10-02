@@ -13,7 +13,6 @@ import {
   Pie,
   Cell,
   Tooltip as RechartsTooltip,
-  Legend as RechartsLegend,
   ResponsiveContainer,
 } from "recharts";
 import {
@@ -29,8 +28,6 @@ import {
   FETCH_LIMIT,
   FONT_SANS,
   useDonutFonts,
-  usePieLabelRenderer,
-  percentLabelFormatter,
   KhoFilter,
   formatNumber,
   toDateKeyUTC,
@@ -40,19 +37,15 @@ import { bucketKey, lastBuckets, PERIOD_LIMIT } from "@/utils/period";
 import DateRangeFilter from "./date";
 import PeriodToggle from "./PeriodToggle";
 
-// Đăng ký thêm các thành phần Line/Area cho Chart.js — an toàn khi gọi
-// lại (Chart.js tự bỏ qua nếu đã được đăng ký ở nơi khác trong app).
 ChartJS.register(LineElement, PointElement, LineController, Filler);
 
 const ASN_MIN_ANGLE = 6;
 
-// Khoảng ngày mặc định: cả tháng hiện tại (vd tháng 9 -> 01/09 đến 30/09)
 const getCurrentMonthRange = () => ({
   from: dayjs().startOf("month").format("YYYY-MM-DD"),
   to: dayjs().endOf("month").format("YYYY-MM-DD"),
 });
 
-// Text hiển thị theo chế độ Ngày / Tháng / Năm
 const PERIOD_TEXT = {
   day: "7 ngày gần nhất",
   month: "12 tháng gần nhất",
@@ -60,10 +53,6 @@ const PERIOD_TEXT = {
 };
 const PERIOD_UNIT = { day: "ngày", month: "tháng", year: "năm" };
 
-// Màu theo loại hình — khai đúng theo TÊN LOẠI HÌNH THẬT xuất hiện trong dữ
-// liệu ASN (khác với module Nhập/Put khác), để mỗi loại hình có 1 màu
-// riêng biệt, không bị trùng. Loại hình lạ ngoài danh sách này (nếu phát
-// sinh sau này) sẽ rơi vào FALLBACK_COLORS bên dưới theo thứ tự xuất hiện.
 const LOAI_HINH_COLORS = {
   "Nhập NCC": "#10b981",
   "Nhập VAS": "#f59e0b",
@@ -71,8 +60,6 @@ const LOAI_HINH_COLORS = {
   "Nhập mua CSH": "#8b5cf6",
   "Nhập nội bộ": "#f43f5e",
   "Nhập trả từ nơi xuất đến": "#0ea5e9",
-  // Loại hình theo cột "Ghi Chú" của file Booking: mặc định KHÔ khi để
-  // trống, còn lại là ĐÔNG / SLL lấy nguyên giá trị trong file.
   KHÔ: "#6366f1",
   ĐÔNG: "#0ea5e9",
   SLL: "#f59e0b",
@@ -88,13 +75,8 @@ const FALLBACK_COLORS = [
   "#6366f1",
 ];
 
-// Thứ tự ưu tiên hiển thị 3 loại hình chính trong biểu đồ "Số kiện theo
-// Booking" — loại hình lạ khác (nếu phát sinh) sẽ xếp sau theo thứ
-// tự xuất hiện trong dữ liệu.
 const LOAI_HINH_KIEN_ORDER = ["KHÔ", "ĐÔNG", "SLL"];
 
-// Bảng màu cho các cột "Số kiện theo ngành hàng" — lặp vòng nếu
-// nhiều ngành hàng hơn số màu
 const NGANH_HANG_COLORS = [
   "#6366f1",
   "#10b981",
@@ -108,19 +90,17 @@ const NGANH_HANG_COLORS = [
   "#ec4899",
 ];
 
-// kien_ke_hoach / kien_con_lai lưu dạng String trong DB (theo đúng
-// Excel gốc) -> parse an toàn về số để cộng dồn, bỏ dấu phẩy/khoảng trắng
 const parseNum = (v) => {
   const n = Number(String(v ?? "").replace(/[.,\s]/g, ""));
   return Number.isFinite(n) ? n : 0;
 };
 
-// Định dạng số bình quân: tối đa 1 số lẻ, kiểu Việt Nam (1.234,5)
 const formatAvg = (n) =>
   (Number(n) || 0).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
 
-// Chuyển hex "#RRGGBB" (hoặc "#RGB") -> "rgba(r,g,b,alpha)" — dùng để dựng
-// gradient mượt cho biểu đồ vùng (area chart)
+const formatPct = (value, total) =>
+  total > 0 ? `${((value / total) * 100).toFixed(1)}%` : "0%";
+
 const hexToRgba = (hex, alpha) => {
   const h = String(hex || "#6366f1").replace("#", "");
   const full =
@@ -138,111 +118,111 @@ const hexToRgba = (hex, alpha) => {
 };
 
 // ─────────────────────────────────────────────
-// CHUẨN HÓA "NGÀNH HÀNG" — dữ liệu gốc bị nhập lẫn mã số (001, 005, 010,
-// 030, 050...) chung với tên ngành hàng, ví dụ:
-//   "005, 010"                 -> chỉ có số, không có tên
-//   "005, Thực phẩm công nghệ" -> số + tên
-//   "Thực phẩm công nghệ, 001" -> tên + số
-//   "030, Hoá phẩm"            -> số + tên khác
-//   "Đồ dùng, 015"             -> tên + số
-// Quy tắc gom nhóm (theo yêu cầu thực tế):
-//   - Nếu có phần chữ (không phải số thuần) -> dùng phần chữ đó làm tên
-//     ngành hàng chuẩn (bỏ hết mã số đi kèm).
-//   - Nếu chỉ toàn mã số, không có phần chữ -> mặc định gom vào
-//     "Thực phẩm công nghệ" (các mã số này đều thuộc ngành đó).
-//   - Riêng các dòng mà cột ngành hàng bị nhập nhầm thành MÃ ASN dạng
-//     "VAS-190926-1" (chữ-số-số) thì KHÔNG tính vào ngành hàng nào cả —
-//     bỏ qua hoàn toàn dòng đó khi gộp biểu đồ ngành hàng.
+// CHUẨN HÓA "NGÀNH HÀNG" (giữ nguyên quy tắc cũ)
+// ─────────────────────────────────────────────
 const ASN_CODE_LIKE_REGEX = /^[A-Za-z]{2,}-\d{4,}-\d+$/;
-
 const isAsnCodeLike = (v) => ASN_CODE_LIKE_REGEX.test(String(v || "").trim());
 
 const normalizeNganhHang = (raw) => {
   const value = String(raw || "").trim();
   if (!value) return "Chưa xác định";
-  // Bị nhập nhầm mã ASN vào cột ngành hàng -> loại bỏ hoàn toàn, không
-  // tính vào "Chưa xác định" hay bất kỳ nhóm nào khác.
   if (isAsnCodeLike(value)) return null;
 
   const parts = value
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
-  // Phần không phải số thuần (vd "Hoá phẩm", "Thực phẩm công nghệ") mới
-  // được coi là tên ngành hàng thật sự — các mã số chỉ là mã đi kèm.
   const textParts = parts.filter((p) => !/^\d+$/.test(p));
-
   if (textParts.length > 0) return textParts[0];
-
-  // Toàn bộ là mã số, không có tên chữ -> mặc định thuộc Thực phẩm công nghệ
   return "Thực phẩm công nghệ";
 };
 
-// Màu theo tone — class tĩnh (không nối chuỗi động) để Tailwind không
-// purge mất khi build.
 const STAT_TONES = {
   indigo: {
     icon: "bg-indigo-100 text-indigo-600",
     value: "text-indigo-700",
-    ring: "ring-indigo-100",
+    bar: "bg-indigo-500",
+    soft: "bg-indigo-50",
   },
   sky: {
     icon: "bg-sky-100 text-sky-600",
     value: "text-sky-700",
-    ring: "ring-sky-100",
+    bar: "bg-sky-500",
+    soft: "bg-sky-50",
   },
   violet: {
     icon: "bg-violet-100 text-violet-600",
     value: "text-violet-700",
-    ring: "ring-violet-100",
+    bar: "bg-violet-500",
+    soft: "bg-violet-50",
   },
   emerald: {
     icon: "bg-emerald-100 text-emerald-600",
     value: "text-emerald-700",
-    ring: "ring-emerald-100",
-  },
-  amber: {
-    icon: "bg-amber-100 text-amber-600",
-    value: "text-amber-700",
-    ring: "ring-amber-100",
+    bar: "bg-emerald-500",
+    soft: "bg-emerald-50",
   },
 };
 
-// Card riêng cho tab ASN — số to, đậm, có màu rõ theo từng loại, tách khỏi
-// StatCard dùng chung (dashboardCommon) để không ảnh hưởng dashboard khác.
+// Card KPI: số tổng rất lớn ở giữa, bình quân/ngày tách thành dải riêng bên dưới
 const ASNStatCard = ({ icon: Icon, label, value, avgValue, tone }) => {
   const t = STAT_TONES[tone] || STAT_TONES.indigo;
   return (
-    <div
-      className={`flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 ring-4 ${t.ring}`}
-    >
-      <span className={`shrink-0 rounded-lg p-2.5 ${t.icon}`}>
-        <Icon size={22} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-slate-500">{label}</p>
-        <p className={`text-2xl font-extrabold leading-tight ${t.value}`}>
-          {value}
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className={`h-1.5 ${t.bar}`} />
+      <div className="flex items-center gap-3 px-4 pt-3">
+        <span className={`shrink-0 rounded-lg p-2 ${t.icon}`}>
+          <Icon size={20} />
+        </span>
+        <p className="truncate text-sm font-semibold uppercase tracking-wide text-slate-500">
+          {label}
         </p>
       </div>
+      <p
+        className={`px-4 pb-3 pt-1 text-4xl font-extrabold leading-tight tabular-nums ${t.value}`}
+      >
+        {value}
+      </p>
       {avgValue !== undefined && (
-        <div className="shrink-0 border-l border-slate-200 pl-3 text-right">
-          <p className="text-xs font-medium text-slate-500">TB / ngày</p>
-          <p className={`text-xl font-bold leading-tight ${t.value}`}>
+        <div
+          className={`flex items-center justify-between px-4 py-2 text-sm ${t.soft}`}
+        >
+          <span className="font-medium text-slate-500">Bình quân / ngày</span>
+          <span className={`text-lg font-bold tabular-nums ${t.value}`}>
             {avgValue}
-          </p>
+          </span>
         </div>
       )}
     </div>
   );
 };
 
+const ChartCard = ({ title, subtitle, right, children, className = "" }) => (
+  <div
+    className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}
+  >
+    <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+      <div>
+        <p className="text-base font-bold text-slate-700">{title}</p>
+        {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+      </div>
+      {right}
+    </div>
+    {children}
+  </div>
+);
+
+const Loading = ({ height = "h-64" }) => (
+  <div className={`flex ${height} items-center justify-center text-slate-400`}>
+    <Loader2 size={20} className="animate-spin" />
+  </div>
+);
+
 const ASNSection = ({ rawData, loading, onNavigate }) => {
   useDonutFonts();
   const [selectedKho, setSelectedKho] = useState(KHO_LIST.map((k) => k.kho));
   const [dateFrom, setDateFrom] = useState(() => getCurrentMonthRange().from);
   const [dateTo, setDateTo] = useState(() => getCurrentMonthRange().to);
-  // Chế độ xem xu hướng: day | month | year (dùng chung cho 2 biểu đồ)
   const [period, setPeriod] = useState("day");
 
   const toggleKho = (kho) => {
@@ -251,7 +231,6 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
     );
   };
 
-  // Lọc theo kho đã chọn + khoảng "Ngày ASN" — cùng cách làm với LetHangSection
   const filtered = useMemo(() => {
     return rawData.filter((r) => {
       if (!selectedKho.includes(Number(r.kho))) return false;
@@ -264,9 +243,18 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       return true;
     });
   }, [rawData, selectedKho, dateFrom, dateTo]);
-
-  // Dữ liệu cho 2 biểu đồ xu hướng: chế độ Ngày tôn trọng bộ lọc ngày;
-  // Tháng / Năm bỏ lọc ngày (chỉ lọc kho) để thấy được toàn bộ lịch sử.
+  useEffect(() => {
+    const dropped = rawData.filter((r) => {
+      const key = toDateKeyUTC(r.ngay_asn);
+      return key === "2026-09-30" && !selectedKho.includes(Number(r.kho));
+    });
+    console.log("rawData:", rawData.length, "| filtered:", filtered.length);
+    console.log(
+      "30/09 bị loại do kho:",
+      dropped.length,
+      dropped.map((r) => r.kho),
+    );
+  }, [rawData, filtered, selectedKho]);
   const trendRows = useMemo(
     () =>
       period === "day"
@@ -291,9 +279,6 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
     });
 
     const buckets = lastBuckets(period, PERIOD_LIMIT[period]);
-
-    // Thứ tự các loại hình: ưu tiên KHÔ / ĐÔNG / SLL trước, loại hình lạ
-    // khác xếp theo sau.
     const known = LOAI_HINH_KIEN_ORDER.filter((lh) => typesSeen.has(lh));
     const extra = [...typesSeen]
       .filter((lh) => !LOAI_HINH_KIEN_ORDER.includes(lh))
@@ -312,7 +297,6 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
     };
   }, [trendRows, period]);
 
-  // KPI + donut + ngành hàng — luôn theo bộ lọc kho + ngày như cũ
   const {
     totalPO,
     totalNCC,
@@ -331,12 +315,11 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
     const nccSet = new Set();
     const bookingSet = new Set();
     let totalSoKien = 0;
-    const loaiHinhKien = {}; // { loai_hinh: tổng so_kien } -> dùng cho donut
-    const nganhHangKien = {}; // { ten_nganh_hang_chuẩn_hóa: tổng so_kien }
-    // Đếm theo từng ngày để tính bình quân/ngày (chỉ tính ngày có dữ liệu)
-    const dayPO = {}; // { 'YYYY-MM-DD': Set(po) }
-    const dayBooking = {}; // { 'YYYY-MM-DD': Set(booking) }
-    const dayNCC = {}; // { 'YYYY-MM-DD': Set(ncc) }
+    const loaiHinhKien = {};
+    const nganhHangKien = {};
+    const dayPO = {};
+    const dayBooking = {};
+    const dayNCC = {};
 
     filtered.forEach((r) => {
       if (r.po) poSet.add(r.po);
@@ -360,17 +343,12 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       const lh = String(r.loai_hinh || "").trim() || "Khác";
       loaiHinhKien[lh] = (loaiHinhKien[lh] || 0) + soKien;
 
-      // Chuẩn hóa ngành hàng: gộp các biến thể có mã số (005, 010, 001,
-      // 030, 050...) về đúng tên ngành hàng; dòng bị nhập nhầm mã ASN thì
-      // trả về null -> bỏ qua, không tính vào biểu đồ ngành hàng.
       const nh = normalizeNganhHang(r.ten_nganh_hang);
       if (nh !== null) {
         nganhHangKien[nh] = (nganhHangKien[nh] || 0) + soKien;
       }
     });
 
-    // Ngành hàng theo tổng kiện kế hoạch, giảm dần — chỉ giữ top 9, phần
-    // còn lại gộp vào "Khác" để biểu đồ không bị vỡ vụn quá nhiều cột nhỏ
     const nganhHangEntries = Object.entries(nganhHangKien)
       .filter(([, v]) => v > 0)
       .sort((a, b) => b[1] - a[1]);
@@ -395,8 +373,6 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
       0,
     );
 
-    // Bình quân/ngày = trung bình số lượng DUY NHẤT của từng ngày có dữ liệu
-    // (vd: TB NCC/ngày = mỗi ngày trung bình có bao nhiêu NCC khác nhau)
     const dayKeys = new Set([
       ...Object.keys(dayPO),
       ...Object.keys(dayBooking),
@@ -408,39 +384,31 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         ? Object.values(map).reduce((sum, set) => sum + set.size, 0) /
           soNgayCoData
         : 0;
-    const averages = {
-      soNgayCoData,
-      avgPO: avgOfDays(dayPO),
-      avgBooking: avgOfDays(dayBooking),
-      avgNCC: avgOfDays(dayNCC),
-      avgKien: soNgayCoData > 0 ? totalSoKien / soNgayCoData : 0,
-    };
 
     return {
       totalPO: poSet.size,
       totalNCC: nccSet.size,
       totalBooking: bookingSet.size,
       totalSoKien,
-      // Donut "Theo loại hình" hiển thị theo TỔNG SỐ KIỆN (không phải số PO)
-      byLoaiHinh: Object.entries(loaiHinhKien).map(([name, value], i) => ({
-        name,
-        value,
-        fill:
-          LOAI_HINH_COLORS[name] || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
-      })),
+      // Sắp giảm dần theo số kiện để danh sách bên cạnh donut dễ đọc
+      byLoaiHinh: Object.entries(loaiHinhKien)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, value], i) => ({
+          name,
+          value,
+          fill:
+            LOAI_HINH_COLORS[name] ||
+            FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+        })),
       byNganhHang,
       totalSoKienNganhHang,
-      ...averages,
+      soNgayCoData,
+      avgPO: avgOfDays(dayPO),
+      avgBooking: avgOfDays(dayBooking),
+      avgNCC: avgOfDays(dayNCC),
+      avgKien: soNgayCoData > 0 ? totalSoKien / soNgayCoData : 0,
     };
   }, [filtered]);
-
-  const pieLabel = usePieLabelRenderer(
-    byLoaiHinh,
-    260,
-    40,
-    ASN_MIN_ANGLE,
-    percentLabelFormatter,
-  );
 
   const dayBarData = useMemo(
     () => ({
@@ -463,6 +431,18 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
   const dayBarMax = useMemo(
     () => Math.max(0, ...last7DaysPO.map((d) => d.count)),
     [last7DaysPO],
+  );
+  const totalPOTrend = useMemo(
+    () => last7DaysPO.reduce((s, d) => s + d.count, 0),
+    [last7DaysPO],
+  );
+  const totalKienTrend = useMemo(
+    () =>
+      last7DaysKien.reduce(
+        (s, d) => s + Object.values(d.byLoai).reduce((a, v) => a + v, 0),
+        0,
+      ),
+    [last7DaysKien],
   );
 
   const kienAreaData = useMemo(() => {
@@ -510,9 +490,6 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
           fill: !isDong,
           stack: isDong ? undefined : "kien",
           yAxisID: isDong ? "yDong" : "y",
-          // Giữ đúng thứ tự tự nhiên KHÔ -> ĐÔNG -> SLL theo vị trí trong
-          // mảng loaiHinhKienTypes, nên tooltip/legend sẽ hiện ĐÔNG ngay
-          // sau KHÔ.
           order: i,
         };
       }),
@@ -535,9 +512,6 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
     [last7DaysKien],
   );
 
-  // Biểu đồ cột ngang xếp hạng ngành hàng theo kiện kế hoạch — đảo ngược
-  // thứ tự vì Chart.js horizontal bar vẽ từ dưới lên, muốn ngành nhiều
-  // nhất nằm trên cùng thì phải đưa nó vào cuối mảng labels/data
   const nganhHangBarData = useMemo(() => {
     const rows = [...byNganhHang].reverse();
     return {
@@ -548,7 +522,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
           data: rows.map((d) => d.value),
           backgroundColor: rows.map((d) => d.fill),
           borderRadius: 6,
-          maxBarThickness: 26,
+          maxBarThickness: 28,
         },
       ],
     };
@@ -594,6 +568,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         />
       </div>
 
+      {/* KPI */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <ASNStatCard
           icon={FileStack}
@@ -604,7 +579,7 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         />
         <ASNStatCard
           icon={ClipboardList}
-          label="Tổng số BOOKING"
+          label="Tổng số Booking"
           value={formatNumber(totalBooking)}
           avgValue={formatAvg(avgBooking)}
           tone="emerald"
@@ -625,42 +600,39 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
         />
       </div>
       <p className="-mt-2 text-xs text-slate-400">
-        Bình quân tính trên {soNgayCoData} ngày có dữ liệu trong bộ lọc.
+        Bình quân/ngày tính trên <b>{soNgayCoData}</b> ngày có dữ liệu trong bộ
+        lọc.
       </p>
 
+      {/* Xu hướng kiện + donut loại hình */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Số kiện theo kỳ Booking — dạng vùng (area) mượt, xếp chồng theo
-            Khô/Đông/SLL — cạnh donut */}
-        <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium text-slate-600">
-              Số kiện theo {PERIOD_UNIT[period]} Booking ({PERIOD_TEXT[period]})
-            </p>
+        <ChartCard
+          className="lg:col-span-2"
+          title={`Số kiện theo ${PERIOD_UNIT[period]} Booking`}
+          subtitle={
+            period === "day"
+              ? `${PERIOD_TEXT[period]} · tổng ${formatNumber(totalKienTrend)} kiện`
+              : `${PERIOD_TEXT[period]} trên toàn bộ dữ liệu (không áp dụng bộ lọc ngày) · tổng ${formatNumber(totalKienTrend)} kiện`
+          }
+          right={
             <PeriodToggle
               value={period}
               onChange={setPeriod}
               activeClass="text-indigo-600"
             />
-          </div>
-          {period !== "day" && (
-            <p className="mb-2 text-xs text-slate-400">
-              {PERIOD_TEXT[period]} trên toàn bộ dữ liệu (không áp dụng bộ lọc
-              ngày phía trên)
-            </p>
-          )}
+          }
+        >
           {loading ? (
-            <div className="flex h-64 items-center justify-center text-slate-400">
-              <Loader2 size={20} className="animate-spin" />
-            </div>
+            <Loading />
           ) : (
-            <div className="h-64">
+            <div className="h-72">
               <Line
                 data={kienAreaData}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
                   interaction: { mode: "index", intersect: false },
-                  layout: { padding: { top: 30, right: 12 } },
+                  layout: { padding: { top: 34, right: 12 } },
                   plugins: {
                     legend: {
                       display: true,
@@ -671,16 +643,17 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
                         pointStyle: "circle",
                         boxWidth: 8,
                         padding: 16,
-                        font: { size: 12, weight: "600" },
-                        color: "#475569",
+                        font: { size: 13, weight: "700" },
+                        color: "#334155",
                       },
                     },
                     tooltip: {
-                      backgroundColor: "rgba(30, 27, 75, 0.92)",
+                      backgroundColor: "rgba(30, 27, 75, 0.94)",
                       titleColor: "#e0e7ff",
-                      titleFont: { weight: "700" },
-                      bodyColor: "#ffffff",
-                      padding: 10,
+                      titleFont: { weight: "700", size: 13 },
+                      bodyFont: { size: 13 },
+                      footerFont: { size: 13, weight: "700" },
+                      padding: 12,
                       cornerRadius: 8,
                       boxPadding: 4,
                       callbacks: {
@@ -691,42 +664,47 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
                             (sum, it) => sum + (it.parsed.y || 0),
                             0,
                           );
-                          // Tổng chỉ hiện ở đây (khi hover) — KHÔNG hiện
-                          // trên datalabel ngoài chart nữa.
                           return `Tổng: ${formatNumber(total)} kiện`;
                         },
                       },
                     },
                     datalabels: {
-                      display: (context) => {
-                        const value =
-                          context.dataset.data[context.dataIndex] || 0;
-                        return value > 0;
-                      },
+                      // Chỉ hiện nhãn khi có giá trị, riêng KHÔ/SLL chỉ cần hiện ở điểm lớn
+                      display: (context) =>
+                        (context.dataset.data[context.dataIndex] || 0) > 0,
+
                       anchor: "end",
-                      align: "top",
-                      offset: (context) =>
-                        context.dataset.label === "ĐÔNG" ? 8 : 10,
-                      color: (context) => {
-                        if (context.dataset.label === "ĐÔNG") return "#0284c7";
-                        if (context.dataset.label === "KHÔ") return "#4338ca";
-                        return "#3730a3"; // SLL / loại hình khác
+                      // Mỗi loại một hướng: SLL phía trên, KHÔ phía dưới, ĐÔNG bên phải
+                      align: (context) => {
+                        const label = context.dataset.label;
+                        if (label === "SLL") return "top";
+                        if (label === "KHÔ") return "bottom";
+                        return "right"; // ĐÔNG
                       },
-                      backgroundColor: (context) =>
-                        context.dataset.label === "ĐÔNG"
-                          ? "rgba(224,242,254,0.95)"
-                          : "rgba(255,255,255,0.92)",
-                      borderColor: (context) =>
-                        context.dataset.label === "ĐÔNG"
-                          ? "#7dd3fc"
-                          : "#c7d2fe",
+                      // Đẩy xa điểm hơn để không chạm nhau
+                      offset: (context) => {
+                        const label = context.dataset.label;
+                        if (label === "SLL") return 12;
+                        if (label === "KHÔ") return 14;
+                        return 18; // ĐÔNG
+                      },
+                      clamp: true,
+
+                      color: (context) => {
+                        if (context.dataset.label === "ĐÔNG") return "#0369a1";
+                        if (context.dataset.label === "KHÔ") return "#3730a3";
+                        return "#92400e";
+                      },
+                      backgroundColor: "rgba(255,255,255,0.95)",
+                      borderColor: (context) => {
+                        if (context.dataset.label === "ĐÔNG") return "#7dd3fc";
+                        if (context.dataset.label === "KHÔ") return "#c7d2fe";
+                        return "#fcd34d";
+                      },
                       borderWidth: 1,
                       borderRadius: 6,
                       padding: { top: 3, bottom: 3, left: 6, right: 6 },
-                      font: { weight: "bold", size: 11 },
-                      // Luôn hiện đúng giá trị riêng của từng dataset
-                      // (KHÔ / ĐÔNG / SLL) tại mỗi điểm — tổng chỉ hiện
-                      // khi hover (tooltip footer ở trên).
+                      font: { weight: "800", size: 12 },
                       formatter: (value) =>
                         value > 0 ? formatNumber(value) : "",
                     },
@@ -735,20 +713,34 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
                     x: {
                       grid: { display: false },
                       ticks: {
-                        font: { size: 12, weight: "600" },
-                        color: "#334155",
+                        font: { size: 13, weight: "700" },
+                        color: "#1e293b",
                       },
                     },
+                    // Trục chính (KHÔ + SLL, số hàng nghìn) -> chuyển sang PHẢI
                     y: {
+                      position: "right", // ✏️ đổi
                       stacked: true,
                       beginAtZero: true,
                       grid: { color: "#eef2ff" },
-                      ticks: { font: { size: 12 }, color: "#64748b" },
+                      ticks: {
+                        font: { size: 12 },
+                        color: "#64748b",
+                        callback: (v) => formatNumber(v),
+                      },
                       suggestedMax:
                         kienAreaMax > 0 ? kienAreaMax * 1.3 : undefined,
+                      title: {
+                        // ➕ thêm tiêu đề cho rõ
+                        display: true,
+                        text: "KHÔ + SLL (kiện)",
+                        color: "#64748b",
+                        font: { size: 11, weight: "600" },
+                      },
                     },
+                    // Trục ĐÔNG (số nhỏ) -> chuyển sang TRÁI
                     yDong: {
-                      position: "right",
+                      position: "left", // ✏️ đổi
                       beginAtZero: true,
                       grid: { display: false },
                       ticks: {
@@ -756,8 +748,6 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
                         color: "#0ea5e9",
                         callback: (v) => formatNumber(v),
                       },
-                      // Nhân hệ số lớn (7 lần) để đường ĐÔNG luôn nằm thấp
-                      // hơn KHÔ/SLL trên màn hình dù 2 trục độc lập nhau.
                       suggestedMax: dongMax > 0 ? dongMax * 7 : undefined,
                       title: {
                         display: true,
@@ -771,204 +761,231 @@ const ASNSection = ({ rawData, loading, onNavigate }) => {
               />
             </div>
           )}
-        </div>
+        </ChartCard>
 
-        {/* Donut theo loại hình — tính theo TỔNG SỐ KIỆN — giữ nguyên vị trí */}
-        <div
-          className="rounded-lg border border-slate-200 bg-white p-4"
-          style={{ fontFamily: FONT_SANS }}
-        >
-          <p className="mb-2 text-sm font-medium text-slate-600">
-            Theo loại hình
-          </p>
-          {loading || totalSoKien === 0 ? (
-            <div className="flex h-64 items-center justify-center text-slate-400">
-              {loading ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                "Không có dữ liệu"
-              )}
-            </div>
-          ) : (
-            <div className="h-[260px]">
-              <ResponsiveContainer width="100%" height={260} debounce={150}>
-                <PieChart margin={{ top: 24, right: 60, bottom: 24, left: 60 }}>
-                  <Pie
-                    data={byLoaiHinh}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={40}
-                    outerRadius={66}
-                    paddingAngle={2}
-                    minAngle={ASN_MIN_ANGLE}
-                    label={pieLabel}
-                    labelLine={false}
-                    cursor={onNavigate ? "pointer" : "default"}
-                    onClick={(data) => handleSliceClick(data.name)}
+        {/* Donut + bảng số liệu */}
+        <ChartCard title="Theo loại hình" subtitle="Tính theo tổng số kiện">
+          <div style={{ fontFamily: FONT_SANS }}>
+            {loading || totalSoKien === 0 ? (
+              <div className="flex h-72 items-center justify-center text-slate-400">
+                {loading ? (
+                  <Loader2 size={20} className="animate-spin" />
+                ) : (
+                  "Không có dữ liệu"
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="relative h-44">
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    debounce={150}
                   >
-                    {byLoaiHinh.map((d, i) => (
-                      <Cell key={i} fill={d.fill} stroke="transparent" />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip
-                    formatter={(value, name) => [
-                      `${formatNumber(value)} kiện (${
-                        totalSoKien
-                          ? ((value / totalSoKien) * 100).toFixed(1)
-                          : 0
-                      }%)`,
-                      name,
-                    ]}
-                  />
-                  <RechartsLegend verticalAlign="bottom" height={24} />
-                </PieChart>
-              </ResponsiveContainer>
+                    <PieChart>
+                      <Pie
+                        data={byLoaiHinh}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={52}
+                        outerRadius={78}
+                        paddingAngle={2}
+                        minAngle={ASN_MIN_ANGLE}
+                        cursor={onNavigate ? "pointer" : "default"}
+                        onClick={(data) => handleSliceClick(data.name)}
+                      >
+                        {byLoaiHinh.map((d, i) => (
+                          <Cell key={i} fill={d.fill} stroke="transparent" />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip
+                        formatter={(value, name) => [
+                          `${formatNumber(value)} kiện (${formatPct(value, totalSoKien)})`,
+                          name,
+                        ]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  {/* Tổng ở giữa donut */}
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-xl font-extrabold leading-none text-slate-800 tabular-nums">
+                      {formatNumber(totalSoKien)}
+                    </span>
+                    <span className="text-[11px] font-medium text-slate-400">
+                      kiện
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-3 space-y-1.5">
+                  {byLoaiHinh.map((d) => (
+                    <button
+                      key={d.name}
+                      type="button"
+                      onClick={() => handleSliceClick(d.name)}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-50"
+                    >
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-full"
+                        style={{ background: d.fill }}
+                      />
+                      <span className="flex-1 truncate font-semibold text-slate-700">
+                        {d.name}
+                      </span>
+                      <span className="font-bold tabular-nums text-slate-800">
+                        {formatNumber(d.value)}
+                      </span>
+                      <span className="w-14 text-right text-xs font-semibold tabular-nums text-slate-500">
+                        {formatPct(d.value, totalSoKien)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </ChartCard>
+      </div>
+
+      {/* Số PO + ngành hàng */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ChartCard
+          title={`Số PO theo ${PERIOD_UNIT[period]} Booking`}
+          subtitle={`${PERIOD_TEXT[period]} · tổng ${formatNumber(totalPOTrend)} PO`}
+          className="bg-gradient-to-b from-white to-indigo-50/40"
+        >
+          {loading ? (
+            <Loading height="h-96" />
+          ) : (
+            <div className="h-96">
+              <Bar
+                data={dayBarData}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  layout: { padding: { top: 36, right: 8 } },
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      bodyFont: { size: 13 },
+                      callbacks: {
+                        label: (ctx) => `${formatNumber(ctx.parsed.y)} PO`,
+                      },
+                    },
+                    datalabels: {
+                      anchor: "end",
+                      align: "end",
+                      offset: 4,
+                      clamp: true,
+                      color: "#312e81",
+                      backgroundColor: "#ffffff",
+                      borderColor: "#c7d2fe",
+                      borderWidth: 1.5,
+                      borderRadius: 6,
+                      padding: { top: 4, bottom: 4, left: 8, right: 8 },
+                      font: { weight: "800", size: 16 },
+                      formatter: (value) =>
+                        value > 0 ? formatNumber(value) : "",
+                    },
+                  },
+                  scales: {
+                    x: {
+                      grid: { display: false },
+                      ticks: {
+                        font: { size: 14, weight: "700" },
+                        color: "#1e293b",
+                      },
+                    },
+                    y: {
+                      beginAtZero: true,
+                      grid: { color: "#e2e8f0" },
+                      ticks: {
+                        font: { size: 13 },
+                        color: "#475569",
+                        callback: (v) => formatNumber(v),
+                      },
+                      suggestedMax: dayBarMax > 0 ? dayBarMax * 1.3 : undefined,
+                    },
+                  },
+                }}
+              />
             </div>
           )}
-        </div>
-      </div>
+        </ChartCard>
 
-      {/* Số PO theo kỳ Booking — khối full-width bên dưới */}
-      <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-indigo-50/40 p-4 shadow-sm">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-medium text-slate-600">
-            Số PO theo {PERIOD_UNIT[period]} Booking ({PERIOD_TEXT[period]})
-          </p>
-          <PeriodToggle
-            value={period}
-            onChange={setPeriod}
-            activeClass="text-indigo-600"
-          />
-        </div>
-        {loading ? (
-          <div className="flex h-80 items-center justify-center text-slate-400">
-            <Loader2 size={20} className="animate-spin" />
-          </div>
-        ) : (
-          <div className="h-80">
-            <Bar
-              data={dayBarData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: { padding: { top: 24 } },
-                plugins: {
-                  legend: { display: false },
-                  tooltip: {
-                    callbacks: {
-                      label: (ctx) => `${formatNumber(ctx.parsed.y)} PO`,
+        <ChartCard
+          title="Số kiện theo ngành hàng"
+          subtitle={`Tổng ${formatNumber(totalSoKienNganhHang)} kiện · nhiều nhất ở trên cùng`}
+        >
+          {loading ? (
+            <Loading height="h-96" />
+          ) : byNganhHang.length === 0 ? (
+            <div className="flex h-96 items-center justify-center text-slate-400">
+              Không có dữ liệu
+            </div>
+          ) : (
+            <div style={{ height: Math.max(384, byNganhHang.length * 44) }}>
+              <Bar
+                data={nganhHangBarData}
+                options={{
+                  indexAxis: "y",
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  layout: { padding: { right: 130 } },
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      bodyFont: { size: 13 },
+                      callbacks: {
+                        label: (ctx) =>
+                          `${formatNumber(ctx.parsed.x)} kiện (${formatPct(ctx.parsed.x, totalSoKienNganhHang)})`,
+                      },
+                    },
+                    datalabels: {
+                      anchor: "end",
+                      align: "end",
+                      offset: 6,
+                      clamp: true,
+                      color: "#312e81",
+                      backgroundColor: "#ffffff",
+                      borderColor: "#c7d2fe",
+                      borderWidth: 1.5,
+                      borderRadius: 6,
+                      padding: { top: 3, bottom: 3, left: 7, right: 7 },
+                      font: { weight: "800", size: 13 },
+                      formatter: (value) =>
+                        value > 0
+                          ? `${formatNumber(value)} (${formatPct(value, totalSoKienNganhHang)})`
+                          : "",
                     },
                   },
-                  datalabels: {
-                    anchor: "end",
-                    align: "end",
-                    offset: 4,
-                    clamp: true,
-                    color: "#1e1b4b",
-                    backgroundColor: "rgba(255,255,255,0.85)",
-                    borderRadius: 4,
-                    padding: { top: 2, bottom: 2, left: 5, right: 5 },
-                    font: { weight: "bold", size: 13 },
-                    formatter: (value) =>
-                      value > 0 ? formatNumber(value) : "",
-                  },
-                },
-                scales: {
-                  x: {
-                    grid: { display: false },
-                    ticks: {
-                      font: { size: 12, weight: "600" },
-                      color: "#334155",
+                  scales: {
+                    x: {
+                      beginAtZero: true,
+                      grid: { color: "#e2e8f0" },
+                      ticks: {
+                        font: { size: 12 },
+                        color: "#475569",
+                        callback: (v) => formatNumber(v),
+                      },
+                      suggestedMax:
+                        nganhHangBarMax > 0
+                          ? nganhHangBarMax * 1.15
+                          : undefined,
+                    },
+                    y: {
+                      grid: { display: false },
+                      ticks: {
+                        font: { size: 13, weight: "700" },
+                        color: "#1e293b",
+                      },
                     },
                   },
-                  y: {
-                    beginAtZero: true,
-                    grid: { color: "#f1f5f9" },
-                    ticks: {
-                      font: { size: 12 },
-                      color: "#64748b",
-                    },
-                    suggestedMax: dayBarMax > 0 ? dayBarMax * 1.25 : undefined,
-                  },
-                },
-              }}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Số kiện theo ngành hàng — cột ngang xếp hạng, ngành nhiều
-          kiện nhất nằm trên cùng; tên ngành hàng dài vẫn đọc trọn vẹn */}
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
-        <p className="mb-2 text-sm font-medium text-slate-600">
-          Số kiện theo ngành hàng
-        </p>
-        {loading ? (
-          <div className="flex h-80 items-center justify-center text-slate-400">
-            <Loader2 size={20} className="animate-spin" />
-          </div>
-        ) : byNganhHang.length === 0 ? (
-          <div className="flex h-80 items-center justify-center text-slate-400">
-            Không có dữ liệu
-          </div>
-        ) : (
-          <div style={{ height: Math.max(260, byNganhHang.length * 42) }}>
-            <Bar
-              data={nganhHangBarData}
-              options={{
-                indexAxis: "y",
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: { padding: { right: 56 } },
-                plugins: {
-                  legend: { display: false },
-                  tooltip: {
-                    callbacks: {
-                      label: (ctx) =>
-                        `${formatNumber(ctx.parsed.x)} kiện (${
-                          totalSoKienNganhHang
-                            ? (
-                                (ctx.parsed.x / totalSoKienNganhHang) *
-                                100
-                              ).toFixed(1)
-                            : 0
-                        }%)`,
-                    },
-                  },
-                  datalabels: {
-                    anchor: "end",
-                    align: "end",
-                    offset: 6,
-                    clamp: true,
-                    color: "#1e1b4b",
-                    backgroundColor: "rgba(255,255,255,0.85)",
-                    borderRadius: 4,
-                    padding: { top: 2, bottom: 2, left: 5, right: 5 },
-                    font: { weight: "bold", size: 12 },
-                    formatter: (value) =>
-                      value > 0 ? `${formatNumber(value)} kiện` : "",
-                  },
-                },
-                scales: {
-                  x: {
-                    beginAtZero: true,
-                    grid: { color: "#f1f5f9" },
-                    ticks: { font: { size: 11 }, color: "#64748b" },
-                    suggestedMax:
-                      nganhHangBarMax > 0 ? nganhHangBarMax * 1.25 : undefined,
-                  },
-                  y: {
-                    grid: { display: false },
-                    ticks: {
-                      font: { size: 12, weight: "600" },
-                      color: "#334155",
-                    },
-                  },
-                },
-              }}
-            />
-          </div>
-        )}
+                }}
+              />
+            </div>
+          )}
+        </ChartCard>
       </div>
     </div>
   );
@@ -983,7 +1000,9 @@ const DashASN = ({ onNavigate }) => {
 
   useEffect(() => {
     const fetchASN = async () => {
+      
       setLoading(true);
+      
       try {
         const res = await asnService.getDanhSach({
           page: 1,
@@ -997,6 +1016,7 @@ const DashASN = ({ onNavigate }) => {
       }
     };
     fetchASN();
+    
   }, []);
 
   return (
