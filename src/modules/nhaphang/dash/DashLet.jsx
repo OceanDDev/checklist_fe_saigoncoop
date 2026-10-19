@@ -48,6 +48,29 @@ const PERIOD_TEXT = {
 };
 const PERIOD_UNIT = { day: "ngày", month: "tháng", year: "năm" };
 
+// datalabels + trục + legend — giống biểu đồ cột bên DashNhapPut:
+// số to, đậm, có nền trắng mờ phía sau để nổi rõ trên mọi màu cột.
+const bigBarDataLabels = {
+  anchor: "end",
+  align: "end",
+  offset: 4,
+  clamp: true,
+  color: "#1e1b4b",
+  backgroundColor: "rgba(255,255,255,0.85)",
+  borderRadius: 4,
+  padding: { top: 2, bottom: 2, left: 5, right: 5 },
+  font: { weight: "bold", size: 12 },
+  formatter: (value) => (value > 0 ? formatNumber(value) : ""),
+};
+const axisTicksBold = { font: { size: 12, weight: "600" }, color: "#334155" };
+const axisTicksNormal = { font: { size: 12 }, color: "#64748b" };
+const legendLabelsBold = {
+  font: { size: 12, weight: "600" },
+  color: "#334155",
+  boxWidth: 12,
+  boxHeight: 12,
+};
+
 // ─────────────────────────────────────────────
 // LET HÀNG (Châm hàng) — theo trạng thái
 // Hoàn Thành / Sẵn sàng châm hàng / Chờ lệnh châm hàng
@@ -193,6 +216,8 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
     [period, filtered, rawData, selectedKho],
   );
 
+  // Mỗi mốc thời gian có 3 cột đứng cạnh nhau (không stacked), mỗi cột là
+  // 1 trạng thái — giống biểu đồ "Số kiện nhập" bên DashNhapPut.
   const trendData = useMemo(() => {
     const sums = {}; // { trang_thai: { key: tổng kiện } }
     const keys = new Set();
@@ -219,29 +244,22 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
       labels: buckets.map((b) => b.label),
       datasets: TRANG_THAI_LIST.map(({ key, label, color }) => ({
         label,
-        // Giá trị 0 -> null để không vẽ cột giả (minBarLength chỉ giúp
-        // các giá trị nhỏ nhưng > 0 vẫn nhìn thấy được)
-        data: buckets.map((b) => sums[key][b.key] || null),
+        data: buckets.map((b) => sums[key][b.key] || 0),
         backgroundColor: color,
-        borderRadius: 2,
-        minBarLength: 4,
-        barPercentage: 0.9,
-        categoryPercentage: 0.9,
+        borderRadius: 4,
       })),
     };
   }, [trendRows, period]);
 
-  // Chừa khoảng trống phía trên (suggestedMax) cho nhãn số ở đỉnh cột
-  // Cột chồng -> chiều cao mỗi cột = tổng các trạng thái trong mốc đó
+  // Chừa khoảng trống phía trên (suggestedMax) cho nhãn số ở đỉnh cột.
+  // Cột đứng cạnh nhau -> lấy giá trị cột cao nhất.
   const trendMax = useMemo(() => {
     let max = 0;
-    trendData.labels.forEach((_, i) => {
-      const total = trendData.datasets.reduce(
-        (s, ds) => s + (ds.data[i] || 0),
-        0,
-      );
-      if (total > max) max = total;
-    });
+    trendData.datasets.forEach((ds) =>
+      ds.data.forEach((v) => {
+        if (v > max) max = v;
+      }),
+    );
     return max;
   }, [trendData]);
 
@@ -351,86 +369,29 @@ const LetHangSection = ({ rawData, loading, onNavigate }) => {
               Không có dữ liệu
             </div>
           ) : (
-            <div className="h-80">
+            <div className="h-72">
               <Bar
                 data={trendData}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
-                  layout: { padding: { top: 8 } },
-                  interaction: { mode: "index", intersect: false },
+                  layout: { padding: { top: 24 } },
                   plugins: {
-                    legend: {
-                      position: "bottom",
-                      labels: {
-                        font: { size: 12, weight: "600" },
-                        color: "#334155",
-                        boxWidth: 12,
-                        boxHeight: 12,
-                      },
-                    },
-                    tooltip: {
-                      callbacks: {
-                        label: (ctx) =>
-                          `${ctx.dataset.label}: ${formatNumber(ctx.parsed.y)} kiện`,
-                        footer: (items) =>
-                          `Tổng: ${formatNumber(
-                            items.reduce((s, it) => s + (it.parsed.y || 0), 0),
-                          )} kiện`,
-                      },
-                    },
-                    // Cột CHỒNG: mỗi mốc thời gian 1 cột, chỉ hiện 1 nhãn
-                    // TỔNG ở đỉnh cột (gắn vào segment trên cùng có giá
-                    // trị). Nhiều mốc (> 12) -> xoay dọc để không đè nhau.
-                    datalabels: {
-                      anchor: "end",
-                      align: "end",
-                      offset: 2,
-                      clamp: true,
-                      rotation: trendData.labels.length > 12 ? -90 : 0,
-                      color: "#1e1b4b",
-                      font: { weight: "bold", size: 11 },
-                      display: (ctx) => {
-                        const i = ctx.dataIndex;
-                        const sets = ctx.chart.data.datasets;
-                        if (!(sets[ctx.datasetIndex].data[i] > 0)) return false;
-                        for (
-                          let d = sets.length - 1;
-                          d > ctx.datasetIndex;
-                          d--
-                        ) {
-                          if (sets[d].data[i] > 0) return false;
-                        }
-                        return true;
-                      },
-                      formatter: (_, ctx) => {
-                        const i = ctx.dataIndex;
-                        const total = ctx.chart.data.datasets.reduce(
-                          (s, ds) => s + (ds.data[i] || 0),
-                          0,
-                        );
-                        return formatNumber(total);
-                      },
-                    },
+                    legend: { position: "bottom", labels: legendLabelsBold },
+                    datalabels: bigBarDataLabels,
                   },
                   scales: {
                     x: {
-                      stacked: true,
+                      stacked: false,
+                      ticks: axisTicksBold,
                       grid: { display: false },
-                      ticks: {
-                        autoSkip: false,
-                        maxRotation: 60,
-                        font: { size: 11, weight: "600" },
-                        color: "#334155",
-                      },
                     },
                     y: {
-                      stacked: true,
+                      stacked: false,
                       beginAtZero: true,
+                      ticks: axisTicksNormal,
                       grid: { color: "#f1f5f9" },
-                      ticks: { font: { size: 12 }, color: "#64748b" },
-                      // chừa chỗ phía trên cho nhãn tổng xoay dọc
-                      suggestedMax: trendMax > 0 ? trendMax * 1.3 : undefined,
+                      suggestedMax: trendMax > 0 ? trendMax * 1.25 : undefined,
                     },
                   },
                 }}

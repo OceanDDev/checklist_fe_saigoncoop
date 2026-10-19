@@ -254,6 +254,15 @@ const NhapHangSection = ({ rawData, asnData, loading, onNavigate }) => {
       };
     }, [filtered]);
 
+  // Danh sách kho đang được chọn — dùng để render card "Tổng kiện - Kho X"
+  const khoActive = useMemo(
+    () => KHO_LIST.filter(({ kho }) => selectedKho.includes(kho)),
+    [selectedKho],
+  );
+
+  // Bình quân/ngày = tổng kiện ÷ số ngày có dữ liệu trong bộ lọc
+  const perDay = (n) => (soNgayCoData > 0 ? n / soNgayCoData : 0);
+
   // Dữ liệu biểu đồ cột: chế độ Ngày tôn trọng bộ lọc ngày; Tháng / Năm bỏ
   // lọc ngày (chỉ lọc kho) để thấy được toàn bộ lịch sử.
   const trendRows = useMemo(
@@ -356,7 +365,7 @@ const NhapHangSection = ({ rawData, asnData, loading, onNavigate }) => {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <NhapPutStatCard
           icon={Boxes}
           label="Tổng số kiện / Kiện Booking (D-1)"
@@ -371,6 +380,20 @@ const NhapHangSection = ({ rawData, asnData, loading, onNavigate }) => {
           avgValue={formatAvg(avgSku)}
           tone="emerald"
         />
+        {/* Card tổng kiện theo từng kho (Kho 810 / 8101 / 8104...) */}
+        {khoActive.map(({ kho, label }) => {
+          const total = byKho[kho] || 0;
+          return (
+            <NhapPutStatCard
+              key={kho}
+              icon={Boxes}
+              label={`Tổng kiện - ${label}`}
+              value={formatNumber(total)}
+              avgValue={formatAvg(perDay(total))}
+              tone="blue"
+            />
+          );
+        })}
       </div>
       <p className="-mt-2 text-xs text-slate-400">
         Bình quân tính trên {soNgayCoData} ngày có dữ liệu trong bộ lọc.

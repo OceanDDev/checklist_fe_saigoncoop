@@ -215,13 +215,11 @@ const ASNImportModal = ({ onClose, onImported }) => {
     setSubmitError(null);
 
     try {
+      // Import thẳng (chỉ insert): file có bao nhiêu dòng thì tạo bấy nhiêu
+      // bản ghi. KHÔNG kiểm tra trùng, KHÔNG cập nhật bản ghi cũ.
       // Mỗi item đã gắn sẵn field kho riêng -> gộp tất cả kho đã chọn.
-      // Dùng importCapNhat: nếu 1 dòng có ĐỦ cả NCC + Số PO + Số BOOKING
-      // và trùng với bản ghi đã có (cùng kho) -> cập nhật lại bản ghi đó.
-      // Thiếu 1 trong 3 field trên -> luôn tạo bản ghi mới (không bị mất
-      // dữ liệu, không bị gộp nhầm với bản ghi khác).
       const allItems = selectedKhoList.flatMap(({ kho }) => slots[kho].items);
-      const res = await asnService.importCapNhat(allItems);
+      const res = await asnService.importNhieu(allItems);
       const khoLabel = selectedKhoList.map(({ label }) => label).join(", ");
       onImported({
         success: true,

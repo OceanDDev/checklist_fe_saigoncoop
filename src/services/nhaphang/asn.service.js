@@ -91,7 +91,8 @@ const importNhieu = async (items) => {
   }
 };
 
-// 🔄 Import kèm cập nhật (upsert theo asn + po)
+// 🔄 Import kèm cập nhật (upsert theo NCC + PO + Booking + kho,
+// dòng thiếu khóa thì match theo toàn bộ nội dung dòng)
 const importCapNhat = async (items) => {
   try {
     return await requestService.post(
@@ -135,6 +136,22 @@ const xoaNhieu = async ({ ids, filter }) => {
   }
 };
 
+// 🧹 Xóa theo bộ lọc đang áp trên bảng (vd Ngày ASN + Kho)
+// filters: { kho, ngay_asn_from, ngay_asn_to, ... } — phải có ít nhất 1 filter
+const xoaTheoBoLoc = async (filters = {}) => {
+  try {
+    return await requestService.post(
+      `${URL.nhaphang.asn}/delete-by-filter`,
+      { filters },
+      undefined,
+      ApiServer,
+    );
+  } catch (error) {
+    console.error("Lỗi khi gọi xoaTheoBoLoc:", error);
+    throw error;
+  }
+};
+
 export const asnService = {
   themASN,
   getDanhSach,
@@ -145,4 +162,5 @@ export const asnService = {
   importCapNhat,
   capNhatNhieu,
   xoaNhieu,
+  xoaTheoBoLoc,
 };

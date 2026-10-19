@@ -5,6 +5,7 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  Trash2,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -15,9 +16,7 @@ import DateRangeFilter from "../dash/date";
 const PAGE_SIZE = 20;
 
 // Cột của bảng + key filter tương ứng gửi lên backend qua query string.
-// "ngay_asn" và "ngay_import" không có key filter text riêng — 2 cột này
-// lọc bằng khoảng ngày (vd ngay_asn_from / ngay_asn_to), xử lý riêng bên
-// dưới, không đi qua input text chung như các cột khác.
+// "ngay_asn" và "ngay_import" lọc bằng khoảng ngày (<field>_from / <field>_to).
 const COLUMNS = [
   { key: "po", label: "PO" },
   { key: "ngay_asn", label: "Ngày ASN", isDateRange: true },
@@ -32,7 +31,6 @@ const COLUMNS = [
   { key: "ngay_import", label: "Ngày import", isDateRange: true },
 ];
 
-// Đọc lại date-only bằng UTC getters — khớp cách ghim ở NhapHangImportModal, không phụ thuộc timezone
 const formatDateOnly = (value) => {
   if (!value) return "-";
   const d = new Date(value);
@@ -43,13 +41,9 @@ const formatDateOnly = (value) => {
   return `${dd}/${mm}/${yyyy}`;
 };
 
-// ─────────────────────────────────────────────
-// TABLE + SEARCH + PAGINATION — ASN
-//
-// Props MỚI (tuỳ chọn), cùng pattern với NhapHangForm:
+// Props (tuỳ chọn):
 // - initialFilters: object filter muốn áp ngay khi bảng mở ra
 // - initialFiltersToken: đổi mỗi lần cần áp lại initialFilters
-// ─────────────────────────────────────────────
 const ASNForm = ({ initialFilters, initialFiltersToken }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [result, setResult] = useState(null);
@@ -60,14 +54,18 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // filter theo từng field, key khớp với COLUMNS — riêng "ngay_asn" và
-  // "ngay_import" dùng 2 key "<field>_from" / "<field>_to" thay vì 1 key
-  // text như các cột khác
   const [filters, setFilters] = useState({});
   const debounceRef = useRef(null);
 
+  // ── Chọn & xóa ──
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [selectAllFilter, setSelectAllFilter] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   const fetchTable = async (targetPage = page, activeFilters = filters) => {
     setLoadingTable(true);
+    setSelectedIds(new Set());
+    setSelectAllFilter(false);
     try {
       const params = { page: targetPage, limit: PAGE_SIZE };
       Object.entries(activeFilters).forEach(([key, value]) => {
@@ -98,7 +96,6 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFiltersToken]);
 
-  // debounce khi gõ filter — reset về trang 1
   const handleFilterChange = (key, value) => {
     const next = { ...filters, [key]: value };
     setFilters(next);
@@ -110,10 +107,6 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
     }, 400);
   };
 
-  // DateRangeFilter báo về 1 cặp (from, to) mỗi lần chọn xong khoảng ngày
-  // -> áp ngay, không cần debounce. Dùng chung cho mọi cột isDateRange
-  // (ngay_asn, ngay_import...) — field là tiền tố key, vd "ngay_asn" thì
-  // gửi lên "ngay_asn_from" / "ngay_asn_to".
   const handleDateRangeChange = (field, from, to) => {
     const next = {
       ...filters,
@@ -122,14 +115,12 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
     };
     setFilters(next);
     setPage(1);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     fetchTable(1, next);
   };
 
   const handleDateRangeClear = (field) => {
-    const next = { ...filters, [`${field}_from`]: "", [`${field}_to`]: "" };
-    setFilters(next);
-    setPage(1);
-    fetchTable(1, next);
+    handleDateRangeChange(field, "", "");
   };
 
   const goToPage = (p) => {
@@ -145,20 +136,92 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
     fetchTable(1, filters);
   };
 
+  // ── Logic chọn dòng ──
+  const hasActiveFilter = Object.values(filters).some(
+    (v) => v !== undefined && v !== "",
+  );
+  const allPageChecked =
+    rows.length > 0 && rows.every((r) => selectedIds.has(r._id));
+  const selectedCount = selectAllFilter ? total : selectedIds.size;
+
+  const toggleRow = (id) => {
+    setSelectAllFilter(false);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllPage = () => {
+    setSelectAllFilter(false);
+    setSelectedIds(
+      allPageChecked ? new Set() : new Set(rows.map((r) => r._id)),
+    );
+  };
+
+  const handleDelete = async () => {
+    if (selectedCount === 0) return;
+    const msg = selectAllFilter
+      ? `Xóa TOÀN BỘ ${total} bản ghi khớp bộ lọc hiện tại?\nKhông thể hoàn tác!`
+      : `Xóa ${selectedIds.size} bản ghi đã chọn?\nKhông thể hoàn tác!`;
+    if (!window.confirm(msg)) return;
+
+    setDeleting(true);
+    try {
+      const cleanFilters = Object.fromEntries(
+        Object.entries(filters).filter(([, v]) => v !== undefined && v !== ""),
+      );
+      const res = selectAllFilter
+        ? await asnService.xoaTheoBoLoc(cleanFilters)
+        : await asnService.xoaNhieu({ ids: [...selectedIds] });
+      setResult({ success: true, message: res?.message || "Đã xóa" });
+      setPage(1);
+      fetchTable(1, filters);
+    } catch (err) {
+      console.error("Lỗi xóa ASN:", err);
+      setResult({
+        success: false,
+        message: err?.response?.data?.message || "Xóa thất bại",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="p-4">
       <div className="mb-4 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => {
-            setResult(null);
-            setModalOpen(true);
-          }}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          <UploadCloud size={16} />
-          Import Excel
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setResult(null);
+              setModalOpen(true);
+            }}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <UploadCloud size={16} />
+            Import Excel
+          </button>
+
+          {selectedCount > 0 && (
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={handleDelete}
+              className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Trash2 size={16} />
+              )}
+              Xóa {selectedCount} dòng
+            </button>
+          )}
+        </div>
 
         <span className="text-sm text-slate-500">
           {total > 0 && `${total} bản ghi`}
@@ -179,12 +242,48 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
         </div>
       )}
 
+      {allPageChecked && total > rows.length && hasActiveFilter && (
+        <div className="mb-2 rounded-lg bg-blue-50 px-4 py-2 text-sm text-blue-800">
+          {selectAllFilter ? (
+            <>
+              Đã chọn tất cả <b>{total}</b> bản ghi khớp bộ lọc.{" "}
+              <button
+                type="button"
+                className="font-medium underline"
+                onClick={() => setSelectAllFilter(false)}
+              >
+                Chỉ chọn trang này
+              </button>
+            </>
+          ) : (
+            <>
+              Đã chọn {rows.length} dòng của trang này.{" "}
+              <button
+                type="button"
+                className="font-medium underline"
+                onClick={() => setSelectAllFilter(true)}
+              >
+                Chọn tất cả {total} bản ghi khớp bộ lọc
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <div className="max-h-[500px] overflow-auto">
           <table className="w-full text-left text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm">
               <tr className="border-b border-slate-200 text-slate-500">
+                <th className="w-8 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={allPageChecked}
+                    onChange={toggleAllPage}
+                    disabled={rows.length === 0}
+                  />
+                </th>
                 {COLUMNS.map((col) => (
                   <th key={col.key} className="px-3 py-2 font-medium">
                     {col.label}
@@ -192,6 +291,7 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
                 ))}
               </tr>
               <tr className="border-b border-slate-200 bg-white">
+                <th className="w-8 px-2 py-1.5" />
                 {COLUMNS.map((col) =>
                   col.isDateRange ? (
                     <th key={col.key} className="px-2 py-1.5 font-normal">
@@ -225,7 +325,7 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
               {loadingTable ? (
                 <tr>
                   <td
-                    colSpan={COLUMNS.length}
+                    colSpan={COLUMNS.length + 1}
                     className="px-3 py-6 text-center text-slate-400"
                   >
                     <Loader2 size={16} className="mx-auto animate-spin" />
@@ -234,7 +334,7 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
               ) : rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={COLUMNS.length}
+                    colSpan={COLUMNS.length + 1}
                     className="px-3 py-6 text-center text-slate-400"
                   >
                     Không có dữ liệu
@@ -244,8 +344,20 @@ const ASNForm = ({ initialFilters, initialFiltersToken }) => {
                 rows.map((r) => (
                   <tr
                     key={r._id}
-                    className="border-b border-slate-100 last:border-0"
+                    className={[
+                      "border-b border-slate-100 last:border-0",
+                      selectedIds.has(r._id) || selectAllFilter
+                        ? "bg-blue-50/60"
+                        : "",
+                    ].join(" ")}
                   >
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectAllFilter || selectedIds.has(r._id)}
+                        onChange={() => toggleRow(r._id)}
+                      />
+                    </td>
                     <td className="px-3 py-2">{r.po}</td>
                     <td className="px-3 py-2">{formatDateOnly(r.ngay_asn)}</td>
                     <td className="px-3 py-2">{r.so_booking}</td>
