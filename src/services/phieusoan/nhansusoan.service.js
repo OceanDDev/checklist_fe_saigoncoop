@@ -255,7 +255,20 @@ const getKienTheoSoSoda = async (codes) => {
     throw error;
   }
 };
+
+/** GET: lấy dữ liệu timeline đơn hàng theo thời gian (CF/CS) đã aggregate sẵn */
+const getOrderTimeline = async () => {
+  try {
+    const response = await ApiServer.get(`${URL.phieusoan.nhansusoan}/timeline`);
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi getOrderTimeline:", error);
+    throw error;
+  }
+};
+
 export const nhanSuSoanService = {
+  getOrderTimeline,
   getAllNhanSuSoan, // GET    /api/saigoncoop/nhansusoan?page=1&limit=50&...
   getNhanSuSoanById, // GET    /api/saigoncoop/nhansusoan/:id
   createNhanSuSoan, // POST   /api/saigoncoop/nhansusoan

@@ -61,19 +61,43 @@ const COLUMNS = [
   { key: "ngay_gio_hoan_thanh", label: "Ngày giờ hoàn thành" },
   { key: "ngay_import", label: "Ngày import" },
 ];
+// Đọc giá trị ô theo tên cột linh hoạt (case-insensitive)
+const getColVal = (row, ...candidateNames) => {
+  if (!row || typeof row !== "object") return "";
+  for (const name of candidateNames) {
+    if (row[name] !== undefined && row[name] !== null && String(row[name]).trim() !== "") {
+      return row[name];
+    }
+  }
+  const rowKeys = Object.keys(row);
+  for (const name of candidateNames) {
+    const target = name.trim().toLowerCase();
+    const matchedKey = rowKeys.find((k) => k.trim().toLowerCase() === target);
+    if (
+      matchedKey &&
+      row[matchedKey] !== undefined &&
+      row[matchedKey] !== null &&
+      String(row[matchedKey]).trim() !== ""
+    ) {
+      return row[matchedKey];
+    }
+  }
+  return "";
+};
+
 const mapRow = (row, kho) => ({
-  sku: String(row["Mã Sản Phẩm"] ?? "").trim(),
-  name: String(row["Tên Sản Phẩm"] ?? "").trim(),
-  vi_tri: String(row["Vị trí châm"] ?? "").trim(),
-  kien: Number(row["Số Kiện"] ?? 0),
+  sku: String(getColVal(row, "Mã Sản Phẩm", "Mã sản phẩm", "SKU")).trim(),
+  name: String(getColVal(row, "Tên Sản Phẩm", "Tên sản phẩm", "Tên Hàng")).trim(),
+  vi_tri: String(getColVal(row, "Vị trí châm", "Vị Trí Châm", "Vị trí")).trim(),
+  kien: Number(getColVal(row, "Số Kiện", "Số kiện", "Số kiện nhập") || 0),
   kho: Number(kho),
-  lpn: String(row["LPN"] ?? "").trim(),
-  trang_thai: String(row["Trạng thái"] ?? "").trim(),
+  lpn: String(getColVal(row, "LPN", "Số LPN")).trim(),
+  trang_thai: String(getColVal(row, "Trạng thái", "Trạng Thái")).trim(),
   loai_hinh: "Let",
-  nhan_vien_let: String(row["Nhân viên châm hàng"] ?? "").trim(),
-  ngay_nhan_let: excelSerialToUTCDate(row["Ngày giờ nhận phiếu châm"]),
-  ngay_gio_tao_let: excelSerialToUTCDate(row["Ngày Giờ Tạo"]),
-  ngay_gio_hoan_thanh: excelSerialToUTCDate(row["Ngày giờ hoàn thành"]),
+  nhan_vien_let: String(getColVal(row, "Nhân viên châm hàng", "NV châm hàng", "Nhân Viên Châm Hàng")).trim(),
+  ngay_nhan_let: excelSerialToUTCDate(getColVal(row, "Ngày giờ nhận phiếu châm", "Ngày Giờ Nhận Phiếu Châm")),
+  ngay_gio_tao_let: excelSerialToUTCDate(getColVal(row, "Ngày Giờ Tạo", "Ngày giờ tạo")),
+  ngay_gio_hoan_thanh: excelSerialToUTCDate(getColVal(row, "Ngày giờ hoàn thành", "Ngày Giờ Hoàn Thành")),
 });
 
 // parse thủ công theo format "dd/MM/yyyy HH:mm[:ss]" hoặc "dd/MM/yyyy",

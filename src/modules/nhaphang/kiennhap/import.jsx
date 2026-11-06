@@ -20,28 +20,83 @@ const KHO_LIST = [
   { kho: 8104, label: "Kho 8104" },
 ];
 
+// Đọc giá trị ô theo tên cột linh hoạt:
+// 1. Thử khớp chính xác các candidateNames trước (O(1))
+// 2. Nếu không thấy, duyệt các key thực tế của row để so khớp không phân biệt hoa/thường, khoảng trắng
+const getColVal = (row, ...candidateNames) => {
+  if (!row || typeof row !== "object") return "";
+
+  // 1. Khớp chính xác
+  for (const name of candidateNames) {
+    if (
+      row[name] !== undefined &&
+      row[name] !== null &&
+      String(row[name]).trim() !== ""
+    ) {
+      return row[name];
+    }
+  }
+
+  // 2. Khớp mềm (case-insensitive, trim)
+  const rowKeys = Object.keys(row);
+  for (const name of candidateNames) {
+    const target = name.trim().toLowerCase();
+    const matchedKey = rowKeys.find((k) => k.trim().toLowerCase() === target);
+    if (
+      matchedKey &&
+      row[matchedKey] !== undefined &&
+      row[matchedKey] !== null &&
+      String(row[matchedKey]).trim() !== ""
+    ) {
+      return row[matchedKey];
+    }
+  }
+
+  return "";
+};
+
 // Map cột trong file Excel (Cxnk_ton_kho) -> field trong DB
 // Tên cột lấy đúng theo header thật của file export (Cxnk_ton_kho-Export_Excel_Custom):
 // Ngày Nhập, Mã Hàng, Tên Hàng, Vị trí, Số kiện nhập, Tổng SL nhập, Trạng Thái,
 const mapRow = (row, kho) => ({
-  sku: String(row["Mã Hàng"] ?? "").trim(),
-  name: String(row["Tên Hàng"] ?? "").trim(),
-  vi_tri: String(row["Vị trí"] ?? "").trim(),
-  kien: Number(row["Số kiện nhập"] ?? 0),
+  sku: String(getColVal(row, "Mã Hàng", "Mã hàng", "SKU")).trim(),
+  name: String(getColVal(row, "Tên Hàng", "Tên hàng", "Tên Sản Phẩm")).trim(),
+  vi_tri: String(getColVal(row, "Vị trí", "Vị Trí")).trim(),
+  kien: Number(
+    getColVal(row, "Số kiện nhập", "Số Kiện Nhập", "Số kiện", "Số Kiện") || 0,
+  ),
   kho: Number(kho),
-  tong_sl: Number(row["Tổng SL nhập"] ?? 0),
-  lpn: String(row["Số LPN"] ?? "").trim(),
-  trang_thai: String(row["Trạng Thái"] ?? "").trim(),
+  tong_sl: Number(
+    getColVal(
+      row,
+      "Tổng SL nhập",
+      "Tổng SL Nhập",
+      "Tổng SL",
+      "Tổng số lượng",
+    ) || 0,
+  ),
+  lpn: String(getColVal(row, "Số LPN", "Số Lpn", "LPN")).trim(),
+  trang_thai: String(getColVal(row, "Trạng Thái", "Trạng thái")).trim(),
   loai_hinh: "Nhập",
   // MỚI — dùng để xác định trùng dòng khi import
-  so_phieu_nhap: String(row["Số phiếu nhập"] ?? "").trim(),
-  loai_hinh_nhap: String(row["Loại hình nhập"] ?? "").trim(),
-  so_po: String(row["Số Po"] ?? "").trim(),
-  nhan_vien_nhap: String(row["NV nhận"] ?? "").trim(),
-  nhan_vien_put: String(row["NV Putaway"] ?? "").trim(),
-  ngay_nhap_kho: parseExcelDate(row["Ngày Nhập"]),
-  ngay_san_xuat: parseExcelDate(row["Ngày Sản Xuất"]),
-  ngay_het_han: parseExcelDate(row["Ngày Hết Hạn"]),
+  so_phieu_nhap: String(
+    getColVal(row, "Số phiếu nhập", "Số Phiếu Nhập"),
+  ).trim(),
+  loai_hinh_nhap: String(
+    getColVal(row, "Loại hình nhập", "Loại Hình Nhập"),
+  ).trim(),
+  so_po: String(getColVal(row, "Số Po", "Số PO", "Số po", "PO")).trim(),
+  nhan_vien_nhap: String(
+    getColVal(row, "NV nhận", "NV Nhận", "Nhân viên nhận"),
+  ).trim(),
+  nhan_vien_put: String(
+    getColVal(row, "NV Putaway", "NV putaway", "Nhân viên putaway"),
+  ).trim(),
+  ngay_nhap_kho: parseExcelDate(getColVal(row, "Ngày Nhập", "Ngày nhập")),
+  ngay_san_xuat: parseExcelDate(
+    getColVal(row, "Ngày Sản Xuất", "Ngày sản xuất"),
+  ),
+  ngay_het_han: parseExcelDate(getColVal(row, "Ngày Hết Hạn", "Ngày hết hạn")),
 });
 // Ghim date-only value về 12:00 trưa UTC — giữ đúng ngày Excel, không lệch theo timezone máy chạy
 const toDateOnlyUTC = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
@@ -246,7 +301,12 @@ const NhapHangImportModal = ({ onClose, onImported }) => {
       // dựa trên so khớp dữ liệu, không xử lý ở đây nữa.
       const mappedItems = rows
         .map((row) => mapRow(row, kho))
-        .filter((item) => item.sku);
+        .filter(
+          (item) =>
+            item.sku &&
+            item.sku.toLowerCase() !== "total" &&
+            item.sku.toLowerCase() !== "mã hàng",
+        );
 
       // Chỉ giữ lại 3 loại hình nhập hợp lệ (Nhập NCC / Nhập nội bộ / Nhập
       // hàng trung chuyển) — các dòng loại hình khác bị loại bỏ, không đưa

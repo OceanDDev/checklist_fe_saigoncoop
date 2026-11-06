@@ -323,7 +323,8 @@ const DashKPI = () => {
   const filteredLet = useMemo(() => {
     return rawLet.filter((r) => {
       if (!selectedKho.includes(Number(r.kho))) return false;
-      const key = toDateKeyUTC(r.ngay_gio_tao_let);
+      // KPI Châm hàng (Let) lọc theo Ngày giờ hoàn thành ở bảng Let
+      const key = toDateKeyUTC(r.ngay_gio_hoan_thanh);
       if (dateFrom || dateTo) {
         if (!key) return false;
         if (dateFrom && key < dateFrom) return false;

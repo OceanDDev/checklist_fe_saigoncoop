@@ -98,9 +98,8 @@ const buildBuckets = (range) => {
   });
 };
 
-// ✅ Gom `items` vào đúng bucket theo tgImport, tách riêng CF/CS. Với
-// chỉ số "Kiện" -> chỉ cộng dồn số kiện của các phiếu đã Hoàn thành.
-const aggregate = (items, range, metric) => {
+// ✅ Gom `items` vào đúng bucket theo tgImport, tách riêng CF/CS cho cả 2 chỉ số (donHang & kien).
+const aggregate = (items, range) => {
   const buckets = buildBuckets(range);
   const data = buckets.map(() => ({
     CF: { donHang: 0, kien: 0 },
@@ -108,8 +107,9 @@ const aggregate = (items, range, metric) => {
   }));
 
   items.forEach((item) => {
-    if (!item.tgImport) return;
-    const t = dayjs(item.tgImport).valueOf();
+    const dateVal = item.tgImport || item.createdAt;
+    if (!dateVal) return;
+    const t = dayjs(dateVal).valueOf();
     const idx = buckets.findIndex(
       (b) => t >= b.start.valueOf() && t <= b.end.valueOf(),
     );
@@ -124,11 +124,10 @@ const aggregate = (items, range, metric) => {
     }
   });
 
-  const field = metric === "kien" ? "kien" : "donHang";
   return buckets.map((b, i) => ({
     label: b.label,
-    CF: data[i].CF[field],
-    CS: data[i].CS[field],
+    CF: data[i].CF,
+    CS: data[i].CS,
   }));
 };
 
@@ -279,7 +278,7 @@ const TimelineBarChart = memo(function TimelineBarChart({
 const OrderTimelineCharts = memo(function OrderTimelineCharts() {
   const [metric, setMetric] = useState("donHang"); // "donHang" | "kien"
 
-  const [rawItems, setRawItems] = useState([]);
+  const [timelineData, setTimelineData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -288,6 +287,20 @@ const OrderTimelineCharts = memo(function OrderTimelineCharts() {
     const fetchData = async () => {
       setLoading(true);
       setError("");
+
+      // 1. Ưu tiên gọi API /timeline từ Backend (tính trực tiếp trên DB, không giới hạn limit 50.000, siêu nhẹ)
+      try {
+        const res = await nhanSuSoanService.getOrderTimeline();
+        if (!cancelled && res?.data) {
+          setTimelineData(res.data);
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn("API /timeline chưa sẵn sàng hoặc lỗi, dùng fallback client-side:", err);
+      }
+
+      // 2. Fallback nếu backend chưa kịp deploy endpoint /timeline
       try {
         const tu = dayjs()
           .subtract(FETCH_MONTHS_BACK - 1, "month")
@@ -296,15 +309,21 @@ const OrderTimelineCharts = memo(function OrderTimelineCharts() {
         const den = dayjs().format("YYYY-MM-DD");
         const res = await nhanSuSoanService.getAllNhanSuSoan({
           page: 1,
-          limit: 50000,
+          limit: 150000, // Tăng limit lên 150.000 để bao trọn tất cả các tháng
           tuNgay: tu,
           denNgay: den,
         });
-        if (!cancelled) setRawItems(res.data || res.items || []);
+        if (!cancelled) {
+          const items = res.data || res.items || [];
+          setTimelineData({
+            ngay: aggregate(items, "ngay"),
+            tuan: aggregate(items, "tuan"),
+            thang: aggregate(items, "thang"),
+          });
+        }
       } catch (err) {
         console.error("Lỗi tải dữ liệu biểu đồ đơn hàng theo thời gian:", err);
         if (!cancelled) {
-          setRawItems([]);
           setError("Không tải được dữ liệu biểu đồ.");
         }
       } finally {
@@ -315,21 +334,34 @@ const OrderTimelineCharts = memo(function OrderTimelineCharts() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 👈 chỉ fetch 1 lần — đủ dữ liệu cho cả 3 biểu đồ bên dưới
+  }, []);
 
-  const dayData = useMemo(
-    () => aggregate(rawItems, "ngay", metric),
-    [rawItems, metric],
-  );
-  const weekData = useMemo(
-    () => aggregate(rawItems, "tuan", metric),
-    [rawItems, metric],
-  );
-  const monthData = useMemo(
-    () => aggregate(rawItems, "thang", metric),
-    [rawItems, metric],
-  );
+  const dayData = useMemo(() => {
+    if (!timelineData?.ngay) return [];
+    return timelineData.ngay.map((d) => ({
+      label: d.label,
+      CF: d.CF?.[metric] ?? 0,
+      CS: d.CS?.[metric] ?? 0,
+    }));
+  }, [timelineData, metric]);
+
+  const weekData = useMemo(() => {
+    if (!timelineData?.tuan) return [];
+    return timelineData.tuan.map((d) => ({
+      label: d.label,
+      CF: d.CF?.[metric] ?? 0,
+      CS: d.CS?.[metric] ?? 0,
+    }));
+  }, [timelineData, metric]);
+
+  const monthData = useMemo(() => {
+    if (!timelineData?.thang) return [];
+    return timelineData.thang.map((d) => ({
+      label: d.label,
+      CF: d.CF?.[metric] ?? 0,
+      CS: d.CS?.[metric] ?? 0,
+    }));
+  }, [timelineData, metric]);
 
   return (
     <div className="space-y-4">
